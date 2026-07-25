@@ -344,9 +344,39 @@ int_draw_preset:
 @loop_done:
   rts
 
+int_draw_tabs:
+  lda SCR_PTR_LO
+  clc
+  adc #SCREEN_WIDTH
+  sta g_temp_scr_ptr_lo
+  lda SCR_PTR_HI
+  adc #0
+  sta g_temp_scr_ptr_hi
+
+  ldy #(SCREEN_WIDTH-1)
+  lda #' '
+  eor #$80
+  jsr ut_atascii_to_icode
+@clear_loop:
+  sta (g_temp_scr_ptr_lo),y
+  dey
+  bpl @clear_loop
+
+  ldy #0
+@tabs_banner_loop:
+  lda tabs_banner,y
+  beq @tabs_banner_done
+  eor #$80
+  jsr ut_atascii_to_icode
+  sta (g_temp_scr_ptr_lo),y
+  iny
+  jmp @tabs_banner_loop
+@tabs_banner_done:
+  rts
+
 ; draws the banners and the "Preset" label
 ; and any other ui elements
-int_draw_other_ui:
+int_draw_main:
   lda SCR_PTR_LO
   sta g_temp_scr_ptr_lo
   lda SCR_PTR_HI
@@ -356,18 +386,10 @@ int_draw_other_ui:
   lda #' '
   eor #$80
   jsr ut_atascii_to_icode
-@top_bar_loop:
+@top_banner_clear_loop:
   sta (g_temp_scr_ptr_lo),y
   dey
-  bpl @top_bar_loop
-
-  lda SCR_PTR_LO
-  clc
-  adc #1
-  sta g_temp_scr_ptr_lo
-  lda SCR_PTR_HI
-  adc #0
-  sta g_temp_scr_ptr_hi
+  bpl @top_banner_clear_loop
 
   ldy #0
 @top_banner_loop:
@@ -379,6 +401,8 @@ int_draw_other_ui:
   iny
   jmp @top_banner_loop
 @top_banner_done:
+
+  jsr int_draw_tabs
 
   lda SCR_PTR_LO
   clc
@@ -421,6 +445,7 @@ int_draw_other_ui:
 ; redraws the menu items, sets the selected by value,
 ; and highlights the selected menu item.
 int_refresh_menus:
+  ; TODO: split this out based on what tab is selected
   refresh_menu baud_menu,     cfg_draft_config+Cfg::serial+CfgSerial::baud
   refresh_menu parity_menu,   cfg_draft_config+Cfg::serial+CfgSerial::parity
   refresh_menu data_menu,     cfg_draft_config+Cfg::serial+CfgSerial::data_bits
@@ -435,6 +460,7 @@ int_refresh_menus:
 
 ; draws the chroma around the borders and the header
 int_draw_menu_borders:
+  ; TODO: split this out based on what tab is selected
   draw_menu_border baud_menu
   draw_menu_border parity_menu
   draw_menu_border data_menu
@@ -462,7 +488,7 @@ cfg_activate:
   draw_preset preset_fastline
   draw_preset preset_APRS
 
-  jsr int_draw_other_ui
+  jsr int_draw_main
 
   rts
 
@@ -702,6 +728,10 @@ int_cmd_accept:
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
   rts
 
+int_handle_key_serial:
+  rts
+
+  ; TODO: split this out based on what tab is selected
 int_handle_kbd:
   lda g_kbd_key_pressed
   bne @valid_key
@@ -934,9 +964,13 @@ preset_APRS_config:     .tag Cfg
 preset_APRS_label:      .byte '4'|$80,"APRS",$00
 
 
-top_banner:             .byte 'S'|$80,'E'|$80,'L'|$80,"theme "
-                        .byte 'E'|$80,'S'|$80,'C'|$80,"revert "
-                        .byte 'R'|$80,'E'|$80,'T'|$80,"terminal"
+top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"next "
+                        .byte "            "
+                        .byte 'E'|$80,'S'|$80,'C'|$80,"cancel "
+                        .byte 'S'|$80,'T'|$80,'A'|$80,'R'|$80,'T'|$80,"run"
+                        .byte $00
+;tabs_banner:            .byte "File|Sess|Ser|APRS"
+tabs_banner:            .byte " File|Sess|Ser|APRS"
                         .byte $00
 mode_protocol_str:      .byte "* may be ignored for some protocols",$00
 draw_menu_tempy:        .byte 0

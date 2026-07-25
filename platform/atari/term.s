@@ -89,18 +89,10 @@ int_draw_ui_base:
   lda #' '
   eor #$80
   jsr ut_atascii_to_icode
-@top_bar_loop:
+@top_banner_clear_loop:
   sta (ZPB0),y
   dey
-  bpl @top_bar_loop
-
-  lda SCR_PTR_LO
-  clc
-  adc #1
-  sta ZPB0
-  lda SCR_PTR_HI
-  adc #0
-  sta ZPB1
+  bpl @top_banner_clear_loop
 
   ldy #0
 @top_banner_loop:
@@ -703,8 +695,7 @@ int_cmd_put_rs232:
 @done:
   rts
 
-top_banner:                  .byte 'S'|$80,'E'|$80,'L'|$80,"theme "
-                             .byte 'S'|$80,'T'|$80,'A'|$80,'R'|$80,'T'|$80,"config "
+top_banner:                  .byte ' ','S'|$80,'E'|$80,'L'|$80,"config "
                              .byte $00
 current_mode:                .res 1
 str_welcome:                 .byte "Welcome!",$00
