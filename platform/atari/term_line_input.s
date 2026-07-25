@@ -3,6 +3,7 @@
 .include "config.inc"
 .include "globals.inc"
 .include "line_input.inc"
+.include "screen.inc"
 
 .segment "CODE"
 

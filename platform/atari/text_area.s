@@ -3,6 +3,7 @@
 .include "globals.inc"
 .include "macros.inc"
 .include "memmove.inc"
+.include "screen.inc"
 .include "text_area.inc"
 .include "utils.inc"
 

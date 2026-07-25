@@ -12,6 +12,7 @@
 .include "term_output.inc"
 .include "protocol_kiss.inc"
 .include "rs232.inc"
+.include "screen.inc"
 .include "term.inc"
 .include "text_area.inc"
 .include "utils.inc"

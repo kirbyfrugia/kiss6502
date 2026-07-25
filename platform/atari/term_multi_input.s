@@ -2,6 +2,7 @@
 .include "term_multi_input.inc"
 .include "config.inc"
 .include "globals.inc"
+.include "screen.inc"
 .include "text_area.inc"
 
 .segment "CODE"

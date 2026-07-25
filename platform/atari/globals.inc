@@ -15,8 +15,6 @@ COMMON_INC = 1
 .globalzp CMDDATA5
 .globalzp CMDDATA6
 .globalzp CMDDATA7
-.globalzp SCR_PTR_LO
-.globalzp SCR_PTR_HI
 .globalzp g_temp_scr_ptr_lo
 .globalzp g_temp_scr_ptr_hi
 .globalzp g_temp_data_ptr_lo
@@ -37,8 +35,6 @@ COMMON_INC = 1
 .global   g_disp_buf_num_lines
 .globalzp g_rx_buf_num_chars
 
-SCREEN_WIDTH         = 40
-SCREEN_HEIGHT        = 24
 G_DISP_BUF_MAX_LINES = 12
 TERMINAL_WIDTH       = 38
 

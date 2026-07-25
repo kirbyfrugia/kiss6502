@@ -4,6 +4,7 @@
 .include "globals.inc"
 .include "kbd.inc"
 .include "main.inc"
+.include "screen.inc"
 .include "term.inc"
 .include "line_input.inc"
 .include "text_area.inc"
@@ -79,7 +80,7 @@ main_loop:
   sta current_state
   cmp #STATE_RUNNING
   beq @switch_to_running
-  jsr cls
+  jsr scr_cls
   jsr cfg_activate
   lda #0
   sta switch_state
@@ -89,7 +90,7 @@ main_loop:
   sta switch_state
   sta select_fired
   sta start_fired
-  jsr cls
+  jsr scr_cls
   jsr trm_activate
 @check_kbd:
   jsr inkbd
@@ -303,34 +304,6 @@ inkbd:
   ldx g_kbdcode_raw_stripped
   lda kbd_ctrld,x
   sta g_kbdcode_atascii
-@done:
-  rts
-
-cls:
-  lda SCR_PTR_LO
-  sta ZPB0
-  lda SCR_PTR_LO+1
-  sta ZPB1
-
-  ldx #(SCREEN_HEIGHT-1)
-@row_loop:
-  ldy #(SCREEN_WIDTH-1)
-  lda #' '
-  jsr ut_atascii_to_icode
-@col_loop:
-  sta (ZPB0),y
-  dey
-  bpl @col_loop
-  dex
-  bmi @done
-  lda ZPB0
-  clc
-  adc #(SCREEN_WIDTH)
-  sta ZPB0
-  bcc @nowrap
-  inc ZPB1
-@nowrap:
-  jmp @row_loop
 @done:
   rts
 

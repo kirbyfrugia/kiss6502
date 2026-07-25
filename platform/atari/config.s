@@ -4,6 +4,7 @@
 .include "config.inc"
 .include "globals.inc"
 .include "rs232.inc"
+.include "screen.inc"
 .include "term.inc"
 .include "utils.inc"
 
@@ -454,10 +455,14 @@ int_draw_main:
 @serial_preset_done:
   rts
 
-; redraws the menu items, sets the selected by value,
-; and highlights the selected menu item.
-int_refresh_menus:
-  ; TODO: split this out based on what tab is selected
+int_refresh_file_tab:
+  rts
+
+int_refresh_session_tab:
+  refresh_menu protocol_menu, cfg_draft_config+Cfg::session+CfgSession::protocol
+  rts
+
+int_refresh_serial_tab:
   refresh_menu baud_menu,     cfg_draft_config+Cfg::serial+CfgSerial::baud
   refresh_menu parity_menu,   cfg_draft_config+Cfg::serial+CfgSerial::parity
   refresh_menu data_menu,     cfg_draft_config+Cfg::serial+CfgSerial::data_bits
@@ -467,12 +472,43 @@ int_refresh_menus:
   refresh_menu dtr_menu,      cfg_draft_config+Cfg::serial+CfgSerial::dtr
   refresh_menu rts_menu,      cfg_draft_config+Cfg::serial+CfgSerial::rets
   refresh_menu mode_menu,     cfg_draft_config+Cfg::serial+CfgSerial::mode
-  refresh_menu protocol_menu, cfg_draft_config+Cfg::session+CfgSession::protocol
   rts
 
-; draws the chroma around the borders and the header
-int_draw_menu_borders:
-  ; TODO: split this out based on what tab is selected
+int_refresh_aprs_tab:
+  rts
+
+; redraws the menu items, sets the selected by value,
+; and highlights the selected menu item.
+int_refresh_menus:
+  lda selected_tab
+  cmp #1
+  beq @session
+  cmp #2
+  beq @serial
+  cmp #3
+  beq @aprs
+  ; file menu
+  jsr int_refresh_file_tab
+  jmp @done
+@session:
+  jsr int_refresh_session_tab
+  jmp @done
+@serial:
+  jsr int_refresh_serial_tab
+  jmp @done
+@aprs:
+  jsr int_refresh_aprs_tab
+@done:
+  rts
+
+int_draw_menu_borders_file_tab:
+  rts
+
+int_draw_menu_borders_session_tab:
+  draw_menu_border protocol_menu
+  rts
+
+int_draw_menu_borders_serial_tab:
   draw_menu_border baud_menu
   draw_menu_border parity_menu
   draw_menu_border data_menu
@@ -482,8 +518,32 @@ int_draw_menu_borders:
   draw_menu_border dtr_menu
   draw_menu_border rts_menu
   draw_menu_border mode_menu
-  draw_menu_border protocol_menu
-  
+  rts
+
+int_draw_menu_borders_aprs_tab:
+  rts
+
+; draws the chroma around the borders and the header
+int_draw_menu_borders:
+  lda selected_tab
+  cmp #1
+  beq @session
+  cmp #2
+  beq @serial
+  cmp #3
+  beq @aprs
+  ; file menu
+  jsr int_draw_menu_borders_file_tab
+  jmp @done
+@session:
+  jsr int_draw_menu_borders_session_tab
+  jmp @done
+@serial:
+  jsr int_draw_menu_borders_serial_tab
+  jmp @done
+@aprs:
+  jsr int_draw_menu_borders_aprs_tab
+@done: 
   rts
 
 cfg_activate:
@@ -756,7 +816,10 @@ int_next_tab:
   ldy #0
 @updated:
   sty selected_tab
+  jsr scr_cls
   jsr int_draw_tabs
+  jsr int_draw_menu_borders
+  jsr int_refresh_menus
   rts
 
 int_handle_console_keys:

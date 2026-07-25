@@ -2,6 +2,7 @@
 .include "config.inc"
 .include "globals.inc"
 .include "macros.inc"
+.include "screen.inc"
 .include "term_output.inc"
 .include "term.inc"
 .include "text_area.inc"

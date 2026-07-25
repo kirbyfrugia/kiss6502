@@ -17,8 +17,6 @@ CMDDATA4:           .res 1
 CMDDATA5:           .res 1
 CMDDATA6:           .res 1
 CMDDATA7:           .res 1
-SCR_PTR_LO:         .res 1
-SCR_PTR_HI:         .res 1
 
 g_temp_scr_ptr_lo:  .res 1
 g_temp_scr_ptr_hi:  .res 1
