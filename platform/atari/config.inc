@@ -23,8 +23,7 @@ CONFIG_FLAG_ACCEPTED = %11000000
   selected_index       .byte
 .endstruct
 
-.struct Config
-  protocol    .byte
+.struct CfgSerial
   mode        .byte
   baud        .byte
   data_bits   .byte
@@ -38,6 +37,22 @@ CONFIG_FLAG_ACCEPTED = %11000000
   xmt         .byte
   translation .byte
   line_feed   .byte
+.endstruct
+
+.struct CfgSession
+  protocol    .byte
+.endstruct
+
+.struct CfgAprs
+  callsign    .res 6
+  ssid        .res 1
+.endstruct
+
+.struct Cfg
+  version     .res 1
+  session     .tag CfgSession
+  serial      .tag CfgSerial
+  aprs        .tag CfgAprs
 .endstruct
 
 .struct Preset
@@ -101,34 +116,34 @@ CONFIG_FLAG_ACCEPTED = %11000000
 .macro make_config  config, _protocol, _mode, _baud, _data_bits, \
                    _stop_bits, _parity, _cts, _dsr, _dtr, _rets
   lda #_protocol
-  sta config+Config::protocol
+  sta config+Cfg::session+CfgSession::protocol
   lda #_mode
-  sta config+Config::mode
+  sta config+Cfg::serial+CfgSerial::mode
   lda #_baud
-  sta config+Config::baud
+  sta config+Cfg::serial+CfgSerial::baud
   lda #_data_bits
-  sta config+Config::data_bits
+  sta config+Cfg::serial+CfgSerial::data_bits
   lda #_stop_bits
-  sta config+Config::stop_bits
+  sta config+Cfg::serial+CfgSerial::stop_bits
   lda #_parity
-  sta config+Config::parity
+  sta config+Cfg::serial+CfgSerial::parity
   lda #_cts
-  sta config+Config::cts
+  sta config+Cfg::serial+CfgSerial::cts
   lda #_dsr
-  sta config+Config::dsr
+  sta config+Cfg::serial+CfgSerial::dsr
   lda #_dtr
-  sta config+Config::dtr
+  sta config+Cfg::serial+CfgSerial::dtr
   lda #_rets
-  sta config+Config::rets
+  sta config+Cfg::serial+CfgSerial::rets
   ; TODO: maybe make the rest of these options
   lda #RS232_TRANSLATION::NONE
-  sta config+Config::translation
+  sta config+Cfg::serial+CfgSerial::translation
   lda #RS232_LINE_FEED::NO_APPEND_LF
-  sta config+Config::line_feed
+  sta config+Cfg::serial+CfgSerial::line_feed
   lda #RS232_CRX::OFF
-  sta config+Config::crx
+  sta config+Cfg::serial+CfgSerial::crx
   lda #RS232_XMT::NO_CHANGE
-  sta config+Config::xmt
+  sta config+Cfg::serial+CfgSerial::xmt
 .endmacro
 
 .macro make_preset preset, config, _label, scr_pos_offset
@@ -168,3 +183,4 @@ CONFIG_FLAG_ACCEPTED = %11000000
 .endmacro
 
 .endif
+

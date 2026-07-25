@@ -171,7 +171,7 @@ int_reset_multi_mode:
   rts
 
 int_reset_protocol:
-  lda cfg_saved_config+Config::protocol
+  lda cfg_saved_config+Cfg::session+CfgSession::protocol
   cmp #TERM_PROTOCOL::TERM
   beq @term
   cmp #TERM_PROTOCOL::APRS
@@ -186,7 +186,7 @@ int_reset_protocol:
   rts
 
 int_repaint:
-  lda cfg_saved_config+Config::mode
+  lda cfg_saved_config+Cfg::serial+CfgSerial::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
   cmp #TERM_MODE::MULTI
@@ -204,7 +204,7 @@ int_repaint:
 
 int_reset:
   jsr int_reset_protocol
-  lda cfg_saved_config+Config::mode
+  lda cfg_saved_config+Cfg::serial+CfgSerial::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
   cmp #TERM_MODE::MULTI
@@ -238,7 +238,7 @@ trm_activate:
   rts
 
 trm_tick:
-  lda cfg_saved_config+Config::mode
+  lda cfg_saved_config+Cfg::serial+CfgSerial::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
   cmp #TERM_MODE::MULTI
@@ -566,7 +566,7 @@ int_cmd_open_rs232:
   rts
 
 int_handle_byte_read:
-  lda cfg_saved_config+Config::protocol
+  lda cfg_saved_config+Cfg::session+CfgSession::protocol
   cmp #TERM_PROTOCOL::TERM
   beq @term
   cmp #TERM_PROTOCOL::APRS

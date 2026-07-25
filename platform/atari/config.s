@@ -81,8 +81,8 @@ cfg_init:
               preset_APRS_label, OFFSET 
 
   ; default config
-  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_draft_config, Config
-  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_saved_config, Config
+  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_draft_config, Cfg
+  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_saved_config, Cfg
 
   OFFSET        .set (MENU_MARGIN_TOP+1) * SCREEN_WIDTH + 2
   NUM_ITEMS     .set 7
@@ -421,16 +421,16 @@ int_draw_other_ui:
 ; redraws the menu items, sets the selected by value,
 ; and highlights the selected menu item.
 int_refresh_menus:
-  refresh_menu baud_menu,     cfg_draft_config+Config::baud
-  refresh_menu parity_menu,   cfg_draft_config+Config::parity
-  refresh_menu data_menu,     cfg_draft_config+Config::data_bits
-  refresh_menu stop_menu,     cfg_draft_config+Config::stop_bits
-  refresh_menu cts_menu,      cfg_draft_config+Config::cts
-  refresh_menu dsr_menu,      cfg_draft_config+Config::dsr
-  refresh_menu dtr_menu,      cfg_draft_config+Config::dtr
-  refresh_menu rts_menu,      cfg_draft_config+Config::rets
-  refresh_menu mode_menu,     cfg_draft_config+Config::mode
-  refresh_menu protocol_menu, cfg_draft_config+Config::protocol
+  refresh_menu baud_menu,     cfg_draft_config+Cfg::serial+CfgSerial::baud
+  refresh_menu parity_menu,   cfg_draft_config+Cfg::serial+CfgSerial::parity
+  refresh_menu data_menu,     cfg_draft_config+Cfg::serial+CfgSerial::data_bits
+  refresh_menu stop_menu,     cfg_draft_config+Cfg::serial+CfgSerial::stop_bits
+  refresh_menu cts_menu,      cfg_draft_config+Cfg::serial+CfgSerial::cts
+  refresh_menu dsr_menu,      cfg_draft_config+Cfg::serial+CfgSerial::dsr
+  refresh_menu dtr_menu,      cfg_draft_config+Cfg::serial+CfgSerial::dtr
+  refresh_menu rts_menu,      cfg_draft_config+Cfg::serial+CfgSerial::rets
+  refresh_menu mode_menu,     cfg_draft_config+Cfg::serial+CfgSerial::mode
+  refresh_menu protocol_menu, cfg_draft_config+Cfg::session+CfgSession::protocol
   rts
 
 ; draws the chroma around the borders and the header
@@ -452,7 +452,7 @@ cfg_activate:
   lda #CONFIG_FLAG_EDITING
   sta cfg_config_flag
 
-  ut_copy_struct_abs_to_abs cfg_saved_config, cfg_draft_config, Config
+  ut_copy_struct_abs_to_abs cfg_saved_config, cfg_draft_config, Cfg
 
   jsr int_draw_menu_borders
   jsr int_refresh_menus
@@ -599,22 +599,22 @@ int_cmd_cancel:
   rts
 
 int_cmd_preset_fastchar:
-  ut_copy_struct_abs_to_abs preset_fastchar_config, cfg_draft_config, Config
+  ut_copy_struct_abs_to_abs preset_fastchar_config, cfg_draft_config, Cfg
   jsr int_refresh_menus
   rts
 
 int_cmd_preset_fastline:
-  ut_copy_struct_abs_to_abs preset_fastline_config, cfg_draft_config, Config
+  ut_copy_struct_abs_to_abs preset_fastline_config, cfg_draft_config, Cfg
   jsr int_refresh_menus
   rts
 
 int_cmd_preset_vintage:
-  ut_copy_struct_abs_to_abs preset_vintage_config, cfg_draft_config, Config
+  ut_copy_struct_abs_to_abs preset_vintage_config, cfg_draft_config, Cfg
   jsr int_refresh_menus
   rts
 
 int_cmd_preset_APRS:
-  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_draft_config, Config
+  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_draft_config, Cfg
   jsr int_refresh_menus
   rts
 
@@ -622,70 +622,70 @@ int_cmd_baud:
   handle_menu_next baud_menu
   ldy baud_menu+Menu::selected_index
   lda baud_menu_item_values,y
-  sta cfg_draft_config+Config::baud
+  sta cfg_draft_config+Cfg::serial+CfgSerial::baud
   rts
 
 int_cmd_parity:
   handle_menu_next parity_menu
   ldy parity_menu+Menu::selected_index
   lda parity_menu_item_values,y
-  sta cfg_draft_config+Config::parity
+  sta cfg_draft_config+Cfg::serial+CfgSerial::parity
   rts
 
 int_cmd_data:
   handle_menu_next data_menu
   ldy data_menu+Menu::selected_index
   lda data_menu_item_values,y
-  sta cfg_draft_config+Config::data_bits
+  sta cfg_draft_config+Cfg::serial+CfgSerial::data_bits
   rts
 
 int_cmd_stop:
   handle_menu_next stop_menu
   ldy stop_menu+Menu::selected_index
   lda stop_menu_item_values,y
-  sta cfg_draft_config+Config::stop_bits
+  sta cfg_draft_config+Cfg::serial+CfgSerial::stop_bits
   rts
 
 int_cmd_cts:
   handle_menu_next cts_menu
   ldy cts_menu+Menu::selected_index
   lda cts_menu_item_values,y
-  sta cfg_draft_config+Config::cts
+  sta cfg_draft_config+Cfg::serial+CfgSerial::cts
   rts
 
 int_cmd_dsr:
   handle_menu_next dsr_menu
   ldy dsr_menu+Menu::selected_index
   lda dsr_menu_item_values,y
-  sta cfg_draft_config+Config::dsr
+  sta cfg_draft_config+Cfg::serial+CfgSerial::dsr
   rts
 
 int_cmd_dtr:
   handle_menu_next dtr_menu
   ldy dtr_menu+Menu::selected_index
   lda dtr_menu_item_values,y
-  sta cfg_draft_config+Config::dtr
+  sta cfg_draft_config+Cfg::serial+CfgSerial::dtr
   rts
 
 int_cmd_rets:
   handle_menu_next rts_menu
   ldy rts_menu+Menu::selected_index
   lda rts_menu_item_values,y
-  sta cfg_draft_config+Config::rets
+  sta cfg_draft_config+Cfg::serial+CfgSerial::rets
   rts
 
 int_cmd_mode:
   handle_menu_next mode_menu
   ldy mode_menu+Menu::selected_index
   lda mode_menu_item_values,y
-  sta cfg_draft_config+Config::mode
+  sta cfg_draft_config+Cfg::serial+CfgSerial::mode
   rts
 
 int_cmd_protocol:
   handle_menu_next protocol_menu
   ldy protocol_menu+Menu::selected_index
   lda protocol_menu_item_values,y
-  sta cfg_draft_config+Config::protocol
+  sta cfg_draft_config+Cfg::session+CfgSession::protocol
   rts
 
 int_cmd_accept:
@@ -693,13 +693,13 @@ int_cmd_accept:
   sta cfg_config_flag
 
   ; if APRS mode, override the user setting
-  lda cfg_draft_config+Config::protocol
+  lda cfg_draft_config+Cfg::session+CfgSession::protocol
   cmp #TERM_PROTOCOL::APRS
   bne @no_override
   lda #TERM_MODE::LINE
-  sta cfg_draft_config+Config::mode
+  sta cfg_draft_config+Cfg::serial+CfgSerial::mode
 @no_override:
-  ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Config
+  ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
   rts
 
 int_handle_kbd:
@@ -921,16 +921,16 @@ protocol_menu_item_label_rtty: .byte "RTTY",$00
 
 presets:                .byte "Presets:",$00
 preset_fastchar:        .tag Preset
-preset_fastchar_config: .tag Config
+preset_fastchar_config: .tag Cfg
 preset_fastchar_label:  .byte '1'|$80,"Fast Char",$00
 preset_fastline:        .tag Preset
-preset_fastline_config: .tag Config
+preset_fastline_config: .tag Cfg
 preset_fastline_label:  .byte '2'|$80,"Fast Line",$00
 preset_vintage:         .tag Preset
-preset_vintage_config:  .tag Config
+preset_vintage_config:  .tag Cfg
 preset_vintage_label:   .byte '3'|$80,"Slow Char",$00
 preset_APRS:            .tag Preset
-preset_APRS_config:     .tag Config
+preset_APRS_config:     .tag Cfg
 preset_APRS_label:      .byte '4'|$80,"APRS",$00
 
 
@@ -952,7 +952,7 @@ menu_item_border_width: .byte 0
 
 highlight_border_width: .byte 0
 
-cfg_draft_config:       .tag Config
-cfg_saved_config:       .tag Config
+cfg_draft_config:       .tag Cfg
+cfg_saved_config:       .tag Cfg
 cfg_config_flag:        .byte 0
 

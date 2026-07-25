@@ -31,9 +31,9 @@ rs232_open:
   ldx iocb
   lda #CMD_CONTROL
   sta ICCOM,x
-  lda cfg_saved_config+Config::dtr
-  ora cfg_saved_config+Config::rets ; rts
-  ora cfg_saved_config+Config::xmt
+  lda cfg_saved_config+Cfg::serial+CfgSerial::dtr
+  ora cfg_saved_config+Cfg::serial+CfgSerial::rets ; rts
+  ora cfg_saved_config+Cfg::serial+CfgSerial::xmt
   sta ICAX1,x
   lda #0
   sta ICAX2,x
@@ -57,12 +57,12 @@ rs232_open:
   lda #CMD_CONFIGURE_BAUD
   sta ICCOM,x
   lda #0
-  ora cfg_saved_config+Config::baud
-  ora cfg_saved_config+Config::stop_bits
+  ora cfg_saved_config+Cfg::serial+CfgSerial::baud
+  ora cfg_saved_config+Cfg::serial+CfgSerial::stop_bits
   sta ICAX1,x
-  lda cfg_saved_config+Config::dsr
-  ora cfg_saved_config+Config::cts
-  ora cfg_saved_config+Config::crx
+  lda cfg_saved_config+Cfg::serial+CfgSerial::dsr
+  ora cfg_saved_config+Cfg::serial+CfgSerial::cts
+  ora cfg_saved_config+Cfg::serial+CfgSerial::crx
   sta ICAX2,x
   jsr CIOV
   bpl @configure_translation
@@ -71,9 +71,9 @@ rs232_open:
   ldx iocb
   lda #CMD_CONFIGURE_TRANSLATION
   sta ICCOM,x
-  lda cfg_saved_config+Config::translation
-  ora cfg_saved_config+Config::parity
-  ora cfg_saved_config+Config::line_feed
+  lda cfg_saved_config+Cfg::serial+CfgSerial::translation
+  ora cfg_saved_config+Cfg::serial+CfgSerial::parity
+  ora cfg_saved_config+Cfg::serial+CfgSerial::line_feed
   sta ICAX1,x
   lda #0
   sta ICAX2,x
