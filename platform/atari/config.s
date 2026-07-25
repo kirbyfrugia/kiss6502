@@ -372,6 +372,18 @@ int_draw_tabs:
   iny
   jmp @tabs_banner_loop
 @tabs_banner_done:
+
+  ldx selected_tab
+  ldy tabs_highlight_starts,x
+@highlight_loop:
+  lda (g_temp_scr_ptr_lo),y
+  eor #$80
+  sta (g_temp_scr_ptr_lo),y
+  iny
+  tya
+  cmp tabs_highlight_ends,x
+  bne @highlight_loop
+  
   rts
 
 ; draws the banners and the "Preset" label
@@ -478,6 +490,7 @@ cfg_activate:
   lda #0
   sta cfg_select_fired
   sta cfg_start_fired
+  sta selected_tab
 
   lda #CONFIG_FLAG_EDITING
   sta cfg_config_flag
@@ -732,7 +745,18 @@ int_cmd_accept:
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
   rts
 
+int_highlight_selected_tab:
+  rts
+
 int_next_tab:
+  ldy selected_tab
+  iny
+  cpy num_tabs
+  bne @updated
+  ldy #0
+@updated:
+  sty selected_tab
+  jsr int_draw_tabs
   rts
 
 int_handle_console_keys:
@@ -995,6 +1019,10 @@ top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"next "
 ;tabs_banner:            .byte "File|Sess|Ser|APRS"
 tabs_banner:            .byte " File|Sess|Ser|APRS"
                         .byte $00
+tabs_highlight_starts:  .byte 1,6,11,15
+tabs_highlight_ends:    .byte 5,10,14,19
+num_tabs:               .byte 4
+selected_tab:           .byte 0
 mode_protocol_str:      .byte "* may be ignored for some protocols",$00
 draw_menu_tempy:        .byte 0
 draw_menu_border_width: .byte 0
