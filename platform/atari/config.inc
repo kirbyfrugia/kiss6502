@@ -6,6 +6,8 @@ CONFIG_INC = 1
 .global cfg_tick
 .global cfg_config_flag
 .global cfg_saved_config
+.global cfg_select_fired
+.global cfg_start_fired
 
 CONFIG_FLAG_EDITING  = %00000000
 CONFIG_FLAG_CANCELED = %10000000

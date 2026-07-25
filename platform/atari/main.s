@@ -16,7 +16,7 @@
 .segment "CODE"
 
 STATE_CONFIG          = %10000000
-STATE_TERMINAL        = %01000000
+STATE_RUNNING         = %01000000
 CTRL_SHIFT_FLAG_CTRL  = %10000000
 CTRL_SHIFT_FLAG_SHIFT = %01000000
 CTRL_SHIFT_FLAG_LOWER = %00000000
@@ -33,47 +33,58 @@ start:
   jsr init
   jmp main_loop
 
-term_tick:
-  lda start_fired
-  beq @handle_tick
-  lda #0
-  sta start_fired
+running_tick:
+  lda select_fired
+  beq @check_start
   lda #STATE_CONFIG
   sta switch_state
-  jmp @done
-@handle_tick:
+  lda #0
+  sta select_fired
+@check_start:
+  lda start_fired
+  beq @tick
+  ; ignore, but clear the flag
+  lda #0
+  sta start_fired
+@tick:
   jsr trm_tick
 @done:
   rts
 
 config_tick:
+  lda select_fired
+  beq @check_start
+  sta cfg_select_fired
+  lda #0
+  sta select_fired
+@check_start:
+  lda start_fired
+  beq @tick
+  sta cfg_start_fired
+  lda #0
+  sta start_fired
+@tick:
   jsr cfg_tick 
   lda #CONFIG_FLAG_EDITING
   bit cfg_config_flag
   bpl @done
-  lda #STATE_TERMINAL
+  lda #STATE_RUNNING
   sta switch_state
 @done:
   rts
 
 main_loop:
-  lda select_fired
-  beq @check_state
-  lda #0
-  sta select_fired
-  jsr next_theme
-@check_state:
   lda switch_state
   beq @check_kbd
   sta current_state
-  cmp #STATE_TERMINAL
-  beq @switch_to_term
+  cmp #STATE_RUNNING
+  beq @switch_to_running
   jsr cls
   jsr cfg_activate
   lda #0
   sta switch_state
   jmp @check_kbd
-@switch_to_term:
+@switch_to_running:
   lda #0
   sta switch_state
   sta select_fired
@@ -85,14 +96,13 @@ main_loop:
   lda current_state
   and #STATE_CONFIG
   bne @config
-@term:
-  jsr term_tick
+@running:
+  jsr running_tick
   jmp @next_tick
 @config:
   jsr config_tick
 @next_tick:
   jmp main_loop
-
 
 ; called every vertical blank
 vbi_handler:

@@ -475,6 +475,10 @@ int_draw_menu_borders:
   rts
 
 cfg_activate:
+  lda #0
+  sta cfg_select_fired
+  sta cfg_start_fired
+
   lda #CONFIG_FLAG_EDITING
   sta cfg_config_flag
 
@@ -728,7 +732,24 @@ int_cmd_accept:
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
   rts
 
-int_handle_key_serial:
+int_next_tab:
+  rts
+
+int_handle_console_keys:
+  lda cfg_start_fired
+  bne @accept
+  lda cfg_select_fired
+  bne @next_tab
+  clc
+  beq @done
+@next_tab:
+  jsr int_next_tab
+  sec
+  jmp @done
+@accept:
+  jsr int_cmd_accept
+  sec
+@done:
   rts
 
   ; TODO: split this out based on what tab is selected
@@ -768,8 +789,6 @@ int_handle_kbd:
   beq @four
   cmp #$1c
   beq @escape
-  cmp #$0c
-  beq @return
   bne @done
 @baud:
   jsr int_cmd_baud
@@ -816,13 +835,17 @@ int_handle_kbd:
 @escape:
   jsr int_cmd_cancel
   jmp @done
-@return:
-  jsr int_cmd_accept
 @done:
   rts
 
 cfg_tick:
+  jsr int_handle_console_keys
+  bcs @done ; handled one of the special keys
   jsr int_handle_kbd
+@done:
+  lda #0
+  sta cfg_select_fired
+  sta cfg_start_fired
   rts
 
 baud_menu:                     .tag Menu
@@ -989,4 +1012,6 @@ highlight_border_width: .byte 0
 cfg_draft_config:       .tag Cfg
 cfg_saved_config:       .tag Cfg
 cfg_config_flag:        .byte 0
+cfg_select_fired:       .byte 0
+cfg_start_fired:        .byte 0
 
