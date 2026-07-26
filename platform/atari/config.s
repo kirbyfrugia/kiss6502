@@ -21,8 +21,7 @@ cfg_init:
   lda #CONFIG_FLAG_EDITING
   sta cfg_config_flag
 
-  OFFSET       .set (MENU_MARGIN_TOP+18) * SCREEN_WIDTH + 13
-  make_config preset_fastchar_config, \
+  make_config cfg_draft_config, \
                   TERM_PROTOCOL::TERM, \
                   TERM_MODE::CHAR, \
                   RS232_BAUD::B9600, \
@@ -33,57 +32,8 @@ cfg_init:
                   RS232_DSR::OFF, \
                   RS232_DTR::ON, \
                   RS232_RTS::ON
-  make_preset preset_fastchar, preset_fastchar_config, \
-              preset_fastchar_label, OFFSET 
 
-  OFFSET       .set (MENU_MARGIN_TOP+19) * SCREEN_WIDTH + 13
-  make_config preset_fastline_config, \
-                  TERM_PROTOCOL::TERM, \
-                  TERM_MODE::LINE, \
-                  RS232_BAUD::B9600, \
-                  RS232_WORDSIZE::N8, \
-                  RS232_STOPBITS::N1, \
-                  RS232_PARITY::NONE, \
-                  RS232_CTS::OFF, \
-                  RS232_DSR::OFF, \
-                  RS232_DTR::ON, \
-                  RS232_RTS::ON
-  make_preset preset_fastline, preset_fastline_config, \
-              preset_fastline_label, OFFSET 
-
-  OFFSET       .set (MENU_MARGIN_TOP+18) * SCREEN_WIDTH + 25
-  make_config preset_vintage_config, \
-                  TERM_PROTOCOL::TERM, \
-                  TERM_MODE::CHAR, \
-                  RS232_BAUD::B1200, \
-                  RS232_WORDSIZE::N7, \
-                  RS232_STOPBITS::N1, \
-                  RS232_PARITY::EVEN, \
-                  RS232_CTS::OFF, \
-                  RS232_DSR::OFF, \
-                  RS232_DTR::ON, \
-                  RS232_RTS::ON
-  make_preset preset_vintage, preset_vintage_config, \
-              preset_vintage_label, OFFSET 
-
-  OFFSET       .set (MENU_MARGIN_TOP+19) * SCREEN_WIDTH + 25
-  make_config preset_APRS_config, \
-                  TERM_PROTOCOL::APRS, \
-                  TERM_MODE::LINE, \
-                  RS232_BAUD::B9600, \
-                  RS232_WORDSIZE::N8, \
-                  RS232_STOPBITS::N1, \
-                  RS232_PARITY::NONE, \
-                  RS232_CTS::OFF, \
-                  RS232_DSR::OFF, \
-                  RS232_DTR::ON, \
-                  RS232_RTS::ON
-  make_preset preset_APRS, preset_APRS_config, \
-              preset_APRS_label, OFFSET 
-
-  ; default config
-  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_draft_config, Cfg
-  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_saved_config, Cfg
+  ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
 
   OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 2
   NUM_ITEMS     .set 7
@@ -142,7 +92,7 @@ cfg_init:
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
   OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 1
-  NUM_ITEMS     .set 3
+  NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 11
   make_menu protocol_menu, protocol_menu_header, \
             protocol_menu_item_values, protocol_menu_item_labels, \
@@ -316,35 +266,6 @@ int_draw_menu_border:
 
   rts
 
-; draws the preset title for a given preset
-; inputs:
-;   cfg_ptr_lo/hi - ptr to the preset
-int_draw_preset:
-  ldy #Preset::scr_pos_ptr
-  lda (cfg_ptr_lo),y
-  sta g_temp_scr_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  sta g_temp_scr_ptr_hi
-
-  ldy #Preset::label_ptr
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_hi
-
-  ldy #0
-@loop:
-  lda (g_temp_data_ptr_lo),y
-  beq @loop_done ; null char
-  jsr ut_atascii_to_icode
-  sta (g_temp_scr_ptr_lo),y
-  iny
-  bne @loop
-@loop_done:
-  rts
-
 int_draw_tabs:
   lda SCR_PTR_LO
   clc
@@ -464,29 +385,6 @@ int_refresh_menus:
   rts
 
 int_draw_menu_borders_file_tab:
-  OFFSET .set (MENU_MARGIN_TOP+17) * SCREEN_WIDTH + 13
-  lda SCR_PTR_LO
-  clc
-  adc #<OFFSET
-  sta g_temp_scr_ptr_lo
-  lda SCR_PTR_HI
-  adc #>OFFSET
-  sta g_temp_scr_ptr_hi
-
-  ldy #0
-@serial_preset_loop:
-  lda presets,y
-  beq @serial_preset_done
-  jsr ut_atascii_to_icode
-  sta (g_temp_scr_ptr_lo),y
-  iny
-  jmp @serial_preset_loop
-@serial_preset_done:
-
-  draw_preset preset_fastchar
-  draw_preset preset_vintage
-  draw_preset preset_fastline
-  draw_preset preset_APRS
   rts
 
 int_draw_menu_borders_session_tab:
@@ -680,26 +578,6 @@ int_cmd_cancel:
   sta cfg_config_flag
   rts
 
-int_cmd_preset_fastchar:
-  ut_copy_struct_abs_to_abs preset_fastchar_config, cfg_draft_config, Cfg
-  jsr int_refresh_menus
-  rts
-
-int_cmd_preset_fastline:
-  ut_copy_struct_abs_to_abs preset_fastline_config, cfg_draft_config, Cfg
-  jsr int_refresh_menus
-  rts
-
-int_cmd_preset_vintage:
-  ut_copy_struct_abs_to_abs preset_vintage_config, cfg_draft_config, Cfg
-  jsr int_refresh_menus
-  rts
-
-int_cmd_preset_APRS:
-  ut_copy_struct_abs_to_abs preset_APRS_config, cfg_draft_config, Cfg
-  jsr int_refresh_menus
-  rts
-
 int_cmd_baud:
   handle_menu_next baud_menu
   ldy baud_menu+Menu::selected_index
@@ -846,14 +724,6 @@ int_handle_kbd:
   beq @mode
   cmp #$32
   beq @protocol
-  cmp #$1f
-  beq @one
-  cmp #$1e
-  beq @two
-  cmp #$1a
-  beq @three
-  cmp #$18
-  beq @four
   cmp #$1c
   beq @escape
   bne @done
@@ -886,18 +756,6 @@ int_handle_kbd:
   jmp @done
 @protocol:
   jsr int_cmd_protocol
-  jmp @done
-@one:
-  jsr int_cmd_preset_fastchar
-  jmp @done
-@two:
-  jsr int_cmd_preset_fastline
-  jmp @done
-@three:
-  jsr int_cmd_preset_vintage
-  jmp @done
-@four:
-  jsr int_cmd_preset_APRS
   jmp @done
 @escape:
   jsr int_cmd_cancel
@@ -1036,21 +894,6 @@ protocol_menu_item_values_end:
 protocol_menu_item_labels:
 protocol_menu_item_label_aprs: .byte "APRS",$00
 protocol_menu_item_label_term: .byte "Terminal",$00
-
-presets:                .byte "Presets:",$00
-preset_fastchar:        .tag Preset
-preset_fastchar_config: .tag Cfg
-preset_fastchar_label:  .byte '1'|$80,"Fast Char",$00
-preset_fastline:        .tag Preset
-preset_fastline_config: .tag Cfg
-preset_fastline_label:  .byte '2'|$80,"Fast Line",$00
-preset_vintage:         .tag Preset
-preset_vintage_config:  .tag Cfg
-preset_vintage_label:   .byte '3'|$80,"Slow Char",$00
-preset_APRS:            .tag Preset
-preset_APRS_config:     .tag Cfg
-preset_APRS_label:      .byte '4'|$80,"APRS",$00
-
 
 top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"next "
                         .byte "            "

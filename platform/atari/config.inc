@@ -148,34 +148,6 @@ CONFIG_FLAG_ACCEPTED = %11000000
   sta config+Cfg::serial+CfgSerial::xmt
 .endmacro
 
-.macro make_preset preset, config, _label, scr_pos_offset
-  lda #<scr_pos_offset
-  clc
-  adc SCR_PTR_LO
-  sta preset+Preset::scr_pos_ptr
-  lda #>scr_pos_offset
-  adc SCR_PTR_HI
-  sta preset+Preset::scr_pos_ptr+1
-
-  lda #<_label
-  sta preset+Preset::label_ptr
-  lda #>_label
-  sta preset+Preset::label_ptr+1
-
-  lda #<config
-  sta preset+Preset::config_ptr
-  lda #>config
-  sta preset+Preset::config_ptr+1
-.endmacro
-
-.macro draw_preset preset
-  lda #<preset
-  sta cfg_ptr_lo
-  lda #>preset
-  sta cfg_ptr_hi
-  jsr int_draw_preset
-.endmacro
-
 .macro handle_menu_next _menu
   lda #<_menu
   sta cfg_ptr_lo
