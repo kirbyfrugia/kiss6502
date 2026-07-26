@@ -2,7 +2,9 @@
 
 .include "atari.inc" ; /usr/share/cc65/asminc/atari.inc
 .include "config.inc"
+.include "file.inc"
 .include "globals.inc"
+.include "line_input.inc"
 .include "rs232.inc"
 .include "screen.inc"
 .include "term.inc"
@@ -17,10 +19,11 @@ cfg_ptr_hi:                  .res 1
 
 .define MENU_MARGIN_TOP 1
 
-cfg_init:
-  lda #CONFIG_FLAG_EDITING
-  sta cfg_config_flag
+CONFIG_VERSION  = 1
+CFG_NAME_LEN    = 8
+CFG_LASTFILE_LEN = 1 + CFG_NAME_LEN
 
+int_load_default_config:
   make_config cfg_draft_config, \
                   TERM_PROTOCOL::TERM, \
                   TERM_MODE::CHAR, \
@@ -33,77 +36,89 @@ cfg_init:
                   RS232_DTR::ON, \
                   RS232_RTS::ON
 
+  lda #CONFIG_VERSION
+  sta cfg_draft_config+Cfg::version
+  rts
+
+cfg_init:
+  lda #CONFIG_FLAG_EDITING
+  sta cfg_config_flag
+
+  jsr int_load_default_config
+
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
 
-  OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 2
-  NUM_ITEMS     .set 7
+  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+2
+  NUM_ITEMS     .set 8
   BORDER_WIDTH  .set 8
   make_menu baud_menu, baud_menu_header, \
             baud_menu_item_values, baud_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 11
+  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+22
   NUM_ITEMS     .set 3
-  BORDER_WIDTH  .set 13
+  BORDER_WIDTH  .set 10
   make_menu parity_menu, parity_menu_header, \
             parity_menu_item_values, parity_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+11) * SCREEN_WIDTH + 2
+  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+12
   NUM_ITEMS     .set 4
   BORDER_WIDTH  .set 8 
   make_menu data_menu, data_menu_header, \
             data_menu_item_values, data_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+17) * SCREEN_WIDTH + 2
+  OFFSET        .set (MENU_MARGIN_TOP+9)*SCREEN_WIDTH+12
   NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 8
   make_menu stop_menu, stop_menu_header, \
             stop_menu_item_values, stop_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+7) * SCREEN_WIDTH + 11
+  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+2
   NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 6
   make_menu cts_menu, cts_menu_header, \
             cts_menu_item_values, cts_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+7) * SCREEN_WIDTH + 18
+  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+10
   NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 6
   make_menu dsr_menu, dsr_menu_header, \
             dsr_menu_item_values, dsr_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+11) * SCREEN_WIDTH + 11
+  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+18
   NUM_ITEMS     .set 3
   BORDER_WIDTH  .set 6
   make_menu dtr_menu, dtr_menu_header, \
             dtr_menu_item_values, dtr_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+11) * SCREEN_WIDTH + 18
+  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+26
   NUM_ITEMS     .set 3
   BORDER_WIDTH  .set 6
   make_menu rts_menu, rts_menu_header, \
             rts_menu_item_values, rts_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 1
+  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+1
   NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 11
   make_menu protocol_menu, protocol_menu_header, \
             protocol_menu_item_values, protocol_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+7) * SCREEN_WIDTH + 26
+  OFFSET        .set (MENU_MARGIN_TOP+8)*SCREEN_WIDTH + 22
   NUM_ITEMS     .set 3
-  BORDER_WIDTH  .set 11
+  BORDER_WIDTH  .set 10
   make_menu mode_menu, mode_menu_header, \
             mode_menu_item_values, mode_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
+
+  jsr int_filetab_init
 
   rts
 
@@ -195,14 +210,14 @@ int_draw_menu_border:
   sta menu_item_num_items
 @top_border:
   ldy draw_menu_border_width
-  lda #$45 ; upper right corner
+  lda #ICODE_UPPER_RIGHT_CORNER
   sta (g_temp_scr_ptr_lo),y
-  lda #$52 ; horizontal bar
+  lda #ICODE_HORIZONTAL_BAR
 @top_loop:
   dey
   sta (g_temp_scr_ptr_lo),y
   bne @top_loop
-  lda #$51 ; upper left corner
+  lda #ICODE_UPPER_LEFT_CORNER
   sta (g_temp_scr_ptr_lo),y
 @header:
   ldy #Menu::header_ptr
@@ -232,11 +247,10 @@ int_draw_menu_border:
   
   ldx menu_item_num_items
 @menu_item_rows_loop:
+  lda #ICODE_VERTICAL_BAR
   ldy #0
-  lda #$41 ; vertical left bar
   sta (g_temp_scr_ptr_lo),y
   ldy draw_menu_border_width 
-  lda #$44 ; vertical right bar
   sta (g_temp_scr_ptr_lo),y
 
   dex
@@ -254,14 +268,14 @@ int_draw_menu_border:
 
 @btm_border:
   ldy draw_menu_border_width
-  lda #$43 ; lower right corner
+  lda #ICODE_LOWER_RIGHT_CORNER
   sta (g_temp_scr_ptr_lo),y
-  lda #$52 ; horizontal bar
+  lda #ICODE_HORIZONTAL_BAR
 @btm_loop:
   dey
   sta (g_temp_scr_ptr_lo),y
   bne @btm_loop
-  lda #$5a ; lower left corner
+  lda #ICODE_LOWER_LEFT_CORNER
   sta (g_temp_scr_ptr_lo),y
 
   rts
@@ -269,22 +283,15 @@ int_draw_menu_border:
 int_draw_tabs:
   lda SCR_PTR_LO
   clc
-  adc #SCREEN_WIDTH
+  adc #(2*SCREEN_WIDTH)
   sta g_temp_scr_ptr_lo
   lda SCR_PTR_HI
   adc #0
   sta g_temp_scr_ptr_hi
 
-  ldy #(SCREEN_WIDTH-1)
-  lda #' '
-;  eor #$80
-  jsr ut_atascii_to_icode
-@clear_loop:
-  sta (g_temp_scr_ptr_lo),y
-  dey
-  bpl @clear_loop
-
-  ldy #0
+  ; the dialog border fills this row, so draw the labels over it,
+  ; starting at column 1 to keep the border's left corner
+  ldy #1
 @tabs_banner_loop:
   lda tabs_banner,y
   beq @tabs_banner_done
@@ -308,9 +315,69 @@ int_draw_tabs:
   
   rts
 
+int_draw_dialog_border:
+  lda SCR_PTR_LO
+  clc
+  adc #(2*SCREEN_WIDTH)
+  sta g_temp_scr_ptr_lo
+  lda SCR_PTR_HI
+  adc #0
+  sta g_temp_scr_ptr_hi
+
+  ldy #(SCREEN_WIDTH-1)
+  lda #ICODE_UPPER_RIGHT_CORNER
+  sta (g_temp_scr_ptr_lo),y
+  lda #ICODE_HORIZONTAL_BAR
+@top_loop:
+  dey
+  sta (g_temp_scr_ptr_lo),y
+  bne @top_loop
+  lda #ICODE_UPPER_LEFT_CORNER
+  sta (g_temp_scr_ptr_lo),y
+
+  ldx #(SCREEN_HEIGHT-4)
+@sides_loop:
+  lda g_temp_scr_ptr_lo
+  clc
+  adc #SCREEN_WIDTH
+  sta g_temp_scr_ptr_lo
+  lda g_temp_scr_ptr_hi
+  adc #0
+  sta g_temp_scr_ptr_hi
+
+  lda #ICODE_VERTICAL_BAR
+  ldy #0
+  sta (g_temp_scr_ptr_lo),y
+  ldy #(SCREEN_WIDTH-1)
+  sta (g_temp_scr_ptr_lo),y
+  dex
+  bne @sides_loop
+
+  lda g_temp_scr_ptr_lo
+  clc
+  adc #SCREEN_WIDTH
+  sta g_temp_scr_ptr_lo
+  lda g_temp_scr_ptr_hi
+  adc #0
+  sta g_temp_scr_ptr_hi
+
+  ldy #(SCREEN_WIDTH-1)
+  lda #ICODE_LOWER_RIGHT_CORNER
+  sta (g_temp_scr_ptr_lo),y
+  lda #ICODE_HORIZONTAL_BAR
+@btm_loop:
+  dey
+  sta (g_temp_scr_ptr_lo),y
+  bne @btm_loop
+  lda #ICODE_LOWER_LEFT_CORNER
+  sta (g_temp_scr_ptr_lo),y
+  rts
+
 ; draws the banners and the "Preset" label
 ; and any other ui elements
 int_draw_main:
+  jsr int_draw_dialog_border
+
   lda SCR_PTR_LO
   sta g_temp_scr_ptr_lo
   lda SCR_PTR_HI
@@ -339,6 +406,12 @@ int_draw_main:
   rts
 
 int_refresh_file_tab:
+  lda #FILE_FOCUS_NAME
+  sta filetab_focus
+  jsr int_filetab_clear_status
+  jsr int_filetab_file_input_set_context
+  jsr li_repaint
+  jsr int_filetab_draw_focus
   rts
 
 int_refresh_session_tab:
@@ -384,7 +457,345 @@ int_refresh_menus:
 @done:
   rts
 
+FILE_LABEL_OFFSET    = 5*SCREEN_WIDTH+2
+FILE_FIELD_OFFSET    = 5*SCREEN_WIDTH+13
+FILE_SUFFIX_OFFSET   = FILE_FIELD_OFFSET+CFG_NAME_LEN
+FILE_BTN_DEF_OFFSET  = 8*SCREEN_WIDTH+2
+FILE_BTN_LOAD_OFFSET = 8*SCREEN_WIDTH+13
+FILE_BTN_SAVE_OFFSET = 8*SCREEN_WIDTH+22
+FILE_STATUS_OFFSET   = 10*SCREEN_WIDTH+2
+FILE_STATUS_WIDTH    = 36
+
+FILE_FOCUS_NAME      = 0
+FILE_FOCUS_DEFAULT   = 1
+FILE_FOCUS_LOAD      = 2
+FILE_FOCUS_SAVE      = 3
+FILE_FOCUS_COUNT     = 4
+
 int_draw_menu_borders_file_tab:
+  lda #<file_name_label
+  sta CMDDATA0
+  lda #>file_name_label
+  sta CMDDATA1
+  lda #<FILE_LABEL_OFFSET
+  sta CMDDATA2
+  lda #>FILE_LABEL_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
+
+  lda #<file_cfg_suffix
+  sta CMDDATA0
+  lda #>file_cfg_suffix
+  sta CMDDATA1
+  lda #<FILE_SUFFIX_OFFSET
+  sta CMDDATA2
+  lda #>FILE_SUFFIX_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
+  rts
+
+int_filetab_init:
+  lda #FILE_FOCUS_NAME
+  sta filetab_focus
+
+  lda #0
+  sta cfg_li+LineInput::scr_cursor
+  sta cfg_li+LineInput::data_cursor
+  sta cfg_li+LineInput::first_visible
+
+  lda #<FILE_FIELD_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta cfg_li+LineInput::scr_ptr
+  lda #>FILE_FIELD_OFFSET
+  adc SCR_PTR_HI
+  sta cfg_li+LineInput::scr_ptr+1
+
+  lda #<cfg_basename
+  sta cfg_li+LineInput::data_ptr
+  lda #>cfg_basename
+  sta cfg_li+LineInput::data_ptr+1
+  lda #CFG_NAME_LEN
+  sta cfg_li+LineInput::num_visible
+  lda #CFG_NAME_LEN
+  sta cfg_li+LineInput::data_len
+
+  ldx #CFG_NAME_LEN-1
+  lda #' '
+@blank:
+  sta cfg_basename,x
+  dex
+  bpl @blank
+  rts
+
+int_filetab_file_input_set_context:
+  lda #<cfg_li
+  sta CMDDATA0
+  lda #>cfg_li
+  sta CMDDATA1
+  jsr li_set_context
+  rts
+
+int_filetab_save_file:
+  jsr int_filetab_file_name_valid
+  bcc @invalid
+  jsr cfg_save_config
+  bcs @failed
+  lda #<msg_saved
+  sta CMDDATA0
+  lda #>msg_saved
+  sta CMDDATA1
+  jsr int_filetab_show_status
+  rts
+@failed:
+  lda #<msg_save_failed
+  sta CMDDATA0
+  lda #>msg_save_failed
+  sta CMDDATA1
+  jsr int_filetab_show_status
+  rts
+@invalid:
+  jsr int_filetab_show_invalid
+  rts
+
+int_filetab_load:
+  jsr int_filetab_file_name_valid
+  bcc @invalid
+  jsr cfg_load_config
+  bcs @failed
+  lda #<msg_loaded
+  sta CMDDATA0
+  lda #>msg_loaded
+  sta CMDDATA1
+  jsr int_filetab_show_status
+  rts
+@failed:
+  lda #<msg_load_failed
+  sta CMDDATA0
+  lda #>msg_load_failed
+  sta CMDDATA1
+  jsr int_filetab_show_status
+  rts
+@invalid:
+  jsr int_filetab_show_invalid
+  rts
+
+; checks if the file name is valid
+; inputs:
+;   cfg_basename - addr of the file name to validate
+; outputs:
+;   carry - set if valid, clear if invalid
+;         - e.g. space in the middle of the file name
+; modifies:
+;   CMDDATA0/1/2
+;   a,y
+int_filetab_file_name_valid:
+  lda #<cfg_basename
+  sta CMDDATA0
+  lda #>cfg_basename
+  sta CMDDATA1
+  lda #CFG_NAME_LEN
+  sta CMDDATA2
+  jsr ut_str_trim_end_find
+
+  ldy ut_result
+  beq @invalid
+  dey
+@loop:
+  lda cfg_basename,y
+  cmp #' '
+  beq @invalid
+  dey
+  bpl @loop
+  sec
+  rts
+@invalid:
+  clc
+  rts
+
+int_filetab_show_invalid:
+  lda #<msg_invalid_filename
+  sta CMDDATA0
+  lda #>msg_invalid_filename
+  sta CMDDATA1
+  jsr int_filetab_show_status
+  rts
+
+; shows the message in CMDDATA0/1 on the status line, clearing first
+; inputs:
+;   CMDDATA0/1 - ptr to the message
+int_filetab_show_status:
+  jsr int_filetab_clear_status
+  lda #<FILE_STATUS_OFFSET
+  sta CMDDATA2
+  lda #>FILE_STATUS_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
+  rts
+
+int_filetab_clear_status:
+  lda #<FILE_STATUS_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta g_temp_scr_ptr_lo
+  lda #>FILE_STATUS_OFFSET
+  adc SCR_PTR_HI
+  sta g_temp_scr_ptr_hi
+
+  ldy #(FILE_STATUS_WIDTH-1)
+  lda #ICODE_SPACE
+@loop:
+  sta (g_temp_scr_ptr_lo),y
+  dey
+  bpl @loop
+  rts
+
+; draws the buttons for the file tab
+; modifies:
+;   a,x,y
+;   CMDDATA0-4
+int_filetab_draw_buttons:
+  ldx #0
+@loop:
+  stx file_btn_idx
+  lda file_btn_ptrs_lo,x
+  sta CMDDATA0
+  lda file_btn_ptrs_hi,x
+  sta CMDDATA1
+  lda file_btn_offs_lo,x
+  sta CMDDATA2
+  lda file_btn_offs_hi,x
+  sta CMDDATA3
+
+  lda #0
+  sta CMDDATA4
+  txa
+  clc
+  adc #FILE_FOCUS_DEFAULT
+  cmp filetab_focus
+  bne @nofocus
+  lda #$80
+  sta CMDDATA4
+@nofocus:
+  jsr scr_draw_str
+  ldx file_btn_idx
+  inx
+  cpx #3
+  bne @loop
+  rts
+
+int_filetab_draw_focus:
+  jsr int_filetab_draw_buttons
+  jsr int_filetab_file_input_set_context
+  lda filetab_focus
+  bne @hide
+  jsr li_show_cursor
+  rts
+@hide:
+  jsr li_hide_cursor
+  rts
+
+; TODO: split the filename text handler out separately
+int_filetab_handle_kbd:
+  lda g_kbdcode_raw
+  cmp #KEY_ESC
+  beq @escape
+  cmp #KEY_TAB
+  beq @focus_next
+  cmp #KEY_RETURN
+  beq @activate
+  ; remaining keys only edit the name field
+  ldx filetab_focus
+  beq @name_focused
+  jmp @done
+@name_focused:
+  cmp #$86 ; ctrl+left arrow
+  beq @cursor_left
+  cmp #$87 ; ctrl+right arrow
+  beq @cursor_right
+  cmp #KEY_DELETE ; backspace
+  beq @backspace
+  cmp #$b4 ; ctrl+delete
+  beq @char_delete
+  cmp #$b7 ; ctrl+insert
+  beq @char_insert
+  jmp @typechar
+@escape:
+  jsr int_cmd_cancel
+  jmp @done
+@focus_next:
+  ldx filetab_focus
+  inx
+  cpx #FILE_FOCUS_COUNT
+  bne @focus_store
+  ldx #FILE_FOCUS_NAME
+@focus_store:
+  stx filetab_focus
+  jsr int_filetab_draw_focus
+  jmp @done
+@cursor_left:
+  jsr int_filetab_file_input_set_context
+  jsr li_move_cursor_left
+  jmp @done
+@cursor_right:
+  jsr int_filetab_file_input_set_context
+  jsr li_move_cursor_right
+  jmp @done
+@backspace:
+  jsr int_filetab_file_input_set_context
+  jsr li_backspace
+  jmp @done
+@char_delete:
+  jsr int_filetab_file_input_set_context
+  jsr li_char_delete
+  jmp @done
+@char_insert:
+  jsr int_filetab_file_input_set_context
+  jsr li_char_insert
+  jmp @done
+@activate:
+  lda filetab_focus
+  cmp #FILE_FOCUS_DEFAULT
+  beq @do_default
+  cmp #FILE_FOCUS_LOAD
+  beq @do_load
+  cmp #FILE_FOCUS_SAVE
+  beq @do_save
+  jmp @done
+@do_default:
+  jsr int_load_default_config
+  jmp @done
+@do_load:
+  jsr int_filetab_load
+  jmp @done
+@do_save:
+  jsr int_filetab_save_file
+  jmp @done
+@typechar:
+  lda g_kbdcode_atascii
+  cmp #' '
+  beq @store
+  jsr ut_is_alphanumeric
+  bcc @done
+  cmp #'a'
+  bcc @store
+  cmp #'z'+1
+  bcs @store
+  sec
+  sbc #$20
+@store:
+  pha
+  jsr int_filetab_file_input_set_context
+  pla
+  sta CMDDATA0
+  jsr li_type_char
+@done:
   rts
 
 int_draw_menu_borders_session_tab:
@@ -439,6 +850,14 @@ cfg_activate:
   sta cfg_config_flag
 
   ut_copy_struct_abs_to_abs cfg_saved_config, cfg_draft_config, Cfg
+
+  ; prefill the file name from disk the first time config is shown
+  lda cfg_lastfile_loaded
+  bne @lastfile_done
+  jsr cfg_load_lastfile
+  lda #1
+  sta cfg_lastfile_loaded
+@lastfile_done:
 
   jsr int_draw_menu_borders
   jsr int_refresh_menus
@@ -697,12 +1116,17 @@ int_handle_console_keys:
 @done:
   rts
 
-  ; TODO: split this out based on what tab is selected
+
 int_handle_kbd:
   lda g_kbd_key_pressed
   bne @valid_key
   jmp @done
 @valid_key:
+  lda selected_tab
+  bne @menus
+  jsr int_filetab_handle_kbd
+  jmp @done
+@menus:
   lda g_kbdcode_raw
   cmp #$15
   beq @baud
@@ -773,6 +1197,197 @@ cfg_tick:
   sta cfg_start_fired
   rts
 
+; assembles "Dn:<name>.CFG",EOL into cfg_filespec from cfg_drive and
+; the space-padded name in cfg_basename.
+cfg_build_filespec:
+  lda #'D'
+  sta cfg_filespec
+  lda cfg_drive
+  clc
+  adc #'0'
+  sta cfg_filespec+1
+  lda #':'
+  sta cfg_filespec+2
+
+  ldx #0
+@name_loop:
+  lda cfg_basename,x
+  cmp #' '
+  beq @name_done
+  sta cfg_filespec+3,x
+  inx
+  cpx #CFG_NAME_LEN
+  bne @name_loop
+@name_done:
+  txa
+  clc
+  adc #3
+  tay
+  lda #'.'
+  sta cfg_filespec,y
+  iny
+  lda #'C'
+  sta cfg_filespec,y
+  iny
+  lda #'F'
+  sta cfg_filespec,y
+  iny
+  lda #'G'
+  sta cfg_filespec,y
+  iny
+  lda #EOL
+  sta cfg_filespec,y
+  rts
+
+; writes the draft config to Dn:<name>.CFG and updates the lastfile
+; outputs:
+;   carry - clear on success, set on error
+cfg_save_config:
+  jsr cfg_build_filespec
+
+  lda #<cfg_filespec
+  sta CMDDATA0
+  lda #>cfg_filespec
+  sta CMDDATA1
+  lda #<cfg_draft_config
+  sta CMDDATA2
+  lda #>cfg_draft_config
+  sta CMDDATA3
+  lda #<.sizeof(Cfg)
+  sta CMDDATA4
+  lda #>.sizeof(Cfg)
+  sta CMDDATA5
+  jsr file_save
+  bcs @error
+
+  jsr cfg_save_lastfile
+  clc
+  rts
+@error:
+  sec
+  rts
+
+; reads Dn:<name>.CFG into the draft config.
+; outputs:
+;   carry - clear on success, set on error
+cfg_load_config:
+  jsr cfg_build_filespec
+
+  lda #<cfg_filespec
+  sta CMDDATA0
+  lda #>cfg_filespec
+  sta CMDDATA1
+  lda #<cfg_draft_config
+  sta CMDDATA2
+  lda #>cfg_draft_config
+  sta CMDDATA3
+  lda #<.sizeof(Cfg)
+  sta CMDDATA4
+  lda #>.sizeof(Cfg)
+  sta CMDDATA5
+  jsr file_load
+  bcs @error
+
+  lda CMDDATA4
+  cmp #<.sizeof(Cfg)
+  bne @error
+  lda CMDDATA5
+  cmp #>.sizeof(Cfg)
+  bne @error
+  lda cfg_draft_config+Cfg::version
+  cmp #CONFIG_VERSION
+  beq @valid
+@error:
+  jsr int_load_default_config
+  sec
+  rts
+@valid:
+  jsr cfg_save_lastfile
+  clc
+  rts
+
+; stores the last saved or loaded filename in a hard-coded
+; file so we can load their last file on boot.
+; outputs:
+;   carry - clear on success, set on error
+cfg_save_lastfile:
+  lda cfg_drive
+  sta cfg_lastfile_data
+  ldx #CFG_NAME_LEN-1
+@copy:
+  lda cfg_basename,x
+  sta cfg_lastfile_data+1,x
+  dex
+  bpl @copy
+
+  lda #<cfg_lastfile_filespec
+  sta CMDDATA0
+  lda #>cfg_lastfile_filespec
+  sta CMDDATA1
+  lda #<cfg_lastfile_data
+  sta CMDDATA2
+  lda #>cfg_lastfile_data
+  sta CMDDATA3
+  lda #CFG_LASTFILE_LEN
+  sta CMDDATA4
+  lda #0
+  sta CMDDATA5
+  jsr file_save
+  rts
+
+; loads the last file saved or loaded into cfg_drive and cfg_basename.
+; on error (e.g. first boot) falls back to drive 1 and a blank name.
+;
+; on-disk format: "DXXXXXXXX"
+;   D         - drive number
+;    XXXXXXXX - file name (CFG_NAME_LEN chars), trailing space padded
+;
+; outputs:
+;   carry - clear on success, set on error
+cfg_load_lastfile:
+  lda #<cfg_lastfile_filespec
+  sta CMDDATA0
+  lda #>cfg_lastfile_filespec
+  sta CMDDATA1
+  lda #<cfg_lastfile_data
+  sta CMDDATA2
+  lda #>cfg_lastfile_data
+  sta CMDDATA3
+  lda #CFG_LASTFILE_LEN
+  sta CMDDATA4
+  lda #0
+  sta CMDDATA5
+  jsr file_load
+  bcs @default
+
+  lda CMDDATA4
+  cmp #CFG_LASTFILE_LEN
+  bne @default
+  lda CMDDATA5
+  bne @default
+
+  lda cfg_lastfile_data+0
+  sta cfg_drive
+  ldx #CFG_NAME_LEN-1
+@copy:
+  lda cfg_lastfile_data+1,x
+  sta cfg_basename,x
+  dex
+  bpl @copy
+  clc
+  rts
+@default:
+  lda #1
+  sta cfg_drive
+  ldx #CFG_NAME_LEN-1
+  lda #' '
+@blank_loop:
+  sta cfg_basename,x
+  dex
+  bpl @blank_loop
+  sec
+  rts
+
 baud_menu:                     .tag Menu
 baud_menu_header:              .byte 'B'|$80,"aud",$00
 baud_menu_item_values:
@@ -781,6 +1396,7 @@ baud_menu_item_values:
   .byte RS232_BAUD::B600
   .byte RS232_BAUD::B1200
   .byte RS232_BAUD::B2400
+  .byte RS232_BAUD::B4800
   .byte RS232_BAUD::B9600
   .byte RS232_BAUD::B19200
 baud_menu_item_values_end:
@@ -790,6 +1406,7 @@ baud_menu_item_label_300:      .byte "300",$00
 baud_menu_item_label_600:      .byte "600",$00
 baud_menu_item_label_1200:     .byte "1200",$00
 baud_menu_item_label_2400:     .byte "2400",$00
+baud_menu_item_label_4800:     .byte "4800",$00
 baud_menu_item_label_9600:     .byte "9600",$00
 baud_menu_item_label_19200:    .byte "19200",$00
 
@@ -874,7 +1491,7 @@ parity_menu_item_label1:       .byte "Even",$00
 parity_menu_item_label2:       .byte "Odd",$00
 
 mode_menu:                     .tag Menu
-mode_menu_header:              .byte "Term ",'M'|$80,"ode*",$00
+mode_menu_header:              .byte 'M'|$80,"ode",$00
 mode_menu_item_values:
   .byte TERM_MODE::LINE
   .byte TERM_MODE::CHAR
@@ -895,7 +1512,7 @@ protocol_menu_item_labels:
 protocol_menu_item_label_aprs: .byte "APRS",$00
 protocol_menu_item_label_term: .byte "Terminal",$00
 
-top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"next "
+top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"tab-> "
                         .byte "            "
                         .byte 'E'|$80,'S'|$80,'C'|$80,"cancel "
                         .byte 'S'|$80,'T'|$80,'A'|$80,'R'|$80,'T'|$80,"run"
@@ -924,4 +1541,31 @@ cfg_saved_config:       .tag Cfg
 cfg_config_flag:        .byte 0
 cfg_select_fired:       .byte 0
 cfg_start_fired:        .byte 0
+
+cfg_drive:              .byte 1
+cfg_basename:           .res CFG_NAME_LEN
+cfg_filespec:           .res 3+CFG_NAME_LEN+4+1; "Dn:"+name+".CFG"+EOL
+cfg_lastfile_filespec:  .byte "D1:KISSTTY.LST", EOL
+cfg_lastfile_data:      .res CFG_LASTFILE_LEN
+cfg_lastfile_loaded:    .byte 0
+
+cfg_li:                 .tag LineInput
+filetab_focus:          .byte 0
+file_btn_idx:           .byte 0
+
+file_name_label:        .byte "File name:",$00
+file_cfg_suffix:        .byte ".CFG",$00
+btn_default:            .byte "[Default]",$00
+btn_load:               .byte "[Load]",$00
+btn_save:               .byte "[Save]",$00
+msg_invalid_filename:   .byte "Invalid filename",$00
+msg_saved:              .byte "Saved",$00
+msg_save_failed:        .byte "Save failed",$00
+msg_loaded:             .byte "Loaded",$00
+msg_load_failed:        .byte "Load failed",$00
+
+file_btn_offs_lo:       .byte <FILE_BTN_DEF_OFFSET, <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET
+file_btn_offs_hi:       .byte >FILE_BTN_DEF_OFFSET, >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET
+file_btn_ptrs_lo:       .byte <btn_default, <btn_load, <btn_save
+file_btn_ptrs_hi:       .byte >btn_default, >btn_load, >btn_save
 

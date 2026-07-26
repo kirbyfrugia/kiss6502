@@ -254,6 +254,33 @@ ut_str_with_code_to_buf:
 
   rts
 
+; returns carry set if a is an alphanumeric atascii char
+; (0-9, A-Z, a-z), carry clear otherwise. a is preserved.
+;
+; inputs:
+;   a - the character
+; outputs:
+;   carry - set if alphanumeric
+ut_is_alphanumeric:
+  cmp #'0'
+  bcc @no
+  cmp #'9'+1
+  bcc @yes
+  cmp #'A'
+  bcc @no
+  cmp #'Z'+1
+  bcc @yes
+  cmp #'a'
+  bcc @no
+  cmp #'z'+1
+  bcs @no
+@yes:
+  sec
+  rts
+@no:
+  clc
+  rts
+
 ; finds the last non-space character in the
 ; given data buf, returning zero if all spaces.
 ; also returns zero if the buffer size is zero.
@@ -264,7 +291,7 @@ ut_str_with_code_to_buf:
 ; outputs:
 ;   ut_result+0 - index of one past last non-space, zero if all spaces
 ; modifies:
-;   a/y
+;   a,y
 ut_str_trim_end_find:
   data_ptr_lo = CMDDATA0
   buf_size = CMDDATA2
@@ -281,8 +308,7 @@ ut_str_trim_end_find:
   cpy #$ff
   bne @trim_loop
   ; if here, rolled over without finding a non-space
-  ; so result should be zero, which will be set by the iny
-  ; in @found
+  ; so result should be zero, which will be set by the iny below
 @found:
   iny
 @result:

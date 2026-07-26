@@ -4,8 +4,18 @@ SCREEN_INC = 1
 SCREEN_WIDTH         = 40
 SCREEN_HEIGHT        = 24
 
+ICODE_SPACE              = $00
+ICODE_SPACE_INVERTED     = $80
+ICODE_HORIZONTAL_BAR     = $52
+ICODE_VERTICAL_BAR       = $7c
+ICODE_UPPER_RIGHT_CORNER = $45
+ICODE_UPPER_LEFT_CORNER  = $51
+ICODE_LOWER_RIGHT_CORNER = $43
+ICODE_LOWER_LEFT_CORNER  = $5a
+
 .globalzp SCR_PTR_LO
 .globalzp SCR_PTR_HI
 .global scr_cls
+.global scr_draw_str
 
 .endif
