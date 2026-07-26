@@ -85,70 +85,70 @@ cfg_init:
   ut_copy_struct_abs_to_abs preset_APRS_config, cfg_draft_config, Cfg
   ut_copy_struct_abs_to_abs preset_APRS_config, cfg_saved_config, Cfg
 
-  OFFSET        .set (MENU_MARGIN_TOP+1) * SCREEN_WIDTH + 2
+  OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 2
   NUM_ITEMS     .set 7
   BORDER_WIDTH  .set 8
   make_menu baud_menu, baud_menu_header, \
             baud_menu_item_values, baud_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+1) * SCREEN_WIDTH + 11
+  OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 11
   NUM_ITEMS     .set 3
   BORDER_WIDTH  .set 13
   make_menu parity_menu, parity_menu_header, \
             parity_menu_item_values, parity_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+10) * SCREEN_WIDTH + 2
+  OFFSET        .set (MENU_MARGIN_TOP+11) * SCREEN_WIDTH + 2
   NUM_ITEMS     .set 4
   BORDER_WIDTH  .set 8 
   make_menu data_menu, data_menu_header, \
             data_menu_item_values, data_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+16) * SCREEN_WIDTH + 2
+  OFFSET        .set (MENU_MARGIN_TOP+17) * SCREEN_WIDTH + 2
   NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 8
   make_menu stop_menu, stop_menu_header, \
             stop_menu_item_values, stop_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+6) * SCREEN_WIDTH + 11
+  OFFSET        .set (MENU_MARGIN_TOP+7) * SCREEN_WIDTH + 11
   NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 6
   make_menu cts_menu, cts_menu_header, \
             cts_menu_item_values, cts_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+6) * SCREEN_WIDTH + 18
+  OFFSET        .set (MENU_MARGIN_TOP+7) * SCREEN_WIDTH + 18
   NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 6
   make_menu dsr_menu, dsr_menu_header, \
             dsr_menu_item_values, dsr_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+10) * SCREEN_WIDTH + 11
+  OFFSET        .set (MENU_MARGIN_TOP+11) * SCREEN_WIDTH + 11
   NUM_ITEMS     .set 3
   BORDER_WIDTH  .set 6
   make_menu dtr_menu, dtr_menu_header, \
             dtr_menu_item_values, dtr_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+10) * SCREEN_WIDTH + 18
+  OFFSET        .set (MENU_MARGIN_TOP+11) * SCREEN_WIDTH + 18
   NUM_ITEMS     .set 3
   BORDER_WIDTH  .set 6
   make_menu rts_menu, rts_menu_header, \
             rts_menu_item_values, rts_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+1) * SCREEN_WIDTH + 26
+  OFFSET        .set (MENU_MARGIN_TOP+2) * SCREEN_WIDTH + 1
   NUM_ITEMS     .set 3
   BORDER_WIDTH  .set 11
   make_menu protocol_menu, protocol_menu_header, \
             protocol_menu_item_values, protocol_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+6) * SCREEN_WIDTH + 26
+  OFFSET        .set (MENU_MARGIN_TOP+7) * SCREEN_WIDTH + 26
   NUM_ITEMS     .set 3
   BORDER_WIDTH  .set 11
   make_menu mode_menu, mode_menu_header, \
@@ -356,7 +356,7 @@ int_draw_tabs:
 
   ldy #(SCREEN_WIDTH-1)
   lda #' '
-  eor #$80
+;  eor #$80
   jsr ut_atascii_to_icode
 @clear_loop:
   sta (g_temp_scr_ptr_lo),y
@@ -367,7 +367,7 @@ int_draw_tabs:
 @tabs_banner_loop:
   lda tabs_banner,y
   beq @tabs_banner_done
-  eor #$80
+  ;eor #$80
   jsr ut_atascii_to_icode
   sta (g_temp_scr_ptr_lo),y
   iny
@@ -414,45 +414,7 @@ int_draw_main:
   iny
   jmp @top_banner_loop
 @top_banner_done:
-
   jsr int_draw_tabs
-
-  lda SCR_PTR_LO
-  clc
-  adc #<((SCREEN_HEIGHT-2)*SCREEN_WIDTH+1)
-  sta g_temp_scr_ptr_lo
-  lda SCR_PTR_HI
-  adc #>((SCREEN_HEIGHT-2)*SCREEN_WIDTH+1)
-  sta g_temp_scr_ptr_hi
- 
-  ldy #0
-@mode_protocol_loop:
-  lda mode_protocol_str,y
-  beq @mode_protocol_done
-  jsr ut_atascii_to_icode
-  sta (g_temp_scr_ptr_lo),y
-  iny
-  jmp @mode_protocol_loop
-@mode_protocol_done:
-
-  OFFSET .set (MENU_MARGIN_TOP+17) * SCREEN_WIDTH + 13
-  lda SCR_PTR_LO
-  clc
-  adc #<OFFSET
-  sta g_temp_scr_ptr_lo
-  lda SCR_PTR_HI
-  adc #>OFFSET
-  sta g_temp_scr_ptr_hi
-
-  ldy #0
-@serial_preset_loop:
-  lda presets,y
-  beq @serial_preset_done
-  jsr ut_atascii_to_icode
-  sta (g_temp_scr_ptr_lo),y
-  iny
-  jmp @serial_preset_loop
-@serial_preset_done:
   rts
 
 int_refresh_file_tab:
@@ -502,6 +464,29 @@ int_refresh_menus:
   rts
 
 int_draw_menu_borders_file_tab:
+  OFFSET .set (MENU_MARGIN_TOP+17) * SCREEN_WIDTH + 13
+  lda SCR_PTR_LO
+  clc
+  adc #<OFFSET
+  sta g_temp_scr_ptr_lo
+  lda SCR_PTR_HI
+  adc #>OFFSET
+  sta g_temp_scr_ptr_hi
+
+  ldy #0
+@serial_preset_loop:
+  lda presets,y
+  beq @serial_preset_done
+  jsr ut_atascii_to_icode
+  sta (g_temp_scr_ptr_lo),y
+  iny
+  jmp @serial_preset_loop
+@serial_preset_done:
+
+  draw_preset preset_fastchar
+  draw_preset preset_vintage
+  draw_preset preset_fastline
+  draw_preset preset_APRS
   rts
 
 int_draw_menu_borders_session_tab:
@@ -559,12 +544,6 @@ cfg_activate:
 
   jsr int_draw_menu_borders
   jsr int_refresh_menus
-
-  draw_preset preset_fastchar
-  draw_preset preset_vintage
-  draw_preset preset_fastline
-  draw_preset preset_APRS
-
   jsr int_draw_main
 
   rts
@@ -817,6 +796,7 @@ int_next_tab:
 @updated:
   sty selected_tab
   jsr scr_cls
+  jsr int_draw_main
   jsr int_draw_tabs
   jsr int_draw_menu_borders
   jsr int_refresh_menus
@@ -1052,12 +1032,10 @@ protocol_menu_header:          .byte '0'|$80,"Protocol",$00
 protocol_menu_item_values:
   .byte TERM_PROTOCOL::APRS
   .byte TERM_PROTOCOL::TERM
-  .byte TERM_PROTOCOL::RTTY
 protocol_menu_item_values_end:
 protocol_menu_item_labels:
 protocol_menu_item_label_aprs: .byte "APRS",$00
 protocol_menu_item_label_term: .byte "Terminal",$00
-protocol_menu_item_label_rtty: .byte "RTTY",$00
 
 presets:                .byte "Presets:",$00
 preset_fastchar:        .tag Preset
@@ -1079,14 +1057,12 @@ top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"next "
                         .byte 'E'|$80,'S'|$80,'C'|$80,"cancel "
                         .byte 'S'|$80,'T'|$80,'A'|$80,'R'|$80,'T'|$80,"run"
                         .byte $00
-;tabs_banner:            .byte "File|Sess|Ser|APRS"
-tabs_banner:            .byte " File|Sess|Ser|APRS"
+tabs_banner:            .byte " File|Session|Serial|APRS"
                         .byte $00
-tabs_highlight_starts:  .byte 1,6,11,15
-tabs_highlight_ends:    .byte 5,10,14,19
+tabs_highlight_starts:  .byte 1,6,14,21
+tabs_highlight_ends:    .byte 5,13,20,25
 num_tabs:               .byte 4
 selected_tab:           .byte 0
-mode_protocol_str:      .byte "* may be ignored for some protocols",$00
 draw_menu_tempy:        .byte 0
 draw_menu_border_width: .byte 0
 draw_menu_end_column:   .byte 0
