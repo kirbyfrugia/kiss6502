@@ -526,13 +526,6 @@ int_filetab_init:
   sta cfg_li+LineInput::num_visible
   lda #CFG_NAME_LEN
   sta cfg_li+LineInput::data_len
-
-  ldx #CFG_NAME_LEN-1
-  lda #' '
-@blank:
-  sta cfg_basename,x
-  dex
-  bpl @blank
   rts
 
 int_filetab_file_input_set_context:
