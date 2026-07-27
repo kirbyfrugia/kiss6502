@@ -338,11 +338,11 @@
 "_Visible" = 0
 "_Saved Category Mask" = "all"
 "Display: Full screen" = 0
-"Hardware mode" = 1
+"Hardware mode" = 0
 "PAL mode" = 0
 "SECAM mode" = 0
 "Mixed video mode" = 0
-"Memory mode" = 4
+"Memory mode" = 0
 "Memory: Axlon size" = 0
 "Memory: Axlon aliasing" = 0
 "Memory: High banks" = 0

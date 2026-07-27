@@ -45,7 +45,6 @@ cfg_init:
   sta cfg_config_flag
 
   jsr int_load_default_config
-
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
 
   OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+2
@@ -499,6 +498,8 @@ int_draw_menu_borders_file_tab:
   rts
 
 int_filetab_init:
+  jsr int_load_lastfile
+
   lda #FILE_FOCUS_NAME
   sta filetab_focus
 
@@ -850,14 +851,6 @@ cfg_activate:
   sta cfg_config_flag
 
   ut_copy_struct_abs_to_abs cfg_saved_config, cfg_draft_config, Cfg
-
-  ; prefill the file name from disk the first time config is shown
-  lda cfg_lastfile_loaded
-  bne @lastfile_done
-  jsr cfg_load_lastfile
-  lda #1
-  sta cfg_lastfile_loaded
-@lastfile_done:
 
   jsr int_draw_menu_borders
   jsr int_refresh_menus
@@ -1344,7 +1337,7 @@ cfg_save_lastfile:
 ;
 ; outputs:
 ;   carry - clear on success, set on error
-cfg_load_lastfile:
+int_load_lastfile:
   lda #<cfg_lastfile_filespec
   sta CMDDATA0
   lda #>cfg_lastfile_filespec
@@ -1547,7 +1540,6 @@ cfg_basename:           .res CFG_NAME_LEN
 cfg_filespec:           .res 3+CFG_NAME_LEN+4+1; "Dn:"+name+".CFG"+EOL
 cfg_lastfile_filespec:  .byte "D1:KISSTTY.LST", EOL
 cfg_lastfile_data:      .res CFG_LASTFILE_LEN
-cfg_lastfile_loaded:    .byte 0
 
 cfg_li:                 .tag LineInput
 filetab_focus:          .byte 0

@@ -24,6 +24,7 @@ CA65FLAGS_DBG  = -D DEBUG -g
 # =============================================================================
 ATARI_DIR       = $(SRCDIR)/atari
 ATARI_3RDPARTY  = $(3RDPARTYDIR)/atari
+ATARI_DOS_DIR  ?= $(ATARI_3RDPARTY)/dos25
 ATARI_CFG       = $(SRCDIR)/atari/config/atari-asm-xex-release.cfg
 ATARI_CFG_DBG   = $(SRCDIR)/atari/config/atari-asm-xex-debug.cfg
 ATARI_SRCS      = main.s \
@@ -84,13 +85,16 @@ $(ATARI_XEX_DBG): $(ATARI_OBJS_DBG)
 	$(LD65) -vm -Ln $(ATARI_VICE_SYM_DBG) -C $(ATARI_CFG_DBG) -m $(ATARI_MAP_DBG) -o $@ $^
 
 $(ATARI_ATR): $(ATARI_XEX) | $(ATARI_ATR_DIR)
+	@test -f "$(ATARI_DOS_DIR)/DOS.SYS" || { echo "Set ATARI_DOS_DIR to a dir with DOS 2.5 DOS.SYS and DUP.SYS (see $(ATARI_3RDPARTY)/dos25/README.md)"; exit 1; }
 	cp $(ATARI_XEX) $(ATARI_ATR_DIR)/autorun.sys
-	dir2atr -S -a -b MyPicoDos406N $@ $(ATARI_ATR_DIR)
+	cp $(ATARI_DOS_DIR)/*.SYS $(ATARI_ATR_DIR)/
+	dir2atr -S -b Dos25 $@ $(ATARI_ATR_DIR)
 
 $(ATARI_ATR_DBG): $(ATARI_XEX_DBG) | $(ATARI_ATR_DIR_DBG)
-        #PicoDos version
+	@test -f "$(ATARI_DOS_DIR)/DOS.SYS" || { echo "Set ATARI_DOS_DIR to a dir with DOS 2.5 DOS.SYS and DUP.SYS (see $(ATARI_3RDPARTY)/dos25/README.md)"; exit 1; }
 	cp $(ATARI_XEX_DBG) $(ATARI_ATR_DIR_DBG)/autorun.sys
-	dir2atr -S -a -b MyPicoDos406N $@ $(ATARI_ATR_DIR_DBG)
+	cp $(ATARI_DOS_DIR)/*.SYS $(ATARI_ATR_DIR_DBG)/
+	dir2atr -S -b Dos25 $@ $(ATARI_ATR_DIR_DBG)
 
 # =============================================================================
 # C64

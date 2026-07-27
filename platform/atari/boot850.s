@@ -15,8 +15,9 @@ POLL_DBYT      = 12        ; Num bytes in 850 response
 POLL_DAUX1     = $01       ; Forces the device to always respond
 POLL_DAUX2     = $00       ; Unused
 
-BOOTSTRAP      = $0506     ; Booter/relocator load address and entry point, hardcoded in DOS II's AUTORUN.sys
-LOAD_RHANDLER  = $0ab3     ; Adds the R: handler to HATABS
+BOOTSTRAP      = $0506     ; loader entry ($0500 load address plus a 6-byte boot header)
+INSTALL_OFFSET = $03b3     ; offset from MEMLO to the handler's "add R: to HATABS" routine
+BOOT_HANDOFF   = $03e9     ; the loader jumps here once it's done relocating the handler
 
 HATABS_ENTRIES = 8
 HATABS_SIZE    = HATABS_ENTRIES * 3
@@ -67,16 +68,33 @@ boot850_bootstrap:
   jsr SIOV
   bmi @error
 @bootstrap:
-  ; execute the bootstrap code provided by the 850's ROM
-  jsr BOOTSTRAP ; bootstraps the 850
-  ; load the r: handler into HATABS. The Altirra docs didn't
-  ; mention this as far as I could find, but I had to do it
-  ; to get the actual handler loaded so the system was aware
-  ; of it.
-  jsr LOAD_RHANDLER
-@installed:
+  ; $0506 loads the handler into MEMLO and relocates it, then jumps to the boot
+  ; handoff instead of returning. The OS sets that up during a normal boot, but
+  ; I'm driving the loader myself, so stub the handoff with clc/rts to get
+  ; control back. Success comes back carry clear; if the loader's own SIO fetch
+  ; fails it exits early with carry set.
+  lda #$18           ; clc opcode
+  sta BOOT_HANDOFF
+  lda #$60           ; rts opcode
+  sta BOOT_HANDOFF+1
+  jsr BOOTSTRAP
+  bcs @error
+
+  ; The handler is relocatable, so its "add R: to HATABS" routine sits at
+  ; MEMLO+INSTALL_OFFSET. Call it to install R: (with the relocated handler
+  ; vector) and bump MEMLO past the handler.
+  clc
+  lda MEMLO
+  adc #<INSTALL_OFFSET
+  sta install_vec
+  lda MEMLO+1
+  adc #>INSTALL_OFFSET
+  sta install_vec+1
+  jsr @install
   clc
   rts
+@install:
+  jmp (install_vec)
 @error:
   sec
   rts
@@ -105,3 +123,4 @@ boot850_check:
   sec
   rts
 
+install_vec: .byte 0, 0

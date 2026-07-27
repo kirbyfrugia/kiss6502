@@ -222,11 +222,13 @@ But it wasn't working for me. At least, I wasn't seeing the R: handler loaded in
 
 I was getting valid responses to each of the commands. I could see that Step 2 was sending command $21 (load) then $26 (load peripheral handler) then $53 (status) which seemed to map nicely to what was supposed to happen according to the Altirra docs. However, the R: handler was not showing up in HATABS.
 
-I searched the code for any pointers to `$031a` (HATABS). There was a loop in the code that looked for an empty slot in HATABS. Nothing else in the code seemed to be calling that from the loader or the handler. So I just made a call directly to the code at `$0ab3` after the bootstrapping sequence. It worked and the R: device showed up in HATABS!
+I searched the code for any pointers to `$031a` (HATABS). There was a loop in the code that looked for an empty slot in HATABS. Nothing else in the loader or handler seemed to be calling it. So I just made a call directly to that routine at `$0ab3` after the bootstrapping sequence, and the R: device showed up in HATABS!
+
+That worked, but only because of where MEMLO happened to be at the time. The `$0506` loader relocates the handler to MEMLO, and that HATABS-install routine relocates right along with it. On the DOS I was using, MEMLO sat at `$0700`, so the routine landed at `$0ab3`. Switch to a different DOS and MEMLO moves, so `$0ab3` points into the middle of something else and you crash. The routine actually lives at MEMLO + `$03b3`, so instead of hard-coding the address I now compute it from the current MEMLO and call that. It works wherever MEMLO ends up.
 
 Where it still might fail:
 
-* This was built to work with a rom dump from my actual 850. According to the Altirra manual, there are different ROM revisions. I think mine is the common one. My code should work on all revisions for the most part, with the exception that I hard-coded the call to load HATABS with the R: handler after it was loaded (`jsr $0ab3`). It's calling directly into a routine that exists at a known location in my ROM revision. Yours *might* differ but I have no way of knowing.
+* This was built to work with a rom dump from my actual 850. According to the Altirra manual, there are different ROM revisions. I think mine is the common one. My code should work on all revisions for the most part, with the exception that I hard-coded the offset to the HATABS-install routine (MEMLO + `$03b3`). Computing it from MEMLO means it survives a different DOS, but the offset itself is still a known location in my ROM revision. Yours *might* differ but I have no way of knowing.
 * I have two SIO2PCs. One of them seems to have a conflict with the Atari 850 when trying to bootstrap the R: handler. I never figured out why, but maybe one of them was driving the bus weirdly. If you hit this issue, try booting with your SIO2PC and then unplugging it before trying to load the R: handler. i.e. before opening the terminal.
 
 ## Resources:
