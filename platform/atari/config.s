@@ -459,16 +459,18 @@ int_refresh_menus:
 FILE_LABEL_OFFSET    = 5*SCREEN_WIDTH+2
 FILE_FIELD_OFFSET    = 5*SCREEN_WIDTH+13
 FILE_SUFFIX_OFFSET   = FILE_FIELD_OFFSET+CFG_NAME_LEN
-FILE_BTN_DEF_OFFSET  = 8*SCREEN_WIDTH+2
-FILE_BTN_LOAD_OFFSET = 8*SCREEN_WIDTH+13
-FILE_BTN_SAVE_OFFSET = 8*SCREEN_WIDTH+22
-FILE_STATUS_OFFSET   = 10*SCREEN_WIDTH+2
+FILE_BTN_LOAD_OFFSET = 8*SCREEN_WIDTH+31
+FILE_BTN_SAVE_OFFSET = 9*SCREEN_WIDTH+31
+FILE_BTN_DEF_OFFSET  = 11*SCREEN_WIDTH+22
+FILE_STATUS_OFFSET   = 13*SCREEN_WIDTH+2
 FILE_STATUS_WIDTH    = 36
 
 FILE_FOCUS_NAME      = 0
-FILE_FOCUS_DEFAULT   = 1
-FILE_FOCUS_LOAD      = 2
-FILE_FOCUS_SAVE      = 3
+FILE_FOCUS_BTN_START = 1
+FILE_FOCUS_LOAD      = 1
+FILE_FOCUS_SAVE      = 2
+FILE_FOCUS_DEFAULT   = 3
+FILE_FOCUS_BTN_END   = 3
 FILE_FOCUS_COUNT     = 4
 
 int_draw_menu_borders_file_tab:
@@ -678,7 +680,7 @@ int_filetab_draw_buttons:
   sta CMDDATA4
   txa
   clc
-  adc #FILE_FOCUS_DEFAULT
+  adc #FILE_FOCUS_BTN_START
   cmp filetab_focus
   bne @nofocus
   lda #$80
@@ -687,7 +689,7 @@ int_filetab_draw_buttons:
   jsr scr_draw_str
   ldx file_btn_idx
   inx
-  cpx #3
+  cpx #FILE_FOCUS_BTN_END
   bne @loop
   rts
 
@@ -1547,17 +1549,17 @@ file_btn_idx:           .byte 0
 
 file_name_label:        .byte "File name:",$00
 file_cfg_suffix:        .byte ".CFG",$00
-btn_default:            .byte "[Default]",$00
 btn_load:               .byte "[Load]",$00
 btn_save:               .byte "[Save]",$00
+btn_default:            .byte "[Load Defaults]",$00
 msg_invalid_filename:   .byte "Invalid filename",$00
 msg_saved:              .byte "Saved",$00
 msg_save_failed:        .byte "Save failed",$00
 msg_loaded:             .byte "Loaded",$00
 msg_load_failed:        .byte "Load failed",$00
 
-file_btn_offs_lo:       .byte <FILE_BTN_DEF_OFFSET, <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET
-file_btn_offs_hi:       .byte >FILE_BTN_DEF_OFFSET, >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET
-file_btn_ptrs_lo:       .byte <btn_default, <btn_load, <btn_save
-file_btn_ptrs_hi:       .byte >btn_default, >btn_load, >btn_save
+file_btn_offs_lo:       .byte <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
+file_btn_offs_hi:       .byte >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
+file_btn_ptrs_lo:       .byte <btn_load, <btn_save, <btn_default
+file_btn_ptrs_hi:       .byte >btn_load, >btn_save, >btn_default
 
