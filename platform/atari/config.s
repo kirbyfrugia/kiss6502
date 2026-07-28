@@ -1269,12 +1269,15 @@ int_filetab_handle_kbd:
   beq @do_save
   jmp @done
 @do_default:
+  jsr int_filetab_clear_status
   jsr int_load_default_config
   jmp @done
 @do_load:
+  jsr int_filetab_clear_status
   jsr int_filetab_load
   jmp @done
 @do_save:
+  jsr int_filetab_clear_status
   jsr int_filetab_save_file
   jmp @done
 @typechar:
