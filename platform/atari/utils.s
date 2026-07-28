@@ -254,7 +254,7 @@ ut_str_with_code_to_buf:
 
   rts
 
-; returns carry set if a is an alphanumeric atascii char
+; checks if char is an alphanumeric atascii char
 ; (0-9, A-Z, a-z), carry clear otherwise. a is preserved.
 ;
 ; inputs:
@@ -281,9 +281,27 @@ ut_is_alphanumeric:
   clc
   rts
 
-; finds the last non-space character in the
-; given data buf, returning zero if all spaces.
-; also returns zero if the buffer size is zero.
+; maps an ascii digit to its 0-9 value.
+; inputs:
+;   a - the character
+; outputs:
+;   a     - the digit value, unchanged if not a digit
+;   carry - set if a held a digit, clear otherwise
+ut_ascii_char_to_digit:
+  cmp #'0'
+  bcc @not_digit
+  cmp #'9'+1
+  bcs @not_digit
+  sec
+  sbc #'0'
+  sec
+  rts
+@not_digit:
+  clc
+  rts
+
+; finds the last non-space character in the given data buf, returning
+; zero if all spaces. also returns zero if the buffer size is zero.
 ;
 ; inputs:
 ;   CMDDATA0/1  - ptr to the data
@@ -314,6 +332,33 @@ ut_str_trim_end_find:
 @result:
   sty ut_result
 @done:
+  rts
+
+; validates that a space padded field has no leading or interior
+; spaces. an all-space (empty) field is also invalid.
+; inputs:
+;   CMDDATA0/1 - ptr to the data
+;   CMDDATA2   - size of the buffer
+; outputs:
+;   carry - set if valid, clear if invalid
+; modifies:
+;   a,y
+ut_str_validate_no_gaps:
+  jsr ut_str_trim_end_find
+  ldy ut_result
+  beq @invalid ; all spaces
+  ; now check for spaces before the last non-space char
+  dey
+@loop:
+  lda (CMDDATA0),y
+  cmp #' '
+  beq @invalid
+  dey
+  bpl @loop
+  sec
+  rts
+@invalid:
+  clc
   rts
 
 ; outputs:

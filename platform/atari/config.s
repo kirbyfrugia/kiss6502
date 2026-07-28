@@ -23,6 +23,9 @@ CONFIG_VERSION  = 1
 CFG_NAME_LEN    = 8
 CFG_LASTFILE_LEN = 1 + CFG_NAME_LEN
 
+APRS_CALL_LEN   = 6
+APRS_SSID_LEN   = 2
+
 int_load_default_config:
   make_config cfg_draft_config, \
                   TERM_PROTOCOL::TERM, \
@@ -38,6 +41,15 @@ int_load_default_config:
 
   lda #CONFIG_VERSION
   sta cfg_draft_config+Cfg::version
+
+  ldx #APRS_CALL_LEN-1
+  lda #' '
+@callsign_loop:
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::callsign,x
+  dex
+  bpl @callsign_loop
+  lda #0
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::ssid
   rts
 
 cfg_init:
@@ -118,6 +130,7 @@ cfg_init:
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
   jsr int_filetab_init
+  jsr int_aprstab_init
 
   rts
 
@@ -334,7 +347,7 @@ int_draw_dialog_border:
   lda #ICODE_UPPER_LEFT_CORNER
   sta (g_temp_scr_ptr_lo),y
 
-  ldx #(SCREEN_HEIGHT-4)
+  ldx #(SCREEN_HEIGHT-6)
 @sides_loop:
   lda g_temp_scr_ptr_lo
   clc
@@ -430,6 +443,26 @@ int_refresh_serial_tab:
   rts
 
 int_refresh_aprs_tab:
+  jsr int_aprstab_ssid_to_text
+
+  lda #APRS_FOCUS_CALLSIGN
+  sta aprstab_focus
+
+  lda #<cfg_callsign_li
+  sta CMDDATA0
+  lda #>cfg_callsign_li
+  sta CMDDATA1
+  jsr li_set_context
+  jsr li_repaint
+
+  lda #<cfg_ssid_li
+  sta CMDDATA0
+  lda #>cfg_ssid_li
+  sta CMDDATA1
+  jsr li_set_context
+  jsr li_repaint
+
+  jsr int_aprstab_draw_focus
   rts
 
 ; redraws the menu items, sets the selected by value,
@@ -472,6 +505,17 @@ FILE_FOCUS_SAVE      = 2
 FILE_FOCUS_DEFAULT   = 3
 FILE_FOCUS_BTN_END   = 3
 FILE_FOCUS_COUNT     = 4
+
+APRS_CALL_LABEL_OFFSET = 5*SCREEN_WIDTH+2
+APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+13
+APRS_SSID_LABEL_OFFSET = 7*SCREEN_WIDTH+2
+APRS_SSID_FIELD_OFFSET = 7*SCREEN_WIDTH+13
+
+APRS_FOCUS_CALLSIGN  = 0
+APRS_FOCUS_FIRST     = 0
+APRS_FOCUS_SSID      = 1
+APRS_FOCUS_LAST      = 1
+APRS_FOCUS_COUNT     = 2
 
 int_draw_menu_borders_file_tab:
   lda #<file_name_label
@@ -581,8 +625,6 @@ int_filetab_load:
   rts
 
 ; checks if the file name is valid
-; inputs:
-;   cfg_basename - addr of the file name to validate
 ; outputs:
 ;   carry - set if valid, clear if invalid
 ;         - e.g. space in the middle of the file name
@@ -596,21 +638,7 @@ int_filetab_file_name_valid:
   sta CMDDATA1
   lda #CFG_NAME_LEN
   sta CMDDATA2
-  jsr ut_str_trim_end_find
-
-  ldy ut_result
-  beq @invalid
-  dey
-@loop:
-  lda cfg_basename,y
-  cmp #' '
-  beq @invalid
-  dey
-  bpl @loop
-  sec
-  rts
-@invalid:
-  clc
+  jsr ut_str_validate_no_gaps
   rts
 
 int_filetab_show_invalid:
@@ -697,101 +725,149 @@ int_filetab_draw_focus:
   jsr li_hide_cursor
   rts
 
-; TODO: split the filename text handler out separately
-int_filetab_handle_kbd:
-  lda g_kbdcode_raw
-  cmp #KEY_ESC
-  beq @escape
-  cmp #KEY_TAB
-  beq @focus_next
-  cmp #KEY_RETURN
-  beq @activate
-  ; remaining keys only edit the name field
-  ldx filetab_focus
-  beq @name_focused
-  jmp @done
-@name_focused:
-  cmp #$86 ; ctrl+left arrow
-  beq @cursor_left
-  cmp #$87 ; ctrl+right arrow
-  beq @cursor_right
-  cmp #KEY_DELETE ; backspace
-  beq @backspace
-  cmp #$b4 ; ctrl+delete
-  beq @char_delete
-  cmp #$b7 ; ctrl+insert
-  beq @char_insert
-  jmp @typechar
-@escape:
-  jsr int_cmd_cancel
-  jmp @done
-@focus_next:
-  ldx filetab_focus
-  inx
-  cpx #FILE_FOCUS_COUNT
-  bne @focus_store
-  ldx #FILE_FOCUS_NAME
-@focus_store:
-  stx filetab_focus
-  jsr int_filetab_draw_focus
-  jmp @done
-@cursor_left:
-  jsr int_filetab_file_input_set_context
-  jsr li_move_cursor_left
-  jmp @done
-@cursor_right:
-  jsr int_filetab_file_input_set_context
-  jsr li_move_cursor_right
-  jmp @done
-@backspace:
-  jsr int_filetab_file_input_set_context
-  jsr li_backspace
-  jmp @done
-@char_delete:
-  jsr int_filetab_file_input_set_context
-  jsr li_char_delete
-  jmp @done
-@char_insert:
-  jsr int_filetab_file_input_set_context
-  jsr li_char_insert
-  jmp @done
-@activate:
-  lda filetab_focus
-  cmp #FILE_FOCUS_DEFAULT
-  beq @do_default
-  cmp #FILE_FOCUS_LOAD
-  beq @do_load
-  cmp #FILE_FOCUS_SAVE
-  beq @do_save
-  jmp @done
-@do_default:
-  jsr int_load_default_config
-  jmp @done
-@do_load:
-  jsr int_filetab_load
-  jmp @done
-@do_save:
-  jsr int_filetab_save_file
-  jmp @done
-@typechar:
-  lda g_kbdcode_atascii
-  cmp #' '
-  beq @store
-  jsr ut_is_alphanumeric
-  bcc @done
-  cmp #'a'
-  bcc @store
-  cmp #'z'+1
-  bcs @store
-  sec
-  sbc #$20
-@store:
-  pha
-  jsr int_filetab_file_input_set_context
-  pla
+int_aprstab_init:
+  lda #APRS_FOCUS_CALLSIGN
+  sta aprstab_focus
+
+  lda #0
+  sta cfg_callsign_li+LineInput::scr_cursor
+  sta cfg_callsign_li+LineInput::data_cursor
+  sta cfg_callsign_li+LineInput::first_visible
+  lda #<APRS_CALL_FIELD_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta cfg_callsign_li+LineInput::scr_ptr
+  lda #>APRS_CALL_FIELD_OFFSET
+  adc SCR_PTR_HI
+  sta cfg_callsign_li+LineInput::scr_ptr+1
+  lda #<(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+  sta cfg_callsign_li+LineInput::data_ptr
+  lda #>(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+  sta cfg_callsign_li+LineInput::data_ptr+1
+  lda #APRS_CALL_LEN
+  sta cfg_callsign_li+LineInput::num_visible
+  sta cfg_callsign_li+LineInput::data_len
+
+  lda #0
+  sta cfg_ssid_li+LineInput::scr_cursor
+  sta cfg_ssid_li+LineInput::data_cursor
+  sta cfg_ssid_li+LineInput::first_visible
+  lda #<APRS_SSID_FIELD_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta cfg_ssid_li+LineInput::scr_ptr
+  lda #>APRS_SSID_FIELD_OFFSET
+  adc SCR_PTR_HI
+  sta cfg_ssid_li+LineInput::scr_ptr+1
+  lda #<cfg_ssid_text
+  sta cfg_ssid_li+LineInput::data_ptr
+  lda #>cfg_ssid_text
+  sta cfg_ssid_li+LineInput::data_ptr+1
+  lda #APRS_SSID_LEN
+  sta cfg_ssid_li+LineInput::num_visible
+  sta cfg_ssid_li+LineInput::data_len
+  rts
+
+; points the line input at the currently focused field
+int_aprstab_input_set_context:
+  ldx aprstab_focus
+  lda cfg_aprs_li_ptrs_lo,x
   sta CMDDATA0
-  jsr li_type_char
+  lda cfg_aprs_li_ptrs_hi,x
+  sta CMDDATA1
+  jsr li_set_context
+  rts
+
+int_aprstab_draw_focus:
+  ldx #APRS_FOCUS_FIRST
+@hide_loop:
+  lda cfg_aprs_li_ptrs_lo,x
+  sta CMDDATA0
+  lda cfg_aprs_li_ptrs_hi,x
+  sta CMDDATA1
+  jsr li_set_context
+  jsr li_hide_cursor
+  cpx #APRS_FOCUS_LAST
+  beq @show
+  inx
+  bne @hide_loop
+@show:
+  jsr int_aprstab_input_set_context
+  jsr li_show_cursor
+  rts
+
+; converts the draft config ssid byte (0-15) into digits
+; for the ssid field.
+int_aprstab_ssid_to_text:
+  lda cfg_draft_config+Cfg::aprs+CfgAprs::ssid
+  cmp #10
+  bcc @single
+  sbc #10
+  ldx #'1'
+  stx cfg_ssid_text+0
+  clc
+  adc #'0'
+  sta cfg_ssid_text+1
+  rts
+@single:
+  clc
+  adc #'0'
+  sta cfg_ssid_text+0
+  lda #' '
+  sta cfg_ssid_text+1
+  rts
+
+; converts the ssid field into a hex value for saving
+int_aprstab_text_to_ssid:
+  lda aprstab_focus
+  cmp #APRS_FOCUS_SSID
+  bne @done
+
+  lda cfg_ssid_text+0
+  cmp #' '
+  beq @blank                ; ssid 0
+  jsr ut_ascii_char_to_digit
+  bcc @done                 ; not a digit
+  sta aprstab_tmp           ; first/tens digit
+
+  lda cfg_ssid_text+1
+  cmp #' '
+  beq @single           ; no second digit
+  jsr ut_ascii_char_to_digit
+  bcc @done             ; not a digit
+  ldx aprstab_tmp
+  beq @store            ; tens is 0
+  cpx #1
+  bne @done             ; tens > 1
+  cmp #6
+  bcs @done             ; tens 1, ones > 5
+  clc
+  adc #10               ; value = 10 + ones
+  jmp @store
+@single:
+  lda aprstab_tmp
+  jmp @store
+@blank:
+  lda #0
+@store:
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::ssid
 @done:
+  rts
+
+; checks if the callsign is valid: no leading or interior spaces.
+; outputs:
+;   carry - set if valid, clear if invalid
+; modifies:
+;   CMDDATA0/1/2
+;   a,y
+int_aprstab_callsign_valid:
+  lda #<(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+  sta CMDDATA0
+  lda #>(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+  sta CMDDATA1
+  lda #APRS_CALL_LEN
+  sta CMDDATA2
+  jsr ut_str_validate_no_gaps
   rts
 
 int_draw_menu_borders_session_tab:
@@ -811,6 +887,29 @@ int_draw_menu_borders_serial_tab:
   rts
 
 int_draw_menu_borders_aprs_tab:
+  lda #<aprs_call_label
+  sta CMDDATA0
+  lda #>aprs_call_label
+  sta CMDDATA1
+  lda #<APRS_CALL_LABEL_OFFSET
+  sta CMDDATA2
+  lda #>APRS_CALL_LABEL_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
+
+  lda #<aprs_ssid_label
+  sta CMDDATA0
+  lda #>aprs_ssid_label
+  sta CMDDATA1
+  lda #<APRS_SSID_LABEL_OFFSET
+  sta CMDDATA2
+  lda #>APRS_SSID_LABEL_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
   rts
 
 ; draws the chroma around the borders and the header
@@ -1104,17 +1203,117 @@ int_handle_console_keys:
 @done:
   rts
 
+int_filetab_handle_kbd:
+  lda g_kbdcode_raw
+  cmp #KEY_ESC
+  beq @escape
+  cmp #KEY_TAB
+  beq @focus_next
+  cmp #KEY_RETURN
+  beq @activate
+  ldx filetab_focus
+  beq @name_focused
+  jmp @done
+@name_focused:
+  cmp #$86 ; ctrl+left arrow
+  beq @cursor_left
+  cmp #$87 ; ctrl+right arrow
+  beq @cursor_right
+  cmp #KEY_DELETE ; backspace
+  beq @backspace
+  cmp #$b4 ; ctrl+delete
+  beq @char_delete
+  cmp #$b7 ; ctrl+insert
+  beq @char_insert
+  jmp @typechar
+@escape:
+  jsr int_cmd_cancel
+  jmp @done
+@focus_next:
+  ldx filetab_focus
+  inx
+  cpx #FILE_FOCUS_COUNT
+  bne @focus_store
+  ldx #FILE_FOCUS_NAME
+@focus_store:
+  stx filetab_focus
+  jsr int_filetab_draw_focus
+  jmp @done
+@cursor_left:
+  jsr int_filetab_file_input_set_context
+  jsr li_move_cursor_left
+  jmp @done
+@cursor_right:
+  jsr int_filetab_file_input_set_context
+  jsr li_move_cursor_right
+  jmp @done
+@backspace:
+  jsr int_filetab_file_input_set_context
+  jsr li_backspace
+  jmp @done
+@char_delete:
+  jsr int_filetab_file_input_set_context
+  jsr li_char_delete
+  jmp @done
+@char_insert:
+  jsr int_filetab_file_input_set_context
+  jsr li_char_insert
+  jmp @done
+@activate:
+  lda filetab_focus
+  cmp #FILE_FOCUS_DEFAULT
+  beq @do_default
+  cmp #FILE_FOCUS_LOAD
+  beq @do_load
+  cmp #FILE_FOCUS_SAVE
+  beq @do_save
+  jmp @done
+@do_default:
+  jsr int_load_default_config
+  jmp @done
+@do_load:
+  jsr int_filetab_load
+  jmp @done
+@do_save:
+  jsr int_filetab_save_file
+  jmp @done
+@typechar:
+  lda g_kbdcode_atascii
+  cmp #' '
+  beq @type
+  jsr ut_is_alphanumeric
+  bcc @done
+  cmp #'a'
+  bcc @type
+  cmp #'z'+1
+  bcs @type
+  sec
+  sbc #$20
+@type:
+  pha
+  jsr int_filetab_file_input_set_context
+  pla
+  sta CMDDATA0
+  jsr li_type_char
+@done:
+  rts
 
-int_handle_kbd:
-  lda g_kbd_key_pressed
-  bne @valid_key
+int_session_handle_kbd:
+  lda g_kbdcode_raw
+  cmp #$32
+  beq @protocol
+  cmp #$1c
+  beq @escape
+  bne @done
+@protocol:
+  jsr int_cmd_protocol
   jmp @done
-@valid_key:
-  lda selected_tab
-  bne @menus
-  jsr int_filetab_handle_kbd
-  jmp @done
-@menus:
+@escape:
+  jsr int_cmd_cancel
+@done:
+  rts
+
+int_serial_handle_kbd:
   lda g_kbdcode_raw
   cmp #$15
   beq @baud
@@ -1134,8 +1333,6 @@ int_handle_kbd:
   beq @rets
   cmp #$25
   beq @mode
-  cmp #$32
-  beq @protocol
   cmp #$1c
   beq @escape
   bne @done
@@ -1166,12 +1363,121 @@ int_handle_kbd:
 @mode:
   jsr int_cmd_mode
   jmp @done
-@protocol:
-  jsr int_cmd_protocol
-  jmp @done
+@escape:
+  jsr int_cmd_cancel
+@done:
+  rts
+
+int_aprstab_handle_kbd:
+  lda g_kbdcode_raw
+  cmp #KEY_ESC
+  beq @escape
+  cmp #KEY_TAB
+  beq @focus_next
+  cmp #$86 ; ctrl+left arrow
+  beq @cursor_left
+  cmp #$87 ; ctrl+right arrow
+  beq @cursor_right
+  cmp #KEY_DELETE ; backspace
+  beq @backspace
+  cmp #$b4 ; ctrl+delete
+  beq @char_delete
+  cmp #$b7 ; ctrl+insert
+  beq @char_insert
+  jmp @typechar
 @escape:
   jsr int_cmd_cancel
   jmp @done
+@focus_next:
+  ldx aprstab_focus
+  inx
+  cpx #APRS_FOCUS_COUNT
+  bne @focus_store
+  ldx #APRS_FOCUS_CALLSIGN
+@focus_store:
+  stx aprstab_focus
+  jsr int_aprstab_draw_focus
+  jmp @done
+@cursor_left:
+  jsr int_aprstab_input_set_context
+  jsr li_move_cursor_left
+  jmp @done
+@cursor_right:
+  jsr int_aprstab_input_set_context
+  jsr li_move_cursor_right
+  jmp @done
+@backspace:
+  jsr int_aprstab_input_set_context
+  jsr li_backspace
+  jsr int_aprstab_text_to_ssid
+  jmp @done
+@char_delete:
+  jsr int_aprstab_input_set_context
+  jsr li_char_delete
+  jsr int_aprstab_text_to_ssid
+  jmp @done
+@char_insert:
+  jsr int_aprstab_input_set_context
+  jsr li_char_insert
+  jsr int_aprstab_text_to_ssid
+  jmp @done
+@typechar:
+  lda aprstab_focus
+  cmp #APRS_FOCUS_SSID
+  beq @ssid_char
+@call_char:
+  lda g_kbdcode_atascii
+  cmp #' '
+  beq @type
+  jsr ut_is_alphanumeric
+  bcc @done
+  cmp #'a'
+  bcc @type
+  cmp #'z'+1
+  bcs @type
+  sec
+  sbc #$20
+@type:
+  pha
+  jsr int_aprstab_input_set_context
+  pla
+  sta CMDDATA0
+  jsr li_type_char
+  jmp @done
+@ssid_char:
+  lda g_kbdcode_atascii
+  jsr ut_ascii_char_to_digit
+  bcc @done
+  jsr int_aprstab_input_set_context
+  lda g_kbdcode_atascii
+  sta CMDDATA0
+  jsr li_type_char
+  jsr int_aprstab_text_to_ssid
+@done:
+  rts
+
+int_handle_kbd:
+  lda g_kbd_key_pressed
+  bne @valid_key
+  jmp @done
+@valid_key:
+  lda selected_tab
+  cmp #1
+  beq @session
+  cmp #2
+  beq @serial
+  cmp #3
+  beq @aprs
+  jsr int_filetab_handle_kbd
+  jmp @done
+@session:
+  jsr int_session_handle_kbd
+  jmp @done
+@serial:
+  jsr int_serial_handle_kbd
+  jmp @done
+@aprs:
+  jsr int_aprstab_handle_kbd
 @done:
   rts
 
@@ -1539,6 +1845,17 @@ cfg_lastfile_data:      .res CFG_LASTFILE_LEN
 cfg_li:                 .tag LineInput
 filetab_focus:          .byte 0
 file_btn_idx:           .byte 0
+
+cfg_callsign_li:        .tag LineInput
+cfg_ssid_li:            .tag LineInput
+cfg_ssid_text:          .res APRS_SSID_LEN
+aprstab_focus:          .byte 0
+aprstab_tmp:            .byte 0
+aprs_call_label:        .byte "Callsign:",$00
+aprs_ssid_label:        .byte "SSID:",$00
+
+cfg_aprs_li_ptrs_lo:    .byte <cfg_callsign_li, <cfg_ssid_li
+cfg_aprs_li_ptrs_hi:    .byte >cfg_callsign_li, >cfg_ssid_li
 
 file_name_label:        .byte "File name:",$00
 file_cfg_suffix:        .byte ".CFG",$00

@@ -108,13 +108,10 @@ li_move_cursor_right:
 ; the chars to the right one space left
 li_char_delete:
   ; MM_FROM = data_cursor + 1 + data_ptr
-  ; check if at far right and ignore if so
   lda li_metadata+LineInput::data_cursor
   clc
   adc #1
   bcs @done ; data cursor wrapped
-  cmp li_metadata+LineInput::data_len
-  bcs @done ; at end of data
 
   adc data_ptr_lo
   sta MM_FROM

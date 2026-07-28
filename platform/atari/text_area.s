@@ -599,20 +599,11 @@ ta_edit_line_delete:
 ; erases the char under the cursor by moving all
 ; the chars to the right one space left
 ta_edit_char_delete:
-  ldy ta_metadata+TextArea::cursory
-  cpy ta_metadata+TextArea::cursor_maxy
-  bcc @not_at_end
-  ldy ta_metadata+TextArea::cursorx
-  cpy ta_metadata+TextArea::cursor_maxx
-  bcc @not_at_end
-  bcs @done
-@not_at_end:
   jsr ta_hide_cursor
   jsr int_shift_chars_left
   jsr int_clear_last_char
   jsr ta_repaint
   jsr ta_show_cursor
-@done:
   rts
 
 ; clears the data in the current line
