@@ -255,12 +255,12 @@ ut_str_with_code_to_buf:
   rts
 
 ; checks if char is an alphanumeric atascii char
-; (0-9, A-Z, a-z), carry clear otherwise. a is preserved.
+; (0-9, A-Z, a-z). a is preserved.
 ;
 ; inputs:
 ;   a - the character
 ; outputs:
-;   carry - set if alphanumeric
+;   carry - clear if alphanumeric, set otherwise
 ut_is_alphanumeric:
   cmp #'0'
   bcc @no
@@ -275,10 +275,10 @@ ut_is_alphanumeric:
   cmp #'z'+1
   bcs @no
 @yes:
-  sec
+  clc
   rts
 @no:
-  clc
+  sec
   rts
 
 ; maps an ascii digit to its 0-9 value.
@@ -286,7 +286,7 @@ ut_is_alphanumeric:
 ;   a - the character
 ; outputs:
 ;   a     - the digit value, unchanged if not a digit
-;   carry - set if a held a digit, clear otherwise
+;   carry - clear if a held a digit, set otherwise
 ut_ascii_char_to_digit:
   cmp #'0'
   bcc @not_digit
@@ -294,10 +294,10 @@ ut_ascii_char_to_digit:
   bcs @not_digit
   sec
   sbc #'0'
-  sec
+  clc
   rts
 @not_digit:
-  clc
+  sec
   rts
 
 ; finds the last non-space character in the given data buf, returning
@@ -355,10 +355,10 @@ ut_str_validate_no_gaps:
   beq @invalid
   dey
   bpl @loop
-  sec
+  clc
   rts
 @invalid:
-  clc
+  sec
   rts
 
 ; outputs:

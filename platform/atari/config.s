@@ -19,12 +19,12 @@ cfg_ptr_hi:                  .res 1
 
 .define MENU_MARGIN_TOP 1
 
-CONFIG_VERSION  = 1
-CFG_NAME_LEN    = 8
-CFG_LASTFILE_LEN = 1 + CFG_NAME_LEN
+CONFIG_VERSION    = 1
+CFG_NAME_LEN      = 8
+CFG_LASTFILE_LEN  = 1 + CFG_NAME_LEN
 
-APRS_CALL_LEN   = 6
-APRS_SSID_LEN   = 2
+APRS_CALLSIGN_LEN = 6
+APRS_SSID_LEN     = 2
 
 int_load_default_config:
   make_config cfg_draft_config, \
@@ -42,7 +42,7 @@ int_load_default_config:
   lda #CONFIG_VERSION
   sta cfg_draft_config+Cfg::version
 
-  ldx #APRS_CALL_LEN-1
+  ldx #APRS_CALLSIGN_LEN-1
   lda #' '
 @callsign_loop:
   sta cfg_draft_config+Cfg::aprs+CfgAprs::callsign,x
@@ -489,6 +489,40 @@ int_refresh_menus:
 @done:
   rts
 
+RUN_STATUS_OFFSET   = 23*SCREEN_WIDTH+2
+RUN_STATUS_WIDTH    = 36
+
+; shows the message in CMDDATA0/1 on the start status line, clearing first
+; inputs:
+;   CMDDATA0/1 - ptr to the message
+int_start_show_status:
+  jsr int_start_clear_status
+  lda #<RUN_STATUS_OFFSET
+  sta CMDDATA2
+  lda #>RUN_STATUS_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
+  rts
+
+int_start_clear_status:
+  lda #<RUN_STATUS_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta g_temp_scr_ptr_lo
+  lda #>RUN_STATUS_OFFSET
+  adc SCR_PTR_HI
+  sta g_temp_scr_ptr_hi
+
+  ldy #(RUN_STATUS_WIDTH-1)
+  lda #ICODE_SPACE
+@loop:
+  sta (g_temp_scr_ptr_lo),y
+  dey
+  bpl @loop
+  rts
+
 FILE_LABEL_OFFSET    = 5*SCREEN_WIDTH+2
 FILE_FIELD_OFFSET    = 5*SCREEN_WIDTH+13
 FILE_SUFFIX_OFFSET   = FILE_FIELD_OFFSET+CFG_NAME_LEN
@@ -518,9 +552,9 @@ APRS_FOCUS_LAST      = 1
 APRS_FOCUS_COUNT     = 2
 
 int_draw_menu_borders_file_tab:
-  lda #<file_name_label
+  lda #<filename_label
   sta CMDDATA0
-  lda #>file_name_label
+  lda #>filename_label
   sta CMDDATA1
   lda #<FILE_LABEL_OFFSET
   sta CMDDATA2
@@ -581,8 +615,8 @@ int_filetab_file_input_set_context:
   rts
 
 int_filetab_save_file:
-  jsr int_filetab_file_name_valid
-  bcc @invalid
+  jsr int_filetab_filename_valid
+  bcs @invalid
   jsr cfg_save_config
   bcs @failed
   lda #<msg_saved
@@ -603,10 +637,11 @@ int_filetab_save_file:
   rts
 
 int_filetab_load:
-  jsr int_filetab_file_name_valid
-  bcc @invalid
+  jsr int_filetab_filename_valid
+  bcs @invalid
   jsr cfg_load_config
   bcs @failed
+  jsr int_aprstab_ssid_to_text
   lda #<msg_loaded
   sta CMDDATA0
   lda #>msg_loaded
@@ -626,12 +661,12 @@ int_filetab_load:
 
 ; checks if the file name is valid
 ; outputs:
-;   carry - set if valid, clear if invalid
+;   carry - set if invalid, clear if valid
 ;         - e.g. space in the middle of the file name
 ; modifies:
 ;   CMDDATA0/1/2
 ;   a,y
-int_filetab_file_name_valid:
+int_filetab_filename_valid:
   lda #<cfg_basename
   sta CMDDATA0
   lda #>cfg_basename
@@ -639,14 +674,6 @@ int_filetab_file_name_valid:
   lda #CFG_NAME_LEN
   sta CMDDATA2
   jsr ut_str_validate_no_gaps
-  rts
-
-int_filetab_show_invalid:
-  lda #<msg_invalid_filename
-  sta CMDDATA0
-  lda #>msg_invalid_filename
-  sta CMDDATA1
-  jsr int_filetab_show_status
   rts
 
 ; shows the message in CMDDATA0/1 on the status line, clearing first
@@ -661,6 +688,14 @@ int_filetab_show_status:
   lda #0
   sta CMDDATA4
   jsr scr_draw_str
+  rts
+
+int_filetab_show_invalid:
+  lda #<msg_invalid_filename
+  sta CMDDATA0
+  lda #>msg_invalid_filename
+  sta CMDDATA1
+  jsr int_filetab_show_status
   rts
 
 int_filetab_clear_status:
@@ -744,7 +779,7 @@ int_aprstab_init:
   sta cfg_callsign_li+LineInput::data_ptr
   lda #>(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
   sta cfg_callsign_li+LineInput::data_ptr+1
-  lda #APRS_CALL_LEN
+  lda #APRS_CALLSIGN_LEN
   sta cfg_callsign_li+LineInput::num_visible
   sta cfg_callsign_li+LineInput::data_len
 
@@ -817,46 +852,57 @@ int_aprstab_ssid_to_text:
   sta cfg_ssid_text+1
   rts
 
-; converts the ssid field into a hex value for saving
+; validates and converts the ssid field into a hex value for saving
+; outputs:
+;   carry - set if invalid ssid, clear otherwise
 int_aprstab_text_to_ssid:
-  lda aprstab_focus
-  cmp #APRS_FOCUS_SSID
-  bne @done
+  left_digit = cfg_ssid_text
+  right_digit = cfg_ssid_text+1
 
-  lda cfg_ssid_text+0
-  cmp #' '
-  beq @blank                ; ssid 0
-  jsr ut_ascii_char_to_digit
-  bcc @done                 ; not a digit
-  sta aprstab_tmp           ; first/tens digit
-
-  lda cfg_ssid_text+1
-  cmp #' '
-  beq @single           ; no second digit
-  jsr ut_ascii_char_to_digit
-  bcc @done             ; not a digit
-  ldx aprstab_tmp
-  beq @store            ; tens is 0
-  cpx #1
-  bne @done             ; tens > 1
-  cmp #6
-  bcs @done             ; tens 1, ones > 5
-  clc
-  adc #10               ; value = 10 + ones
-  jmp @store
-@single:
-  lda aprstab_tmp
-  jmp @store
-@blank:
   lda #0
-@store:
+  sta aprstab_tmp
+
+  lda right_digit
+  cmp #' '
+  bne @right_digit_not_blank
+@right_digit_blank:
+  lda left_digit
+  cmp #' '
+  bne @single_digit
+@all_blank:
+  lda aprstab_tmp
+  beq @parsed
+@right_digit_not_blank:
+  lda left_digit
+  cmp #'2'
+  bcs @error
+  cmp #' '
+  beq @right_digit_not_blank_ignore_left
+  cmp #'0'
+  beq @right_digit_not_blank_ignore_left
+@right_digit_not_blank_left_digit_one:
+  lda #10
+  sta aprstab_tmp
+@right_digit_not_blank_ignore_left:
+  lda right_digit
+@single_digit:
+  jsr ut_ascii_char_to_digit
+  bcs @error
+  clc
+  adc aprstab_tmp 
+@parsed:
+  cmp #16
+  bcs @error
   sta cfg_draft_config+Cfg::aprs+CfgAprs::ssid
-@done:
+  clc
+  rts
+@error:
+  sec
   rts
 
 ; checks if the callsign is valid: no leading or interior spaces.
 ; outputs:
-;   carry - set if valid, clear if invalid
+;   carry - set if invalid, clear if valid
 ; modifies:
 ;   CMDDATA0/1/2
 ;   a,y
@@ -865,7 +911,7 @@ int_aprstab_callsign_valid:
   sta CMDDATA0
   lda #>(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
   sta CMDDATA1
-  lda #APRS_CALL_LEN
+  lda #APRS_CALLSIGN_LEN
   sta CMDDATA2
   jsr ut_str_validate_no_gaps
   rts
@@ -887,9 +933,9 @@ int_draw_menu_borders_serial_tab:
   rts
 
 int_draw_menu_borders_aprs_tab:
-  lda #<aprs_call_label
+  lda #<aprs_callsign_label
   sta CMDDATA0
-  lda #>aprs_call_label
+  lda #>aprs_callsign_label
   sta CMDDATA1
   lda #<APRS_CALL_LABEL_OFFSET
   sta CMDDATA2
@@ -1154,18 +1200,39 @@ int_cmd_protocol:
   sta cfg_draft_config+Cfg::session+CfgSession::protocol
   rts
 
-int_cmd_accept:
-  lda #CONFIG_FLAG_ACCEPTED
-  sta cfg_config_flag
-
-  ; if APRS mode, override the user setting
+int_cmd_start:
   lda cfg_draft_config+Cfg::session+CfgSession::protocol
   cmp #TERM_PROTOCOL::APRS
-  bne @no_override
+  bne @start
+
+  ; only allow line mode in aprs
   lda #TERM_MODE::LINE
   sta cfg_draft_config+Cfg::serial+CfgSerial::mode
-@no_override:
+@aprs_check_callsign:
+  jsr int_aprstab_callsign_valid
+  bcc @aprs_check_ssid
+  lda #<msg_invalid_callsign
+  sta CMDDATA0
+  lda #>msg_invalid_callsign
+  sta CMDDATA1
+  jsr int_start_show_status
+  jmp @error
+@aprs_check_ssid:
+  jsr int_aprstab_text_to_ssid
+  bcc @start
+  lda #<msg_invalid_ssid
+  sta CMDDATA0
+  lda #>msg_invalid_ssid
+  sta CMDDATA1
+  jsr int_start_show_status
+@error:
+  sec
+  rts
+@start:
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
+  lda #CONFIG_FLAG_START
+  sta cfg_config_flag
+  clc
   rts
 
 int_highlight_selected_tab:
@@ -1188,7 +1255,7 @@ int_next_tab:
 
 int_handle_console_keys:
   lda cfg_start_fired
-  bne @accept
+  bne @start
   lda cfg_select_fired
   bne @next_tab
   clc
@@ -1197,8 +1264,8 @@ int_handle_console_keys:
   jsr int_next_tab
   sec
   jmp @done
-@accept:
-  jsr int_cmd_accept
+@start:
+  jsr int_cmd_start
   sec
 @done:
   rts
@@ -1285,7 +1352,7 @@ int_filetab_handle_kbd:
   cmp #' '
   beq @type
   jsr ut_is_alphanumeric
-  bcc @done
+  bcs @done
   cmp #'a'
   bcc @type
   cmp #'z'+1
@@ -1431,16 +1498,16 @@ int_aprstab_handle_kbd:
 @call_char:
   lda g_kbdcode_atascii
   cmp #' '
-  beq @type
+  beq @type_callsign
   jsr ut_is_alphanumeric
-  bcc @done
+  bcs @done
   cmp #'a'
-  bcc @type
+  bcc @type_callsign
   cmp #'z'+1
-  bcs @type
+  bcs @type_callsign
   sec
   sbc #$20
-@type:
+@type_callsign:
   pha
   jsr int_aprstab_input_set_context
   pla
@@ -1449,8 +1516,11 @@ int_aprstab_handle_kbd:
   jmp @done
 @ssid_char:
   lda g_kbdcode_atascii
+  cmp #' '
+  beq @type_ssid
   jsr ut_ascii_char_to_digit
-  bcc @done
+  bcs @done
+@type_ssid:
   jsr int_aprstab_input_set_context
   lda g_kbdcode_atascii
   sta CMDDATA0
@@ -1810,9 +1880,9 @@ protocol_menu_item_label_aprs: .byte "APRS",$00
 protocol_menu_item_label_term: .byte "Terminal",$00
 
 top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"tab-> "
-                        .byte "            "
+                        .byte "          "
                         .byte 'E'|$80,'S'|$80,'C'|$80,"cancel "
-                        .byte 'S'|$80,'T'|$80,'A'|$80,'R'|$80,'T'|$80,"run"
+                        .byte 'S'|$80,'T'|$80,'A'|$80,'R'|$80,'T'|$80,"start"
                         .byte $00
 tabs_banner:            .byte " File|Session|Serial|APRS"
                         .byte $00
@@ -1854,13 +1924,13 @@ cfg_ssid_li:            .tag LineInput
 cfg_ssid_text:          .res APRS_SSID_LEN
 aprstab_focus:          .byte 0
 aprstab_tmp:            .byte 0
-aprs_call_label:        .byte "Callsign:",$00
+aprs_callsign_label:    .byte "Callsign:",$00
 aprs_ssid_label:        .byte "SSID:",$00
 
 cfg_aprs_li_ptrs_lo:    .byte <cfg_callsign_li, <cfg_ssid_li
 cfg_aprs_li_ptrs_hi:    .byte >cfg_callsign_li, >cfg_ssid_li
 
-file_name_label:        .byte "File name:",$00
+filename_label:         .byte "File name:",$00
 file_cfg_suffix:        .byte ".CFG",$00
 btn_load:               .byte "[Load]",$00
 btn_save:               .byte "[Save]",$00
@@ -1870,6 +1940,9 @@ msg_saved:              .byte "Saved",$00
 msg_save_failed:        .byte "Save failed",$00
 msg_loaded:             .byte "Loaded",$00
 msg_load_failed:        .byte "Load failed",$00
+
+msg_invalid_callsign:   .byte "Invalid APRS callsign",$00
+msg_invalid_ssid:       .byte "Invalid APRS ssid",$00
 
 file_btn_offs_lo:       .byte <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
 file_btn_offs_hi:       .byte >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
