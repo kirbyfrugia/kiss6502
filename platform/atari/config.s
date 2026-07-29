@@ -28,8 +28,8 @@ APRS_SSID_LEN     = 2
 
 int_load_default_config:
   make_config cfg_draft_config, \
-                  TERM_PROTOCOL::TERM, \
-                  TERM_MODE::CHAR, \
+                  TERM_PROTOCOL::APRS, \
+                  TERM_MODE::LINE, \
                   RS232_BAUD::B9600, \
                   RS232_WORDSIZE::N8, \
                   RS232_STOPBITS::N1, \
@@ -489,17 +489,17 @@ int_refresh_menus:
 @done:
   rts
 
-RUN_STATUS_OFFSET   = 23*SCREEN_WIDTH+2
-RUN_STATUS_WIDTH    = 36
+START_STATUS_OFFSET   = 22*SCREEN_WIDTH+1
+START_STATUS_WIDTH    = 36
 
 ; shows the message in CMDDATA0/1 on the start status line, clearing first
 ; inputs:
 ;   CMDDATA0/1 - ptr to the message
 int_start_show_status:
   jsr int_start_clear_status
-  lda #<RUN_STATUS_OFFSET
+  lda #<START_STATUS_OFFSET
   sta CMDDATA2
-  lda #>RUN_STATUS_OFFSET
+  lda #>START_STATUS_OFFSET
   sta CMDDATA3
   lda #0
   sta CMDDATA4
@@ -507,15 +507,15 @@ int_start_show_status:
   rts
 
 int_start_clear_status:
-  lda #<RUN_STATUS_OFFSET
+  lda #<START_STATUS_OFFSET
   clc
   adc SCR_PTR_LO
   sta g_temp_scr_ptr_lo
-  lda #>RUN_STATUS_OFFSET
+  lda #>START_STATUS_OFFSET
   adc SCR_PTR_HI
   sta g_temp_scr_ptr_hi
 
-  ldy #(RUN_STATUS_WIDTH-1)
+  ldy #(START_STATUS_WIDTH-1)
   lda #ICODE_SPACE
 @loop:
   sta (g_temp_scr_ptr_lo),y

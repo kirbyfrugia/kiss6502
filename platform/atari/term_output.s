@@ -98,6 +98,7 @@ to_resize:
   rts
 
 ; prints N null terminated strings, each on their own line
+; NOTE: this is really inefficient, so only use if you have to.
 ; inputs:
 ;   CMDDATA0/1 - pointer to the data to append
 ;   CMDDATA2   - number of lines to append
