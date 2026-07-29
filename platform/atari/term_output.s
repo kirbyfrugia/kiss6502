@@ -97,6 +97,52 @@ to_resize:
   jsr ta_shift_clear
   rts
 
+; prints N null terminated strings, each on their own line
+; inputs:
+;   CMDDATA0/1 - pointer to the data to append
+;   CMDDATA2   - number of lines to append
+to_print_lines:
+  jsr int_set_context
+
+  jsr ta_out_next_line
+
+  lda CMDDATA0
+  sta to_tempa
+
+  ldx #0
+  stx to_tempx
+@lines_loop:
+  ldy #0
+  sty to_tempy
+@col_loop:
+  ; ta_edit_type_char modifies A, so cache it
+  lda to_tempa
+  sta CMDDATA0
+  ldy to_tempy
+  lda (CMDDATA0),y
+  beq @col_done
+  sta CMDDATA0
+  jsr ta_edit_type_char
+  inc to_tempy
+  jmp @col_loop
+@col_done:
+  jsr ta_out_next_line
+  inc to_tempx
+  ldx to_tempx
+  cpx CMDDATA2
+  beq @lines_done
+  inc to_tempy
+  lda to_tempa
+  clc
+  adc to_tempy
+  sta to_tempa
+  bcc @nowrap
+  inc CMDDATA1
+@nowrap:
+  jmp @lines_loop
+@lines_done:
+  rts
+
 ; see ta_out_println for what this does. Not super
 ; efficient, but fine for short strings like "welcome"
 to_println:
@@ -126,6 +172,10 @@ to_append_lines:
 
 to_metadata: .tag TextArea
 to_data:     .res TO_MAX_SIZE
+
+to_tempa: .res 1
+to_tempx: .res 1
+to_tempy: .res 1
 
 new_line: .repeat SCREEN_WIDTH, I
              .byte ' '

@@ -39,6 +39,7 @@ TO_MAX_HEIGHT               = TO_HEIGHT_SINGLE_LINE_INPUT
 .global to_init
 .global to_append_char
 .global to_append_lines
+.global to_print_lines
 .global to_println
 .global to_repaint
 .global to_resize

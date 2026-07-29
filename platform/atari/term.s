@@ -224,6 +224,7 @@ trm_activate:
   jsr int_repaint
   jsr int_cmd_boot850
   jsr int_cmd_open_rs232
+  jsr int_print_usage
   jmp @done
 @just_repaint:
   jsr int_repaint
@@ -283,17 +284,8 @@ int_cmd_line_mode_char_delete:
   jsr tli_char_delete
   rts
 
-int_cmd_line_mode_return:
-;  lda #<tli_data
-;  sta CMDDATA0
-;  lda #>tli_data
-;  sta CMDDATA1
-;  lda #1
-;  sta CMDDATA2
-;  lda #0
-;  sta CMDDATA3
-;  jsr to_append_lines
 
+int_send_message:
   lda #<tli_data
   sta CMDDATA0
   lda #>tli_data
@@ -307,11 +299,45 @@ int_cmd_line_mode_return:
   lda #KISS_SEND_FLAG_TRIM_END
   sta CMDDATA5
   jsr pk_send_message
-  bcc iclmr_success
+  bcc ism_success
   print_str_with_code str_error_rs232_putchr, g_copy_buffer40, pk_error
-iclmr_success:
+ism_success:
+  rts
+
+int_print_usage:
+  lda #<str_help
+  sta CMDDATA0
+  lda #>str_help
+  sta CMDDATA1
+  lda str_help_num_lines
+  sta CMDDATA2
+  jsr to_print_lines
+  rts
+
+;  these settings get saved in their own file, not the config file.
+int_parse_cmd_line:
+  lda tli_data
+  cmp #'/'
+  bne @not_slash
+@unknown:
+  jsr int_print_usage
+  jmp @done
+@not_slash:
+  jsr int_send_message
+@done:
   jsr tli_shift_clear
   rts
+
+int_cmd_line_mode_return:
+;  lda #<tli_data
+;  sta CMDDATA0
+;  lda #>tli_data
+;  sta CMDDATA1
+;  lda #1
+;  sta CMDDATA2
+;  lda #0
+;  sta CMDDATA3
+;  jsr to_append_lines
 
 int_cmd_multi_mode_move_cursor_up:
   jsr tmi_edit_move_cursor_up
@@ -717,6 +743,18 @@ str_error_rs232_getchr:      .byte "Error on RS232 getchr",$00
 str_error_rs232_getchr_code: ; used as index to print error code for above str
 str_error_rs232_putchr:      .byte "Error on RS232 putchr",$00
 str_error_rs232_putchr_code: ; used as index to print error code for above str
+
+str_help:
+  .byte "usage:",$00
+  .byte "/h          - print help",$00
+  .byte "/rx+ <call> - add to include list",$00
+  .byte "/rx- <call> - rem from include list",$00
+  .byte "/net        - rx all, tx broadcast",$00
+  .byte "/qso <call> - rx frm incl/tx to qso",$00
+  .byte "/msg <call> <msg> - send msg to call",$00
+  .byte "/s          - show current settings",$00
+str_help_num_lines:          .byte 8
+
 command_error:               .byte 0
 
 rs232_byte_read:             .byte 0
