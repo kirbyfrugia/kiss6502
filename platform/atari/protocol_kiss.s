@@ -2,7 +2,6 @@
 .include "protocol_kiss.inc"
 .include "atari.inc"
 .include "globals.inc"
-.include "macros.inc"
 .include "rs232.inc"
 .include "utils.inc"
 

@@ -1,7 +1,6 @@
 .setcpu "6502"
 .include "config.inc"
 .include "globals.inc"
-.include "macros.inc"
 .include "screen.inc"
 .include "term_output.inc"
 .include "term.inc"

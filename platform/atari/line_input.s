@@ -1,7 +1,6 @@
 .setcpu "6502"
 .include "line_input.inc"
 .include "globals.inc"
-.include "macros.inc"
 .include "memmove.inc"
 .include "utils.inc"
 
@@ -39,7 +38,7 @@ do_switch:
   beq no_cache
 cache_exists:
   ; copy our local cache to the existing source LineInput
-  copy_struct_abs_to_zp li_metadata, context_ptr_lo, LineInput
+  ut_copy_struct_abs_to_zp li_metadata, context_ptr_lo, LineInput
 no_cache:
   ; now point to the new line input
   lda CMDDATA0
@@ -49,7 +48,7 @@ no_cache:
 
   ; copy data from the new LineInput to the local cache in
   ; the zero page.
-  copy_struct_zp_to_abs context_ptr_lo, li_metadata, LineInput
+  ut_copy_struct_zp_to_abs context_ptr_lo, li_metadata, LineInput
 set_context_done:
   rts
 

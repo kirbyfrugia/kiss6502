@@ -4,7 +4,6 @@
 .include "boot850.inc"
 .include "config.inc"
 .include "globals.inc"
-.include "macros.inc"
 .include "main.inc"
 .include "line_input.inc"
 .include "term_line_input.inc"

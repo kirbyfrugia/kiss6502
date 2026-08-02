@@ -1,7 +1,6 @@
 .setcpu "6502"
 .include "config.inc"
 .include "globals.inc"
-.include "macros.inc"
 .include "memmove.inc"
 .include "screen.inc"
 .include "text_area.inc"
@@ -42,7 +41,7 @@ do_switch:
   beq no_cache
 cache_exists:
   ; copy our local cache to the existing source TextArea
-  copy_struct_abs_to_zp ta_metadata, context_ptr_lo, TextArea
+  ut_copy_struct_abs_to_zp ta_metadata, context_ptr_lo, TextArea
 no_cache:
   ; now point to the new text area
   lda CMDDATA0
@@ -52,7 +51,7 @@ no_cache:
 
   ; copy data from the new TextArea to the local cache in
   ; the zero page.
-  copy_struct_zp_to_abs context_ptr_lo, ta_metadata, TextArea
+  ut_copy_struct_zp_to_abs context_ptr_lo, ta_metadata, TextArea
 set_context_done:
   rts
 

@@ -340,7 +340,7 @@ ut_str_trim_end_find:
 ;   CMDDATA0/1 - ptr to the data
 ;   CMDDATA2   - size of the buffer
 ; outputs:
-;   carry - set if valid, clear if invalid
+;   carry - clear if valid, set if invalid
 ; modifies:
 ;   a,y
 ut_str_validate_no_gaps:
