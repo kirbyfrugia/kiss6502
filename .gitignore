@@ -2,4 +2,6 @@ build
 /target
 kisstty.log
 test-with-self.txt
-todo.txt
+todo.md
+todo-atari.md
+todo-rust.md

@@ -111,9 +111,9 @@ pk_text_to_ssid:
   sec
   rts
 
-; parses a callsign with an optional ssid, e.g. W1AW-9, stopping
-; at a space or when the characters run out. lowercase is
-; accepted and uppercased.
+; parses a callsign with an optional ssid, e.g. NOCALL-1, stopping
+; at a space or when the characters run out. callsign will
+; be converted to upper case.
 ;
 ; inputs:
 ;   CMDDATA0/1 - ptr to the text
