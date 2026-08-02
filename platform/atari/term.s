@@ -62,7 +62,7 @@ int_draw_ui_multi_line_input:
 ; draws the char mode specific part of the ui
 int_draw_ui_single_line_input:
   jsr int_draw_ui_base
-  draw_divider (SCREEN_WIDTH*22)
+  jsr int_draw_tx_status
 
   CURSOR_POS .set (SCREEN_WIDTH*23)
   lda SCR_PTR_LO
@@ -77,6 +77,50 @@ int_draw_ui_single_line_input:
   jsr ut_atascii_to_icode
   sta (ZPB0),y
 
+  rts
+
+TX_STATUS_OFFSET = 22*SCREEN_WIDTH+1
+
+; redraws the divider above the input line, with the current tx
+; addressee sunk into it in reverse text.
+int_draw_tx_status:
+  draw_divider (SCREEN_WIDTH*22)
+
+  lda cfg_saved_config+Cfg::session+CfgSession::protocol
+  cmp #TERM_PROTOCOL::APRS
+  bne @done
+
+  lda SCR_PTR_LO
+  clc
+  adc #<TX_STATUS_OFFSET
+  sta ZPB0
+  lda SCR_PTR_HI
+  adc #>TX_STATUS_OFFSET
+  sta ZPB1
+
+  ldy #0
+  ldx #0
+@prefix_loop:
+  lda str_tx_prefix,x
+  beq @addressee
+  eor #$80
+  jsr ut_atascii_to_icode
+  sta (ZPB0),y
+  inx
+  iny
+  bne @prefix_loop
+@addressee:
+  ldx #0
+@addressee_loop:
+  lda tx_addressee,x
+  beq @done
+  eor #$80
+  jsr ut_atascii_to_icode
+  sta (ZPB0),y
+  inx
+  iny
+  bne @addressee_loop
+@done:
   rts
 
 int_draw_ui_base:
@@ -422,7 +466,7 @@ int_cmd_tx:
   bcs @invalid
   jsr int_build_tx_addressee
 @show:
-  jsr int_show_tx
+  jsr int_draw_tx_status
   rts
 @invalid:
   print_str str_invalid_callsign
@@ -439,8 +483,6 @@ int_set_tx_broadcast:
 @done:
   rts
 
-; renders the parsed callsign and ssid into the tx addressee.
-; a zero ssid is left off, matching how callsigns are written.
 int_build_tx_addressee:
   ldx #0
   ldy #0
@@ -478,28 +520,6 @@ int_build_tx_addressee:
 @done:
   lda #0
   sta tx_addressee,y
-  rts
-
-int_show_tx:
-  lda #<str_tx_prefix
-  sta CMDDATA0
-  lda #>str_tx_prefix
-  sta CMDDATA1
-  lda #<g_copy_buffer40
-  sta CMDDATA2
-  lda #>g_copy_buffer40
-  sta CMDDATA3
-  jsr ut_str_to_buf
-  ldx #0
-@copy_loop:
-  lda tx_addressee,x
-  sta (CMDDATA2),y
-  beq @done
-  inx
-  iny
-  bne @copy_loop
-@done:
-  print_str g_copy_buffer40
   rts
 
 int_cmd_multi_mode_move_cursor_up:
