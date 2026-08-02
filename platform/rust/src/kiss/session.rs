@@ -602,7 +602,7 @@ mod tests {
 
     fn raw_info_frame(source: &str, info: &[u8]) -> Ax25Frame {
         let mut bytes = Vec::new();
-        bytes.extend(addr(Ax25Addr::AX25DEST).encode(false));
+        bytes.extend(addr(Ax25Addr::AX25DEST).encode_dest());
         bytes.extend(addr(source).encode(true));
         bytes.push(0x03);
         bytes.push(0xf0);

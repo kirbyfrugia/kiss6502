@@ -25,6 +25,8 @@ pub struct Ax25Addr {
 impl Ax25Addr {
     pub const AX25DEST: &str = "APKTY1";
 
+    const COMMAND: u8 = 0b1000_0000;
+
     pub fn parse(s: &str) -> Result<Self, String> {
         let s = s.trim();
         let (addr, ssid) = match s.split_once('-') {
@@ -80,6 +82,12 @@ impl Ax25Addr {
         };
 
         return bytes;
+    }
+
+    pub fn encode_dest(&self) -> [u8; 7] {
+        let mut bytes = self.encode(false);
+        bytes[6] |= Self::COMMAND;
+        bytes
     }
 
     fn process_addr(buf: &[u8; 7]) -> String {
@@ -151,7 +159,7 @@ impl Ax25Frame {
 
         let num_digis = self.digipeaters.len();
 
-        bytes.extend(self.dest.encode(false));
+        bytes.extend(self.dest.encode_dest());
         bytes.extend(self.source.encode(num_digis == 0));
 
         for (i, digi) in self.digipeaters.iter().enumerate() {
@@ -230,3 +238,36 @@ impl Ax25Frame {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dest_encodes_with_the_command_bit_set() {
+        let dest = Ax25Addr::new(Ax25Addr::AX25DEST.to_string(), 0);
+
+        assert_eq!(
+            dest.encode_dest(),
+            [0x82, 0xA0, 0x96, 0xA8, 0xB2, 0x62, 0xE0],
+            "must match pk_dest_addr in platform/atari/protocol_kiss.s",
+        );
+    }
+
+    #[test]
+    fn source_encodes_without_the_command_bit_and_marked_last() {
+        let source = Ax25Addr::new("NOCALL".to_string(), 0);
+
+        assert_eq!(
+            source.encode(true),
+            [0x9C, 0x9E, 0x86, 0x82, 0x98, 0x98, 0x61],
+        );
+    }
+
+    #[test]
+    fn ssid_lands_in_bits_four_through_one() {
+        let source = Ax25Addr::new("W1AW".to_string(), 9);
+
+        assert_eq!(source.encode(true), [0xAE, 0x62, 0x82, 0xAE, 0x40, 0x40, 0x73]);
+    }
+}
