@@ -26,10 +26,11 @@ This means a few things:
 kisstty has the concept of "net mode" (broadcast) and "qso mode" (conversations)
 for APRS `message` types.
 
-In net mode, it addresses all messages to a `BROADCAST` addressee. I considered
-different ways to indicate that a message was meant for everyone, such as APRS
-bulletins. However, I wanted to be sure I didn't cause any weird issues with
-other software where they built in special handling for things like bulletins.
+In net mode, it addresses all messages to `CQ`. Receiving stations read messages
+addressed to `ALL`, `QST` or `CQ` as a general call, and none of the three are
+ever acked. I considered APRS bulletins (`BLN1`, `BLN2`, ...) instead, but other
+software gives those special handling. They get sorted onto a separate bulletins
+page rather than showing up in the normal message flow.
 
 You switch modes by entering:
 ```
