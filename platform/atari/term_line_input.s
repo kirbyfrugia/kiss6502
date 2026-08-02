@@ -9,7 +9,7 @@
 
 MARGIN_LEFT  = 1
 MARGIN_TOP   = 23
-MAX_LINE_LEN = 128
+MAX_LINE_LEN = 67
 
 ; initializes the line input area
 ;

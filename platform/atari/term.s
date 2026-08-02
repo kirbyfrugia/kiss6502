@@ -946,4 +946,3 @@ command_error:               .byte 0
 
 rs232_byte_read:             .byte 0
 port_status:                 .byte 0
-tempy_delete_later:          .byte 0
