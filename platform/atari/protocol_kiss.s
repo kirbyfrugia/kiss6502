@@ -50,13 +50,163 @@ pk_encode_addr:
   sta (out_ptr_lo),y
   rts
 
+; validates and converts a two character ssid field into a value.
+; the field can be left aligned, right aligned, or all spaces
+; for a zero ssid.
+;
+; inputs:
+;   CMDDATA0/1 - ptr to the two character field
+; outputs:
+;   a     - the ssid, 0 to 15
+;   carry - set if invalid ssid, clear otherwise
+; modifies:
+;   a,y
+pk_text_to_ssid:
+  left_digit = 0
+  right_digit = 1
+
+  lda #0
+  sta ssid_tmp
+
+  ldy #right_digit
+  lda (CMDDATA0),y
+  cmp #' '
+  bne @right_digit_not_blank
+@right_digit_blank:
+  ldy #left_digit
+  lda (CMDDATA0),y
+  cmp #' '
+  bne @single_digit
+@all_blank:
+  lda ssid_tmp
+  beq @parsed
+@right_digit_not_blank:
+  ldy #left_digit
+  lda (CMDDATA0),y
+  cmp #'2'
+  bcs @error
+  cmp #' '
+  beq @right_digit_not_blank_ignore_left
+  cmp #'0'
+  beq @right_digit_not_blank_ignore_left
+  cmp #'1'
+  bne @error
+@right_digit_not_blank_left_digit_one:
+  lda #10
+  sta ssid_tmp
+@right_digit_not_blank_ignore_left:
+  ldy #right_digit
+  lda (CMDDATA0),y
+@single_digit:
+  jsr ut_ascii_char_to_digit
+  bcs @error
+  clc
+  adc ssid_tmp
+@parsed:
+  cmp #16
+  bcs @error
+  clc
+  rts
+@error:
+  sec
+  rts
+
+; parses a callsign with an optional ssid, e.g. W1AW-9, stopping
+; at a space or when the characters run out. lowercase is
+; accepted and uppercased.
+;
+; inputs:
+;   CMDDATA0/1 - ptr to the text
+;   CMDDATA2   - number of characters to scan
+; outputs:
+;   pk_callsign - uppercased and space padded to 6
+;   pk_ssid     - the ssid, 0 to 15
+;   carry       - clear if valid, set otherwise
+; modifies:
+;   CMDDATA0/1
+;   a,x,y
+pk_parse_callsign:
+  text_ptr_lo = CMDDATA0
+  text_len = CMDDATA2
+
+  ldx #APRS_CALLSIGN_LEN-1
+  lda #' '
+@blank_loop:
+  sta pk_callsign,x
+  dex
+  bpl @blank_loop
+
+  lda #0
+  sta pk_ssid
+
+  ldx #0
+  ldy #0
+@call_loop:
+  cpy text_len
+  beq @call_end
+  lda (text_ptr_lo),y
+  cmp #' '
+  beq @call_end
+  cmp #'-'
+  beq @dash
+  jsr ut_to_upper
+  jsr ut_is_alphanumeric
+  bcs @error
+  cpx #APRS_CALLSIGN_LEN
+  bcs @error
+  sta pk_callsign,x
+  inx
+  iny
+  bne @call_loop
+@call_end:
+  cpx #0
+  beq @error
+  clc
+  rts
+@dash:
+  cpx #0
+  beq @error
+  iny
+  lda #' '
+  sta ssid_text+0
+  sta ssid_text+1
+  ldx #0
+@ssid_loop:
+  cpy text_len
+  beq @ssid_end
+  lda (text_ptr_lo),y
+  cmp #' '
+  beq @ssid_end
+  cpx #APRS_SSID_LEN
+  bcs @error
+  sta ssid_text,x
+  inx
+  iny
+  bne @ssid_loop
+@ssid_end:
+  cpx #0
+  beq @error
+  lda #<ssid_text
+  sta CMDDATA0
+  lda #>ssid_text
+  sta CMDDATA1
+  jsr pk_text_to_ssid
+  bcs @error
+  sta pk_ssid
+  clc
+  rts
+@error:
+  sec
+  rts
+
 ; writes N chars from the given buffer over rs232 as
 ; a kiss message type with the option of trimming the end
 ; off the data. i.e. sending until last non-space char.
 ;
 ; inputs:
 ;   CMDDATA0/1 - ptr to the data
-;   CMDDATA2/3 - ptr to the addressee
+;   CMDDATA2/3 - ptr to the addressee, null terminated or 9 chars.
+;                shorter ones are padded out with spaces.
 ;   CMDDATA4   - size of buf
 ;   CMDDATA5   - trim flag, set RS232_PUTBUF_TRIM to trim
 pk_send_message:
@@ -86,14 +236,16 @@ pk_send_message:
   bne @ready
 @all_spaces:
   jmp @done
+@to_error:
+  jmp @error
 @ready:
   lda #KISS_FEND
   jsr rs232_putchr
-  bcs @error
+  bcs @to_error
 
   lda #KISS_CMD::DATA_FRAME
   jsr int_putchr_escaped
-  bcs @error
+  bcs @to_error
 
   ; TODO: don't hard-code the header
   ldy #0
@@ -101,7 +253,7 @@ pk_send_message:
   sty tempy
   lda pk_dest_addr,y
   jsr int_putchr_escaped
-  bcs @error
+  bcs @to_error
   ldy tempy
   iny
   cpy #7
@@ -131,16 +283,28 @@ pk_send_message:
   bcs @error
 
   ldy #0
-@addressee:
+@addressee_loop:
   sty tempy
-  lda pk_broadcast_addressee,y
+  lda (addressee_ptr_lo),y
+  beq @addressee_pad_loop
   jsr int_putchr_escaped
   bcs @error
   ldy tempy
   iny
-  cpy #9
-  bne @addressee
- 
+  cpy #KISS_ADDRESSEE_LEN
+  bne @addressee_loop
+  beq @addressee_done
+@addressee_pad_loop:
+  sty tempy
+  lda #' '
+  jsr int_putchr_escaped
+  bcs @error
+  ldy tempy
+  iny
+  cpy #KISS_ADDRESSEE_LEN
+  bne @addressee_pad_loop
+@addressee_done:
+
   lda #':'
   jsr int_putchr_escaped
   bcs @error
@@ -712,6 +876,10 @@ y_index_var:     .res 1
 btwn_counter:    .res 1
 tempy:           .res 1
 tempchr:         .res 1
+ssid_tmp:        .res 1
+ssid_text:       .res APRS_SSID_LEN
+pk_callsign:     .res APRS_CALLSIGN_LEN
+pk_ssid:         .res 1
 
 pk_dest_addr: ; APKTY1
   .byte $82,$A0,$96,$A8,$B2,$62,$E0
@@ -720,5 +888,5 @@ pk_state:        .res 1
 pk_frame_header: .tag KissFrameHeader
 pk_source_addr:  .res .sizeof(KissFrameAddr)
 pk_error:        .res 1
-pk_broadcast_addressee: .byte "CQ       "
+pk_broadcast_addressee: .byte "CQ",$00
 

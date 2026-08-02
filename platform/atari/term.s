@@ -174,6 +174,7 @@ int_reset_protocol:
 @aprs:
   jsr pk_reset
   jsr int_set_source_addr
+  jsr int_set_tx_broadcast
   jmp @done
 @done:
   rts
@@ -304,9 +305,9 @@ int_send_message:
   sta CMDDATA0
   lda #>tli_data
   sta CMDDATA1
-  lda #<pk_broadcast_addressee
+  lda #<tx_addressee
   sta CMDDATA2
-  lda #>pk_broadcast_addressee
+  lda #>tx_addressee
   sta CMDDATA3
   lda tli_metadata+LineInput::data_len
   sta CMDDATA4
@@ -330,27 +331,175 @@ int_print_usage:
   jsr to_append_lines
   rts
 
-;  these settings get saved in their own file, not the config file.
 int_cmd_line_mode_return:
-;  lda #<tli_data
-;  sta CMDDATA0
-;  lda #>tli_data
-;  sta CMDDATA1
-;  lda #1
-;  sta CMDDATA2
-;  lda #0
-;  sta CMDDATA3
-;  jsr to_append_lines
   lda tli_data
   cmp #'/'
   bne @not_slash
-@unknown:
-  jsr int_print_usage
+  jsr int_run_command
   jmp @done
 @not_slash:
   jsr int_send_message
 @done:
   jsr tli_shift_clear
+  rts
+
+int_run_command:
+  lda #<str_cmd_tx
+  sta CMDDATA0
+  lda #>str_cmd_tx
+  sta CMDDATA1
+  jsr int_cmd_name_matches
+  bcc @tx
+  jsr int_print_usage
+  jmp @done
+@tx:
+  jsr int_cmd_tx
+@done:
+  rts
+
+; matches what was typed against the given command name. the
+; typed name has to end at a space, so /txfoo is not a match
+; for /tx.
+;
+; inputs:
+;   CMDDATA0/1 - ptr to the null terminated name, in uppercase
+; outputs:
+;   carry - clear on a match, set otherwise
+;   y     - index into tli_data just past the name
+int_cmd_name_matches:
+  ldy #0
+@name_loop:
+  lda (CMDDATA0),y
+  beq @name_end
+  sta cmd_char
+  lda tli_data,y
+  jsr ut_to_upper
+  cmp cmd_char
+  bne @no_match
+  iny
+  bne @name_loop
+@name_end:
+  lda tli_data,y
+  cmp #' '
+  bne @no_match
+  clc
+  rts
+@no_match:
+  sec
+  rts
+
+; points the tx addressee at the callsign given as the argument.
+; no argument goes back to the broadcast addressee.
+;
+; inputs:
+;   y - index into tli_data just past the command name
+int_cmd_tx:
+@skip_loop:
+  cpy tli_metadata+LineInput::data_len
+  beq @no_arg
+  lda tli_data,y
+  cmp #' '
+  bne @have_arg
+  iny
+  bne @skip_loop
+@no_arg:
+  jsr int_set_tx_broadcast
+  jmp @show
+@have_arg:
+  sty cmd_arg_idx
+  tya
+  clc
+  adc #<tli_data
+  sta CMDDATA0
+  lda #>tli_data
+  adc #0
+  sta CMDDATA1
+  lda tli_metadata+LineInput::data_len
+  sec
+  sbc cmd_arg_idx
+  sta CMDDATA2
+  jsr pk_parse_callsign
+  bcs @invalid
+  jsr int_build_tx_addressee
+@show:
+  jsr int_show_tx
+  rts
+@invalid:
+  print_str str_invalid_callsign
+  rts
+
+int_set_tx_broadcast:
+  ldy #0
+@copy_loop:
+  lda pk_broadcast_addressee,y
+  sta tx_addressee,y
+  beq @done
+  iny
+  bne @copy_loop
+@done:
+  rts
+
+; renders the parsed callsign and ssid into the tx addressee.
+; a zero ssid is left off, matching how callsigns are written.
+int_build_tx_addressee:
+  ldx #0
+  ldy #0
+@call_loop:
+  lda pk_callsign,x
+  cmp #' '
+  beq @call_done
+  sta tx_addressee,y
+  inx
+  iny
+  cpx #APRS_CALLSIGN_LEN
+  bne @call_loop
+@call_done:
+  lda pk_ssid
+  beq @done
+  sta cmd_ssid
+  lda #'-'
+  sta tx_addressee,y
+  iny
+  lda cmd_ssid
+  cmp #10
+  bcc @ones
+  sec
+  sbc #10
+  sta cmd_ssid
+  lda #'1'
+  sta tx_addressee,y
+  iny
+  lda cmd_ssid
+@ones:
+  clc
+  adc #'0'
+  sta tx_addressee,y
+  iny
+@done:
+  lda #0
+  sta tx_addressee,y
+  rts
+
+int_show_tx:
+  lda #<str_tx_prefix
+  sta CMDDATA0
+  lda #>str_tx_prefix
+  sta CMDDATA1
+  lda #<g_copy_buffer40
+  sta CMDDATA2
+  lda #>g_copy_buffer40
+  sta CMDDATA3
+  jsr ut_str_to_buf
+  ldx #0
+@copy_loop:
+  lda tx_addressee,x
+  sta (CMDDATA2),y
+  beq @done
+  inx
+  iny
+  bne @copy_loop
+@done:
+  print_str g_copy_buffer40
   rts
 
 int_cmd_multi_mode_move_cursor_up:
@@ -760,13 +909,18 @@ str_error_rs232_putchr_code: ; used as index to print error code for above str
 str_help:
   .byte "usage:                                "
   .byte "/h          - print help              "
-  .byte "/rx+ <call> - add call to incl list   "
-  .byte "/rx- <call> - rem call from incl list "
-  .byte "/net        - rx frm all/tx broadcast "
-  .byte "/qso <call> - rx frm incl/tx to qso   "
-  .byte "/msg <call> <msg> - send msg to call  "
-  .byte "/s          - show current settings   "
-str_help_num_lines:          .byte 8
+  .byte "/tx <call>  - send messages to <call> "
+  .byte "/tx         - send messages to CQ     "
+str_help_num_lines:          .byte 4
+
+str_cmd_tx:                  .byte "/TX",$00
+str_tx_prefix:               .byte "tx: ",$00
+str_invalid_callsign:        .byte "invalid callsign",$00
+
+tx_addressee:                .res KISS_ADDRESSEE_LEN+1
+cmd_char:                    .res 1
+cmd_arg_idx:                 .res 1
+cmd_ssid:                    .res 1
 
 command_error:               .byte 0
 

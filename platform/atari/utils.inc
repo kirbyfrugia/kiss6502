@@ -8,11 +8,13 @@ UTILS_INC = 1
 .global   ut_hex_to_atascii
 .global   ut_hex_to_icode
 .global   ut_bin_to_bcd
+.global   ut_str_to_buf
 .global   ut_str_with_code_to_buf
 .global   ut_str_trim_end_find
 .global   ut_str_validate_no_gaps
 .global   ut_is_alphanumeric
 .global   ut_ascii_char_to_digit
+.global   ut_to_upper
 
 ; compares 16 bit x to y, branches appropriately
 .macro ut_cmp16 _x, _y, branch_xlty, branch_xeqy, branch_xgty

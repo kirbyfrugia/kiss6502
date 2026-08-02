@@ -40,6 +40,13 @@ PCTL_KISS_INC = 1
 .global pk_broadcast_addressee
 .global pk_encode_addr
 .global pk_source_addr
+.global pk_text_to_ssid
+.global pk_parse_callsign
+.global pk_callsign
+.global pk_ssid
+
+APRS_CALLSIGN_LEN = 6
+APRS_SSID_LEN     = 2
 
 KISS_STATE_NEW           = %10000000 ; waiting for first FEND
 KISS_STATE_FESC          = %01000000 ; in an FESC waiting for next byte
@@ -63,6 +70,7 @@ KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX = 7
 KISS_TYPE_MSG_START_COLON_IDX  = 0
 KISS_TYPE_MSG_ADDRESSEE_IDX    = 1
 KISS_TYPE_MSG_END_COLON_IDX    = 10
+KISS_ADDRESSEE_LEN             = 9
 
 KISS_SEND_FLAG_TRIM_END = %10000000
 

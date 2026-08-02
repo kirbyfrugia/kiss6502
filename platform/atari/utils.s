@@ -281,6 +281,23 @@ ut_is_alphanumeric:
   sec
   rts
 
+; maps a lowercase ascii letter to uppercase. anything else
+; comes back unchanged.
+;
+; inputs:
+;   a - the character
+; outputs:
+;   a - the uppercased character
+ut_to_upper:
+  cmp #'a'
+  bcc @done
+  cmp #'z'+1
+  bcs @done
+  sec
+  sbc #('a'-'A')
+@done:
+  rts
+
 ; maps an ascii digit to its 0-9 value.
 ; inputs:
 ;   a - the character

@@ -5,6 +5,7 @@
 .include "file.inc"
 .include "globals.inc"
 .include "line_input.inc"
+.include "protocol_kiss.inc"
 .include "rs232.inc"
 .include "screen.inc"
 .include "term.inc"
@@ -23,8 +24,6 @@ CONFIG_VERSION    = 1
 CFG_NAME_LEN      = 8
 CFG_LASTFILE_LEN  = 1 + CFG_NAME_LEN
 
-APRS_CALLSIGN_LEN = 6
-APRS_SSID_LEN     = 2
 
 int_load_default_config:
   make_config cfg_draft_config, \
@@ -856,42 +855,11 @@ int_aprstab_ssid_to_text:
 ; outputs:
 ;   carry - set if invalid ssid, clear otherwise
 int_aprstab_text_to_ssid:
-  left_digit = cfg_ssid_text
-  right_digit = cfg_ssid_text+1
-
-  lda #0
-  sta aprstab_tmp
-
-  lda right_digit
-  cmp #' '
-  bne @right_digit_not_blank
-@right_digit_blank:
-  lda left_digit
-  cmp #' '
-  bne @single_digit
-@all_blank:
-  lda aprstab_tmp
-  beq @parsed
-@right_digit_not_blank:
-  lda left_digit
-  cmp #'2'
-  bcs @error
-  cmp #' '
-  beq @right_digit_not_blank_ignore_left
-  cmp #'0'
-  beq @right_digit_not_blank_ignore_left
-@right_digit_not_blank_left_digit_one:
-  lda #10
-  sta aprstab_tmp
-@right_digit_not_blank_ignore_left:
-  lda right_digit
-@single_digit:
-  jsr ut_ascii_char_to_digit
-  bcs @error
-  clc
-  adc aprstab_tmp 
-@parsed:
-  cmp #16
+  lda #<cfg_ssid_text
+  sta CMDDATA0
+  lda #>cfg_ssid_text
+  sta CMDDATA1
+  jsr pk_text_to_ssid
   bcs @error
   sta cfg_draft_config+Cfg::aprs+CfgAprs::ssid
   clc
@@ -1923,7 +1891,6 @@ cfg_callsign_li:        .tag LineInput
 cfg_ssid_li:            .tag LineInput
 cfg_ssid_text:          .res APRS_SSID_LEN
 aprstab_focus:          .byte 0
-aprstab_tmp:            .byte 0
 aprs_callsign_label:    .byte "Callsign:",$00
 aprs_ssid_label:        .byte "SSID:",$00
 
