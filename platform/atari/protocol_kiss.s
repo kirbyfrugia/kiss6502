@@ -92,7 +92,7 @@ pk_send_message:
   bcs @error
 
   lda #KISS_CMD::DATA_FRAME
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
 
   ; TODO: don't hard-code the header
@@ -100,7 +100,7 @@ pk_send_message:
 @dest:
   sty tempy
   lda pk_dest_addr,y
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
   ldy tempy
   iny
@@ -111,7 +111,7 @@ pk_send_message:
 @src:
   sty tempy
   lda pk_source_addr,y
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
   ldy tempy
   iny
@@ -119,22 +119,22 @@ pk_send_message:
   bne @src
 
   lda #$03 ; ui frame
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
 
   lda #$f0 ; PID, no layer 3
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
 
   lda #':'
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
 
   ldy #0
 @addressee:
   sty tempy
   lda pk_broadcast_addressee,y
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
   ldy tempy
   iny
@@ -142,17 +142,19 @@ pk_send_message:
   bne @addressee
  
   lda #':'
-  jsr rs232_putchr
+  jsr int_putchr_escaped
   bcs @error
 
-  lda CMDDATA2
-  pha
-  lda ut_result
-  sta CMDDATA2
-  jsr rs232_putchrs
-  pla
-  sta CMDDATA2
+  ldy #0
+@info_loop:
+  sty tempy
+  lda (data_ptr_lo),y
+  jsr int_putchr_escaped
   bcs @error
+  ldy tempy
+  iny
+  cpy ut_result
+  bne @info_loop
 
   lda #KISS_FEND
   jsr rs232_putchr
@@ -164,6 +166,38 @@ pk_send_message:
   ldy rs232_last_status
   sty pk_error
   sec
+  rts
+
+; writes the byte over rs232, replacing it with the two byte
+; escape sequence if it collides with a kiss framing byte.
+;
+; inputs:
+;   a - the byte to write
+; outputs:
+;   carry - set on a putchr error
+; modifies:
+;   a,x
+int_putchr_escaped:
+  cmp #KISS_FEND
+  beq @fend
+  cmp #KISS_FESC
+  beq @fesc
+  jsr rs232_putchr
+  rts
+@fend:
+  lda #KISS_TFEND
+  sta tempchr
+  jmp @escape
+@fesc:
+  lda #KISS_TFESC
+  sta tempchr
+@escape:
+  lda #KISS_FESC
+  jsr rs232_putchr
+  bcs @done
+  lda tempchr
+  jsr rs232_putchr
+@done:
   rts
 
 pk_next_frame:
@@ -677,6 +711,7 @@ x_index_var_end: .res 1
 y_index_var:     .res 1
 btwn_counter:    .res 1
 tempy:           .res 1
+tempchr:         .res 1
 
 pk_dest_addr: ; APKTY1
   .byte $82,$A0,$96,$A8,$B2,$62,$E0
