@@ -34,7 +34,6 @@ pk_send_message:
   trim = CMDDATA5
 
   lda trim
-  bit KISS_SEND_FLAG_TRIM_END
   bmi @trim
   lda buf_size
   beq @data_empty; was empty string
@@ -656,5 +655,5 @@ hardcoded_src:  ; NOCALL
 pk_state:        .res 1
 pk_frame_header: .tag KissFrameHeader
 pk_error:        .res 1
-pk_broadcast_addressee: .byte "BROADCAST"
+pk_broadcast_addressee: .byte "CQ       "
 

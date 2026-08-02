@@ -185,8 +185,8 @@ impl MainUi {
         let addressee_tx;
 
         let (mode, rx, tx) = match &self.app_mode {
-            AppMode::Monitor => ("MODE: monitor", "all data types", "broadcast"),
-            AppMode::Net => ("MODE: net", "all messages", "broadcast"),
+            AppMode::Monitor => ("MODE: monitor", "all data types", AprsMessage::BROADCAST_ADDRESSEE),
+            AppMode::Net => ("MODE: net", "all messages", AprsMessage::BROADCAST_ADDRESSEE),
             AppMode::Qso { addressee, .. } => {
                 addressee_rx = format!("from {}", addressee);
                 addressee_tx = format!("to {}", addressee);

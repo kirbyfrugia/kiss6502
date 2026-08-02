@@ -65,7 +65,12 @@ impl AprsData {
 }
 
 impl AprsMessage {
-    pub const BROADCAST_ADDRESSEE: &str = "BROADCAST";
+    pub const BROADCAST_ADDRESSEE: &str = "CQ";
+
+    pub fn is_broadcast_addressee(addressee: &str) -> bool {
+        let addressee = addressee.trim().to_uppercase();
+        matches!(addressee.as_str(), "ALL" | "QST" | "CQ") || addressee.starts_with("BLN")
+    }
 
     pub fn new(addressee: String, text: String, id: Option<String>) -> Self {
         Self {

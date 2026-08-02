@@ -301,7 +301,7 @@ impl KissSession {
     pub fn try_claim(&mut self, message: Message) -> Option<Message> {
         match message {
             Message::SendAprsMessage { addressee, text } => {
-                let id = if addressee == AprsMessage::BROADCAST_ADDRESSEE {
+                let id = if AprsMessage::is_broadcast_addressee(&addressee) {
                     None
                 } else {
                     Some(self.next_message_id(&addressee))
@@ -846,6 +846,27 @@ mod tests {
             session.frames[0].log_id,
             "update must target the item that was originally published",
         );
+    }
+
+    #[test]
+    fn send_to_a_broadcast_addressee_carries_no_message_id() {
+        for addressee in ["CQ", "ALL", "QST", "BLN1", "BLNA", "BLN1WX", "cq"] {
+            let (mut session, _receiver) = session();
+            send(&mut session, addressee, "hello");
+
+            assert!(
+                !session.frames[0].is_ackable(),
+                "{addressee} is a broadcast addressee and should not be ackable",
+            );
+        }
+    }
+
+    #[test]
+    fn send_to_a_callsign_carries_a_message_id() {
+        let (mut session, _receiver) = session();
+        send(&mut session, "NOCALL-1", "hello");
+
+        assert!(session.frames[0].is_ackable());
     }
 
     #[test]
