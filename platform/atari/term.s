@@ -173,8 +173,25 @@ int_reset_protocol:
   jmp @done
 @aprs:
   jsr pk_reset
+  jsr int_set_source_addr
   jmp @done
 @done:
+  rts
+
+int_set_source_addr:
+  lda #<(cfg_saved_config+Cfg::aprs+CfgAprs::callsign)
+  sta CMDDATA0
+  lda #>(cfg_saved_config+Cfg::aprs+CfgAprs::callsign)
+  sta CMDDATA1
+  lda #<pk_source_addr
+  sta CMDDATA2
+  lda #>pk_source_addr
+  sta CMDDATA3
+  lda cfg_saved_config+Cfg::aprs+CfgAprs::ssid
+  sta CMDDATA4
+  lda #(KISS_ADDR_RESERVED | KISS_ADDR_LAST)
+  sta CMDDATA5
+  jsr pk_encode_addr
   rts
 
 int_repaint:

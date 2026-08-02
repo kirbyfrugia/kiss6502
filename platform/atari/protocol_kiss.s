@@ -17,6 +17,39 @@ pk_reset:
   jsr pk_next_frame
   rts
 
+; encodes a callsign and ssid into the 7 byte ax25 address
+; format. each callsign byte is shifted left one bit, then a
+; last byte holds the ssid in bits 4-1 with the given flags
+; ored in.
+;
+; inputs:
+;   CMDDATA0/1 - ptr to the callsign, space padded to 6
+;   CMDDATA2/3 - ptr to the 7 byte output buffer
+;   CMDDATA4   - ssid, 0 to 15
+;   CMDDATA5   - flags to or into the ssid byte
+; modifies:
+;   a,y
+pk_encode_addr:
+  callsign_ptr_lo = CMDDATA0
+  out_ptr_lo = CMDDATA2
+  ssid = CMDDATA4
+  addr_flags = CMDDATA5
+
+  ldy #0
+@callsign_loop:
+  lda (callsign_ptr_lo),y
+  asl
+  sta (out_ptr_lo),y
+  iny
+  cpy #.sizeof(KissFrameAddr::callsign)
+  bne @callsign_loop
+
+  lda ssid
+  asl
+  ora addr_flags
+  sta (out_ptr_lo),y
+  rts
+
 ; writes N chars from the given buffer over rs232 as
 ; a kiss message type with the option of trimming the end
 ; off the data. i.e. sending until last non-space char.
@@ -66,7 +99,7 @@ pk_send_message:
   ldy #0
 @dest:
   sty tempy
-  lda hardcoded_dest,y
+  lda pk_dest_addr,y
   jsr rs232_putchr
   bcs @error
   ldy tempy
@@ -77,7 +110,7 @@ pk_send_message:
   ldy #0
 @src:
   sty tempy
-  lda hardcoded_src,y
+  lda pk_source_addr,y
   jsr rs232_putchr
   bcs @error
   ldy tempy
@@ -645,14 +678,12 @@ y_index_var:     .res 1
 btwn_counter:    .res 1
 tempy:           .res 1
 
-; TODO: remove this instead of hardcoding
-hardcoded_dest: ; APZ001 
-  .byte $82,$A0,$B4,$60,$60,$62,$E0
-hardcoded_src:  ; NOCALL
-  .byte $9C,$9E,$86,$82,$98,$98,$61
+pk_dest_addr: ; APKTY1
+  .byte $82,$A0,$96,$A8,$B2,$62,$E0
 
 pk_state:        .res 1
 pk_frame_header: .tag KissFrameHeader
+pk_source_addr:  .res .sizeof(KissFrameAddr)
 pk_error:        .res 1
 pk_broadcast_addressee: .byte "CQ       "
 

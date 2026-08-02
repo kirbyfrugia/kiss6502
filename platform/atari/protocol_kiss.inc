@@ -38,6 +38,8 @@ PCTL_KISS_INC = 1
 .global pk_send_message
 .global pk_error
 .global pk_broadcast_addressee
+.global pk_encode_addr
+.global pk_source_addr
 
 KISS_STATE_NEW           = %10000000 ; waiting for first FEND
 KISS_STATE_FESC          = %01000000 ; in an FESC waiting for next byte
@@ -77,6 +79,10 @@ KISS_SEND_FLAG_TRIM_END = %10000000
   DUPLEX      = $05
   RETURN      = $ff
 .endenum
+
+KISS_ADDR_COMMAND  = %10000000
+KISS_ADDR_RESERVED = %01100000
+KISS_ADDR_LAST     = %00000001
 
 ; these are sent shifted left by one bit
 ; but they are unshifted in this struct
