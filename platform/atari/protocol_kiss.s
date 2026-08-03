@@ -10,12 +10,46 @@
 buf_counter:  .res 1
 addr_counter: .res 1
 
+DEDUP_N = 16            ; must be a power of 2, the write index wraps with an AND
+DEDUP_TTL_SECS = 30
+DEDUP_TICK_FRAMES = 60  ; number of VBIs before running the dedup ttl expire function
+
 .segment "CODE"
 
 pk_reset:
   lda #KISS_STATE_NEW
   sta pk_state
+  lda #0
+  sta dedup_next
+  ldx #DEDUP_N-1
+@ttl_clear_loop:
+  sta dedup_ttl,x
+  dex
+  bpl @ttl_clear_loop
+  lda #DEDUP_TICK_FRAMES
+  sta dedup_tick
   jsr pk_next_frame
+  rts
+
+; ages out the dedup entries, called from the vbi.
+; we do this once per every DEDUP_TICK_FRAMES frames.
+;
+; modifies:
+;   a,x
+pk_vbi_tick:
+  dec dedup_tick
+  bne @done
+  lda #DEDUP_TICK_FRAMES
+  sta dedup_tick
+  ldx #DEDUP_N-1
+@ttl_loop:
+  lda dedup_ttl,x
+  beq @next
+  dec dedup_ttl,x
+@next:
+  dex
+  bpl @ttl_loop
+@done:
   rts
 
 ; encodes a callsign and ssid into the 7 byte ax25 address
@@ -625,6 +659,11 @@ int_process_message:
 @finalize:
   sty y_index_var
   jsr int_add_header_bytes_to_crc
+  ; todo: actually handle acks
+  jsr int_is_ack
+  bcs @done
+  jsr int_check_duplicate
+  bcs @done
   jsr int_finalize_disp
 @done:
   rts
@@ -858,7 +897,77 @@ int_add_header_bytes_to_crc:
 
   rts
 
-int_ack_message:
+; checks whether the received message is an ack
+; outputs:
+;   c - set if the frame is an ack, clear otherwise
+; modifies:
+;   a,x
+int_is_ack:
+  lda g_rx_buf_num_chars
+  cmp #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN+KISS_MSG_ID_MIN_LEN)
+  bcc @not_ack
+  cmp #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN+KISS_MSG_ID_MAX_LEN+1)
+  bcs @not_ack
+
+  ldx #KISS_TYPE_MSG_TEXT_IDX
+  lda g_rx_buf,x
+  cmp #'a'
+  bne @not_ack
+  inx
+  lda g_rx_buf,x
+  cmp #'c'
+  bne @not_ack
+  inx
+  lda g_rx_buf,x
+  cmp #'k'
+  bne @not_ack
+  sec
+  rts
+@not_ack:
+  clc
+  rts
+
+; checks the crc of the frame we just read against the ones
+; we have recently seen.
+;
+; inputs:
+;   crc_lo/crc_hi - crc of the frame just read
+; outputs:
+;   c - set if we have already seen this frame, clear otherwise
+; modifies:
+;   a,x,y
+int_check_duplicate:
+  ldx #DEDUP_N-1
+@scan_loop:
+  lda dedup_ttl,x
+  beq @next
+  lda dedup_crc_lo,x
+  cmp crc_lo
+  bne @next
+  lda dedup_crc_hi,x
+  cmp crc_hi
+  beq @duplicate
+@next:
+  dex
+  bpl @scan_loop
+
+  ldx dedup_next
+  lda crc_lo
+  sta dedup_crc_lo,x
+  lda crc_hi
+  sta dedup_crc_hi,x
+  lda #DEDUP_TTL_SECS
+  sta dedup_ttl,x
+
+  inx
+  txa
+  and #DEDUP_N-1
+  sta dedup_next
+
+  clc
+  rts
+@duplicate:
+  sec
   rts
 
 ; inputs:
@@ -938,4 +1047,10 @@ pk_digi_len:     .res 1
 pk_digi_addrs:   .res APRS_MAX_DIGI * .sizeof(KissFrameAddr)
 pk_error:        .res 1
 pk_broadcast_addressee: .byte "CQ",$00
+
+dedup_next:      .res 1
+dedup_tick:      .res 1
+dedup_crc_lo:    .res DEDUP_N
+dedup_crc_hi:    .res DEDUP_N
+dedup_ttl:       .res DEDUP_N
 

@@ -8,6 +8,7 @@
 .include "screen.inc"
 .include "term.inc"
 .include "line_input.inc"
+.include "protocol_kiss.inc"
 .include "text_area.inc"
 .include "utils.inc"
 
@@ -148,9 +149,9 @@ vbi_handler:
   lda debounce_count_start
   beq @check_option
   dec debounce_count_start
-
 @check_option:
 @done:
+  jsr pk_vbi_tick
   jmp XITVBV ; hand control back to OS
 
 

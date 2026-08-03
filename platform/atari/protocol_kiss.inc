@@ -30,6 +30,7 @@
 PCTL_KISS_INC = 1
 
 .global pk_reset
+.global pk_vbi_tick
 .global pk_new_byte
 .global pk_next_frame
 .global pk_process_frame
@@ -74,7 +75,13 @@ KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX = 7
 KISS_TYPE_MSG_START_COLON_IDX  = 0
 KISS_TYPE_MSG_ADDRESSEE_IDX    = 1
 KISS_TYPE_MSG_END_COLON_IDX    = 10
+KISS_TYPE_MSG_TEXT_IDX         = 11
 KISS_ADDRESSEE_LEN             = 9
+
+; an ack is the text "ack" followed by a 1 to 5 char message id
+KISS_ACK_PREFIX_LEN = 3
+KISS_MSG_ID_MIN_LEN = 1
+KISS_MSG_ID_MAX_LEN = 5
 
 KISS_SEND_FLAG_TRIM_END = %10000000
 
