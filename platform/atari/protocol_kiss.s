@@ -817,6 +817,9 @@ int_process_message:
   cmp #KISS_TYPE_MSG_END_COLON_IDX
   bcc @done ; not a valid message
 
+  jsr int_is_our_source
+  bcs @done ; we showed it when we sent it
+
   lda #<pk_frame_header
   sta fmt_hdr_lo
   lda #>pk_frame_header
@@ -1066,6 +1069,25 @@ int_add_header_bytes_to_crc:
   cpy #(KissFrameHeader::source+.sizeof(KissFrameAddr))
   bne @source_loop
 
+  rts
+
+; checks whether we are the source of the frame we just received
+; outputs:
+;   c - set if we sent the frame, clear otherwise
+; modifies:
+;   a,y
+int_is_our_source:
+  ldy #.sizeof(KissFrameAddr)-1
+@source_loop:
+  lda pk_frame_header+KissFrameHeader::source,y
+  cmp pk_tx_header+KissFrameHeader::source,y
+  bne @no
+  dey
+  bpl @source_loop
+  sec
+  rts
+@no:
+  clc
   rts
 
 ; checks whether the received message is an ack
