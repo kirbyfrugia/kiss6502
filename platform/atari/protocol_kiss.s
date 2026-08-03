@@ -249,7 +249,7 @@ pk_send_message:
 
   ; TODO: don't hard-code the header
   ldy #0
-@dest:
+@dest_loop:
   sty tempy
   lda pk_dest_addr,y
   jsr int_putchr_escaped
@@ -257,10 +257,10 @@ pk_send_message:
   ldy tempy
   iny
   cpy #7
-  bne @dest 
+  bne @dest_loop 
 
   ldy #0
-@src:
+@src_loop:
   sty tempy
   lda pk_source_addr,y
   jsr int_putchr_escaped
@@ -268,12 +268,12 @@ pk_send_message:
   ldy tempy
   iny
   cpy #7
-  bne @src
+  bne @src_loop
 
   lda pk_digi_len
   beq @digi_done
   ldy #0
-@digi:
+@digi_loop:
   sty tempy
   lda pk_digi_addrs,y
   jsr int_putchr_escaped
@@ -281,7 +281,7 @@ pk_send_message:
   ldy tempy
   iny
   cpy pk_digi_len
-  bne @digi
+  bne @digi_loop
 @digi_done:
 
   lda #$03 ; ui frame
