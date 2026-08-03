@@ -17,7 +17,7 @@ fmt_data_hi:  .res 1
 ; ':' + addressee + ':' + text + '{' + 4 hex digits
 PK_TX_BUF_LEN = 1 + KISS_ADDRESSEE_LEN + 1 + APRS_MAX_MSG_LEN + 1 + 4
 
-DEDUP_N = 16            ; must be a power of 2, the write index wraps with an AND
+DEDUP_N = 32            ; must be a power of 2, the write index wraps with an AND
 DEDUP_TTL_SECS = 30
 DEDUP_TICK_FRAMES = 60  ; number of VBIs before running the dedup ttl expire function
 
@@ -120,11 +120,65 @@ int_decode_addr:
   sta (CMDDATA2),y
   rts
 
-; fills the header the display path renders our own frames from.
+; renders an address into addr_text as an aprs addressee, space
+; padded to KISS_ADDRESSEE_LEN so it can be compared against the
+; addressee field of a received frame.
+;
+; inputs:
+;   CMDDATA0/1 - ptr to the KissFrameAddr
+; outputs:
+;   addr_text - the rendered addressee
+; modifies:
+;   a,x,y
+int_addr_to_text:
+  ldx #0
+  ldy #0
+@callsign_loop:
+  lda (CMDDATA0),y
+  cmp #' '
+  beq @callsign_done
+  sta addr_text,x
+  inx
+  iny
+  cpy #.sizeof(KissFrameAddr::callsign)
+  bne @callsign_loop
+@callsign_done:
+
+  ldy #KissFrameAddr::ssid
+  lda (CMDDATA0),y
+  beq @pad_loop
+
+  jsr ut_ssid_to_digits
+
+  lda #'-'
+  sta addr_text,x
+  inx
+
+  ldy #0
+@digits_loop:
+  lda ut_ssid_digits,y
+  sta addr_text,x
+  inx
+  iny
+  cpy ut_ssid_len
+  bne @digits_loop
+
+@pad_loop:
+  cpx #KISS_ADDRESSEE_LEN
+  beq @done
+  lda #' '
+  sta addr_text,x
+  inx
+  bne @pad_loop
+@done:
+  rts
+
+; fills the header the display path renders our own frames from,
+; and our own addressee for matching against received frames.
 ; should only change when config does.
 ;
 ; modifies:
-;   a,y
+;   a,x,y
 ;   CMDDATA0/1/2/3
 pk_set_tx_header:
   lda #<pk_dest_addr
@@ -146,6 +200,19 @@ pk_set_tx_header:
   lda #>(pk_tx_header+KissFrameHeader::source)
   sta CMDDATA3
   jsr int_decode_addr
+
+  lda #<(pk_tx_header+KissFrameHeader::source)
+  sta CMDDATA0
+  lda #>(pk_tx_header+KissFrameHeader::source)
+  sta CMDDATA1
+  jsr int_addr_to_text
+
+  ldx #KISS_ADDRESSEE_LEN-1
+@copy_loop:
+  lda addr_text,x
+  sta my_addressee,x
+  dex
+  bpl @copy_loop
   rts
 
 ; validates and converts a two character ssid field into a value.
@@ -947,6 +1014,8 @@ int_process_message:
 ; modifies:
 ;   a,y
 int_finalize_disp:
+  lda #0
+  sta g_disp_buf_num_lines
   lda y_index_var
   beq @done
 @mod_loop:
@@ -1210,30 +1279,20 @@ int_addr_to_buf:
 int_ssid_to_buf:
   cmp #0
   beq @done
-  stx tempx
-  jsr ut_bin_to_bcd
-  ldx tempx
+  jsr ut_ssid_to_digits
 
   lda #'-'
   sta g_disp_buf,x
   inx
-  lda ut_result
-  lsr
-  lsr
-  lsr
-  lsr
-  beq @no_tens
-  tay
-  lda ut_hex_table_atascii,y
+
+  ldy #0
+@digits_loop:
+  lda ut_ssid_digits,y
   sta g_disp_buf,x
   inx
-@no_tens:
-  lda ut_result
-  and #%00001111
-  tay
-  lda ut_hex_table_atascii,y
-  sta g_disp_buf,x
-  inx
+  iny
+  cpy ut_ssid_len
+  bne @digits_loop
 @done:
   rts
 
@@ -1248,6 +1307,8 @@ tempy:           .res 1
 tempchr:         .res 1
 ssid_tmp:        .res 1
 ssid_text:       .res APRS_SSID_LEN
+addr_text:       .res KISS_ADDRESSEE_LEN
+my_addressee:    .res KISS_ADDRESSEE_LEN
 pk_callsign:     .res APRS_CALLSIGN_LEN
 pk_ssid:         .res 1
 

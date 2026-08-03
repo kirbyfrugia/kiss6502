@@ -8,6 +8,9 @@ UTILS_INC = 1
 .global   ut_hex_to_atascii
 .global   ut_hex_to_icode
 .global   ut_bin_to_bcd
+.global   ut_ssid_to_digits
+.global   ut_ssid_digits
+.global   ut_ssid_len
 .global   ut_str_to_buf
 .global   ut_str_with_code_to_buf
 .global   ut_str_trim_end_find

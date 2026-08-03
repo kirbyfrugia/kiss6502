@@ -152,12 +152,42 @@ ut_mult_32bitX91:
 
   rts
 
+; converts an ssid into its decimal digits, left aligned
+;
+; inputs:
+;   a - the ssid, 0 to 15
+; outputs:
+;   ut_ssid_digits - the digits
+;   ut_ssid_len    - number of digits, 1 or 2
+; modifies:
+;   a,y
+ut_ssid_to_digits:
+  cmp #10
+  bcs @tens
+  clc
+  adc #'0'
+  sta ut_ssid_digits+0
+  ldy #1
+  sty ut_ssid_len
+  jmp @done
+@tens:
+  sbc #10
+  clc
+  adc #'0'
+  sta ut_ssid_digits+1
+  lda #'1'
+  sta ut_ssid_digits+0
+  ldy #2
+  sty ut_ssid_len
+@done:
+  rts
+
 ; Thanks to [Andrew Jacobs]( https://6502.org/source/integers/hex2dec-more.htm)
 ; inputs:
 ;   A - value to convert
 ; outputs:
-;   bcd_result+0 = low nibble is ones, high nibble is 10s
-;   bcd_result+1 = hundreds digit
+;   ut_result+0 = low nibble is ones, high nibble is 10s
+;   ut_result+1 = hundreds digit
 ; modifies:
 ;   A and X
 ut_bin_to_bcd:
@@ -378,9 +408,8 @@ ut_str_validate_no_gaps:
   sec
   rts
 
-; outputs:
-;   bcd_result+0 = low nibble is ones, high nibble is 10s
-;   bcd_result+1 = hundreds digit
+ut_ssid_digits:  .res 2
+ut_ssid_len:     .res 1
 
 ut_hex_table_atascii: .byte "0123456789ABCDEF"
 
