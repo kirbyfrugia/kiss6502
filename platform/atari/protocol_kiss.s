@@ -9,6 +9,13 @@
 .segment "ZEROPAGE"
 buf_counter:  .res 1
 addr_counter: .res 1
+fmt_hdr_lo:   .res 1
+fmt_hdr_hi:   .res 1
+fmt_data_lo:  .res 1
+fmt_data_hi:  .res 1
+
+; ':' + addressee + ':' + text + '{' + 4 hex digits
+PK_TX_BUF_LEN = 1 + KISS_ADDRESSEE_LEN + 1 + APRS_MAX_MSG_LEN + 1 + 4
 
 DEDUP_N = 16            ; must be a power of 2, the write index wraps with an AND
 DEDUP_TTL_SECS = 30
@@ -87,6 +94,58 @@ pk_encode_addr:
   asl
   ora addr_flags
   sta (out_ptr_lo),y
+  rts
+
+; unshifts a wire address back into the KissFrameAddr layout
+; the display path renders from.
+;
+; inputs:
+;   CMDDATA0/1 - ptr to the 7 byte encoded address
+;   CMDDATA2/3 - ptr to the KissFrameAddr to fill
+; modifies:
+;   a,y
+int_decode_addr:
+  ldy #0
+@callsign_loop:
+  lda (CMDDATA0),y
+  lsr
+  sta (CMDDATA2),y
+  iny
+  cpy #.sizeof(KissFrameAddr::callsign)
+  bne @callsign_loop
+
+  lda (CMDDATA0),y
+  lsr
+  and #%00001111
+  sta (CMDDATA2),y
+  rts
+
+; fills the header the display path renders our own frames from.
+; should only change when config does.
+;
+; modifies:
+;   a,y
+;   CMDDATA0/1/2/3
+pk_set_tx_header:
+  lda #<pk_dest_addr
+  sta CMDDATA0
+  lda #>pk_dest_addr
+  sta CMDDATA1
+  lda #<(pk_tx_header+KissFrameHeader::dest)
+  sta CMDDATA2
+  lda #>(pk_tx_header+KissFrameHeader::dest)
+  sta CMDDATA3
+  jsr int_decode_addr
+
+  lda #<pk_source_addr
+  sta CMDDATA0
+  lda #>pk_source_addr
+  sta CMDDATA1
+  lda #<(pk_tx_header+KissFrameHeader::source)
+  sta CMDDATA2
+  lda #>(pk_tx_header+KissFrameHeader::source)
+  sta CMDDATA3
+  jsr int_decode_addr
   rts
 
 ; validates and converts a two character ssid field into a value.
@@ -255,11 +314,13 @@ pk_send_message:
   buf_size = CMDDATA4
   send_flags = CMDDATA5
 
+  lda #0
+  sta g_disp_buf_num_lines
+
   lda send_flags
   bmi @trim
   lda buf_size
   beq @data_empty; was empty string
-  sta ut_result
   bne @ready
 @data_empty:
   jmp @done
@@ -272,6 +333,7 @@ pk_send_message:
   pla
   sta CMDDATA2
   lda ut_result
+  sta buf_size
   beq @all_spaces; was an empty string
   bne @ready
 @all_spaces:
@@ -279,6 +341,8 @@ pk_send_message:
 @to_error:
   jmp @error
 @ready:
+  jsr int_build_tx_buf
+
   lda #KISS_FEND
   jsr rs232_putchr
   bcs @to_error
@@ -332,58 +396,38 @@ pk_send_message:
   jsr int_putchr_escaped
   bcs @error
 
-  lda #':'
-  jsr int_putchr_escaped
-  bcs @error
-
-  ldy #0
-@addressee_loop:
-  sty tempy
-  lda (addressee_ptr_lo),y
-  beq @addressee_pad_loop
-  jsr int_putchr_escaped
-  bcs @error
-  ldy tempy
-  iny
-  cpy #KISS_ADDRESSEE_LEN
-  bne @addressee_loop
-  beq @addressee_done
-@addressee_pad_loop:
-  sty tempy
-  lda #' '
-  jsr int_putchr_escaped
-  bcs @error
-  ldy tempy
-  iny
-  cpy #KISS_ADDRESSEE_LEN
-  bne @addressee_pad_loop
-@addressee_done:
-
-  lda #':'
-  jsr int_putchr_escaped
-  bcs @error
-
   ldy #0
 @info_loop:
   sty tempy
-  lda (data_ptr_lo),y
+  lda pk_tx_buf,y
   jsr int_putchr_escaped
   bcs @error
   ldy tempy
   iny
-  cpy ut_result
+  cpy pk_tx_buf_num_chars
   bne @info_loop
-
-  lda send_flags
-  and #KISS_SEND_FLAG_BROADCAST
-  bne @id_done
-  jsr int_putchr_msg_id
-  bcs @error
-@id_done:
 
   lda #KISS_FEND
   jsr rs232_putchr
   bcs @error
+
+  lda #<pk_tx_header
+  sta fmt_hdr_lo
+  lda #>pk_tx_header
+  sta fmt_hdr_hi
+  lda #<pk_tx_buf
+  sta fmt_data_lo
+  lda #>pk_tx_buf
+  sta fmt_data_hi
+  lda pk_tx_buf_num_chars
+  sta fmt_len
+
+  jsr int_format_message
+  jsr int_finalize_disp
+
+  inc msg_id_lo
+  bne @done
+  inc msg_id_hi
 @done:
   clc
   rts
@@ -425,53 +469,94 @@ int_putchr_escaped:
 @done:
   rts
 
-; writes the byte as two hex chars
+; writes the byte as two hex chars into the tx buffer
 ;
 ; inputs:
 ;   a - the byte to write
+;   x - offset in the tx buffer to store at
 ; outputs:
-;   carry - set on a putchr error
+;   x - advanced by two
 ; modifies:
-;   a,x
-int_putchr_hex:
+;   a,x,y
+int_hex_to_tx_buf:
   pha
   lsr
   lsr
   lsr
   lsr
-  tax
-  lda ut_hex_table_atascii,x
-  jsr int_putchr_escaped
+  tay
+  lda ut_hex_table_atascii,y
+  sta pk_tx_buf,x
+  inx
   pla
-  bcs @done
   and #%00001111
-  tax
-  lda ut_hex_table_atascii,x
-  jmp int_putchr_escaped
-@done:
+  tay
+  lda ut_hex_table_atascii,y
+  sta pk_tx_buf,x
+  inx
   rts
 
-; writes the message id suffix and bumps the counter
+; builds the info field for the message we are sending
 ;
+; inputs:
+;   CMDDATA0/1 - ptr to the data
+;   CMDDATA2/3 - ptr to the addressee
+;   CMDDATA4   - number of chars in the data
+;   CMDDATA5   - send flags
 ; outputs:
-;   carry - set on a putchr error
+;   pk_tx_buf_num_chars - number of chars written
 ; modifies:
-;   a,x
-int_putchr_msg_id:
-  lda #'{'
-  jsr int_putchr_escaped
-  bcs @done
-  lda msg_id_hi
-  jsr int_putchr_hex
-  bcs @done
-  lda msg_id_lo
-  jsr int_putchr_hex
-  bcs @done
+;   a,x,y
+int_build_tx_buf:
+  ldx #0
+  lda #':'
+  sta pk_tx_buf,x
+  inx
 
-  inc msg_id_lo
-  bne @done
-  inc msg_id_hi
-@done:
+  ldy #0
+@addressee_loop:
+  lda (addressee_ptr_lo),y
+  beq @addressee_pad_loop
+  sta pk_tx_buf,x
+  inx
+  iny
+  cpy #KISS_ADDRESSEE_LEN
+  bne @addressee_loop
+  beq @addressee_done
+@addressee_pad_loop:
+  lda #' '
+  sta pk_tx_buf,x
+  inx
+  iny
+  cpy #KISS_ADDRESSEE_LEN
+  bne @addressee_pad_loop
+@addressee_done:
+
+  lda #':'
+  sta pk_tx_buf,x
+  inx
+
+  ldy #0
+@data_loop:
+  lda (data_ptr_lo),y
+  sta pk_tx_buf,x
+  inx
+  iny
+  cpy buf_size
+  bne @data_loop
+
+  lda send_flags
+  and #KISS_SEND_FLAG_BROADCAST
+  bne @id_done
+  lda #'{'
+  sta pk_tx_buf,x
+  inx
+  lda msg_id_hi
+  jsr int_hex_to_tx_buf
+  lda msg_id_lo
+  jsr int_hex_to_tx_buf
+@id_done:
+  stx pk_tx_buf_num_chars
   rts
 
 pk_next_frame:
@@ -669,13 +754,17 @@ int_fend:
 @done:
   rts
 
+; renders a message into the display buffer and computes its crc.
+;
 ; inputs:
-;   
-int_process_message:
-  lda g_rx_buf_num_chars
-  cmp #KISS_TYPE_MSG_END_COLON_IDX
-  bcc @done ; not a valid message
-
+;   fmt_hdr_lo/hi  - ptr to the frame header
+;   fmt_data_lo/hi - ptr to the info field
+;   fmt_len        - number of chars in the info field
+; outputs:
+;   y_index_var    - one past the last char written
+; modifies:
+;   a,x,y
+int_format_message:
   jsr crc_reset
 
   lda #<g_disp_buf
@@ -683,15 +772,14 @@ int_process_message:
   lda #>g_disp_buf
   sta g_temp_data_ptr_hi
 
-  ldy #0
-  ldx #KissFrameHeader::source
-  stx x_index_var
+  ldx #0
+  lda #KissFrameHeader::source
+  sta x_index_var
   jsr int_addr_to_buf
 
   lda #'>'
-  sta g_disp_buf,y
-
-  iny
+  sta g_disp_buf,x
+  inx
 
   lda #KISS_TYPE_MSG_ADDRESSEE_IDX
   sta x_index_var
@@ -703,23 +791,45 @@ int_process_message:
 
   lda #KISS_TYPE_MSG_END_COLON_IDX
   sta x_index_var
-  lda g_rx_buf_num_chars
+  lda fmt_len
   sta x_index_var_end
   lda #'{'
   sta terminator
   jsr int_read_until_terminator_with_crc
   bcc @finalize ; no message id
   lda #'#'
-  sta g_disp_buf,y
-  iny
+  sta g_disp_buf,x
   inx
-  stx x_index_var
+  iny
+  sty x_index_var
+  stx tempx
   lda terminator
   jsr crc_upd
+  ldx tempx
   jsr int_read_until_end_with_crc
 @finalize:
-  sty y_index_var
+  stx y_index_var
   jsr int_add_header_bytes_to_crc
+  rts
+
+int_process_message:
+  lda g_rx_buf_num_chars
+  cmp #KISS_TYPE_MSG_END_COLON_IDX
+  bcc @done ; not a valid message
+
+  lda #<pk_frame_header
+  sta fmt_hdr_lo
+  lda #>pk_frame_header
+  sta fmt_hdr_hi
+  lda #<g_rx_buf
+  sta fmt_data_lo
+  lda #>g_rx_buf
+  sta fmt_data_hi
+  lda g_rx_buf_num_chars
+  sta fmt_len
+
+  jsr int_format_message
+
   ; todo: actually handle acks
   jsr int_is_ack
   bcs @done
@@ -862,38 +972,38 @@ int_finalize_disp:
 @done:
   rts
 
-; reads from rx_buf from x_index_var to x_index_var_end
-; or the given terminator char appears, updating the crc
+; reads the info field from x_index_var to x_index_var_end
+; until the given terminator char appears, updating the crc
 ; with each char written. the terminator itself is not
 ; written or added to the crc.
 ;
 ; assumes x_index_var_end - x_index_var > 1
 ;
 ; inputs:
-;   terminator            - char to search for as terminator
-;   g_temp_data_ptr_lo/hi - pointer to where to store output
-;   x_index_var           - start index to check
-;   x_index_var_end       - end index to check (one past)
-;   y                     - start index to write to
+;   terminator      - terminator char
+;   fmt_data_lo/hi  - ptr to the info field
+;   x_index_var     - start index to check
+;   x_index_var_end - end index to check (one past)
+;   x               - start index to write to
 ; outputs:
 ;   c - set if the terminator was found, clear if we hit the end
-;   x - index of the terminator, or x_index_var_end
-;   y - index of last written char + 1
+;   y - index of the terminator, or x_index_var_end
+;   x - index of last written char + 1
 ; modifies:
 ;   a, ZPB0
 int_read_until_terminator_with_crc:
-  ldx x_index_var
+  ldy x_index_var
 @loop:
-  lda g_rx_buf,x
+  lda (fmt_data_lo),y
   cmp terminator
   beq @found
-  sta (g_temp_data_ptr_lo),y
+  sta g_disp_buf,x
   stx ZPB0
   jsr crc_upd
   ldx ZPB0
-  iny
   inx
-  cpx x_index_var_end
+  iny
+  cpy x_index_var_end
   bne @loop
   clc
   rts
@@ -901,32 +1011,32 @@ int_read_until_terminator_with_crc:
   sec
   rts
 
-; reads from rx_buf from x_index_var to x_index_var_end,
+; reads the info field from x_index_var to x_index_var_end,
 ; updating the crc with each char written.
 ;
 ; assumes x_index_var_end - x_index_var > 1
 ;
 ; inputs:
-;   g_temp_data_ptr_lo/hi - pointer to where to store output
-;   x_index_var           - start index to check
-;   x_index_var_end       - end index to check (one past)
-;   y                     - start index to write to
+;   fmt_data_lo/hi  - ptr to the info field
+;   x_index_var     - start index to check
+;   x_index_var_end - end index to check (one past)
+;   x               - start index to write to
 ; outputs:
-;   x - index of last read char + 1
-;   y - index of last written char + 1
+;   y - index of last read char + 1
+;   x - index of last written char + 1
 ; modifies:
 ;   a, ZPB0
 int_read_until_end_with_crc:
-  ldx x_index_var
+  ldy x_index_var
 @loop:
-  lda g_rx_buf,x
-  sta (g_temp_data_ptr_lo),y
+  lda (fmt_data_lo),y
+  sta g_disp_buf,x
   stx ZPB0
   jsr crc_upd
   ldx ZPB0
-  iny
   inx
-  cpx x_index_var_end
+  iny
+  cpy x_index_var_end
   bne @loop
 @done:
   rts
@@ -942,7 +1052,7 @@ int_read_until_end_with_crc:
 int_add_header_bytes_to_crc:
   ldy #KissFrameHeader::dest
 @dest_loop:
-  lda pk_frame_header,y
+  lda (fmt_hdr_lo),y
   jsr crc_upd
   iny
   cpy #(KissFrameHeader::dest+.sizeof(KissFrameAddr))
@@ -950,7 +1060,7 @@ int_add_header_bytes_to_crc:
 
   ldy #KissFrameHeader::source
 @source_loop:
-  lda pk_frame_header,y
+  lda (fmt_hdr_lo),y
   jsr crc_upd
   iny
   cpy #(KissFrameHeader::source+.sizeof(KissFrameAddr))
@@ -964,22 +1074,22 @@ int_add_header_bytes_to_crc:
 ; modifies:
 ;   a,x
 int_is_ack:
-  lda g_rx_buf_num_chars
+  lda fmt_len
   cmp #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN+KISS_MSG_ID_MIN_LEN)
   bcc @not_ack
   cmp #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN+KISS_MSG_ID_MAX_LEN+1)
   bcs @not_ack
 
-  ldx #KISS_TYPE_MSG_TEXT_IDX
-  lda g_rx_buf,x
+  ldy #KISS_TYPE_MSG_TEXT_IDX
+  lda (fmt_data_lo),y
   cmp #'a'
   bne @not_ack
-  inx
-  lda g_rx_buf,x
+  iny
+  lda (fmt_data_lo),y
   cmp #'c'
   bne @not_ack
-  inx
-  lda g_rx_buf,x
+  iny
+  lda (fmt_data_lo),y
   cmp #'k'
   bne @not_ack
   sec
@@ -1032,56 +1142,74 @@ int_check_duplicate:
   rts
 
 ; inputs:
-;   g_temp_data_ptr_lo/hi - address of line
-;   x_index_var           - offset in KissFrameHeader to start of address
-;   y                     - offset in disp buffer to store address
+;   fmt_hdr_lo/hi - ptr to the frame header
+;   x_index_var   - offset in KissFrameHeader to start of address
+;   x             - offset in disp buffer to store address
+; outputs:
+;   x - one past the last char written
 ; modifies:
-;   x_index_var           - will be one past end of this address
+;   x_index_var   - will be one past end of this address
 ;   a,x,y
 int_addr_to_buf:
+  ldy x_index_var
   lda x_index_var
-  tax
   clc
   adc #6
   sta x_index_var ; offset to ssid
 @loop:
-  lda pk_frame_header,x
+  lda (fmt_hdr_lo),y
   cmp #$20
   beq @loop_done
-  sta (g_temp_data_ptr_lo),y
-  iny
+  sta g_disp_buf,x
   inx
-  cpx x_index_var
+  iny
+  cpy x_index_var
   bne @loop
 @loop_done:
-  ldx x_index_var       ; index to ssid
-  lda pk_frame_header,x ; ssid
-  beq @done             ; ssid of zero
+  ldy x_index_var       ; index to ssid
+  lda (fmt_hdr_lo),y    ; ssid
+  ; update our index to one past end of this address
+  inc x_index_var
+  jsr int_ssid_to_buf
+  rts
+
+; writes the "-N" suffix for an ssid or nothing if zero
+;
+; inputs:
+;   a - the ssid, 0 to 15
+;   x - offset in disp buffer to store at
+; outputs:
+;   x - one past the last char written
+; modifies:
+;   a,x,y
+int_ssid_to_buf:
+  cmp #0
+  beq @done
+  stx tempx
   jsr ut_bin_to_bcd
+  ldx tempx
 
   lda #'-'
-  sta (g_temp_data_ptr_lo),y
+  sta g_disp_buf,x
+  inx
   lda ut_result
   lsr
   lsr
   lsr
   lsr
   beq @no_tens
-  tax
-  lda ut_hex_table_atascii,x
-  iny
-  sta (g_temp_data_ptr_lo),y 
+  tay
+  lda ut_hex_table_atascii,y
+  sta g_disp_buf,x
+  inx
 @no_tens:
-  iny
   lda ut_result
   and #%00001111
-  tax
-  lda ut_hex_table_atascii,x
-  sta (g_temp_data_ptr_lo),y
-  iny
+  tay
+  lda ut_hex_table_atascii,y
+  sta g_disp_buf,x
+  inx
 @done:
-  ; update our x to one past end of this address
-  inc x_index_var
   rts
 
 ;zulu:            .res 1
@@ -1109,8 +1237,12 @@ pk_digi_addrs:   .res APRS_MAX_DIGI * .sizeof(KissFrameAddr)
 pk_error:        .res 1
 pk_broadcast_addressee: .byte "CQ",$00
 
+fmt_len:         .res 1
 msg_id_lo:       .res 1
 msg_id_hi:       .res 1
+pk_tx_header:    .tag KissFrameHeader
+pk_tx_buf:       .res PK_TX_BUF_LEN
+pk_tx_buf_num_chars: .res 1
 dedup_next:      .res 1
 dedup_tick:      .res 1
 dedup_crc_lo:    .res DEDUP_N

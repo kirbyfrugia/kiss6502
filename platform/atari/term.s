@@ -242,6 +242,7 @@ int_set_source_addr:
 @store_flags:
   sta CMDDATA5
   jsr pk_encode_addr
+  jsr pk_set_tx_header
   rts
 
 ; encodes the configured digipeaters into pk_digi_addrs, marking
@@ -419,7 +420,20 @@ int_send_message:
   jsr pk_send_message
   bcc ism_success
   print_str_with_code str_error_rs232_putchr, g_copy_buffer40, pk_error
+  jmp ism_done
 ism_success:
+  lda g_disp_buf_num_lines
+  beq ism_done
+  lda #<g_disp_buf
+  sta CMDDATA0
+  lda #>g_disp_buf
+  sta CMDDATA1
+  lda g_disp_buf_num_lines
+  sta CMDDATA2
+  lda #1
+  sta CMDDATA3
+  jsr to_append_lines
+ism_done:
   rts
 
 int_print_usage:

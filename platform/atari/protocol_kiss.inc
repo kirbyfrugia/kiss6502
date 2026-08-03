@@ -30,6 +30,7 @@
 PCTL_KISS_INC = 1
 
 .global pk_reset
+.global pk_set_tx_header
 .global pk_vbi_tick
 .global pk_new_byte
 .global pk_next_frame
@@ -49,6 +50,7 @@ PCTL_KISS_INC = 1
 .global pk_ssid
 
 APRS_CALLSIGN_LEN = 6
+APRS_MAX_MSG_LEN  = 67
 APRS_SSID_LEN     = 2
 APRS_MAX_DIGI     = 8
 APRS_DIGI_LEN     = (APRS_CALLSIGN_LEN+1+APRS_SSID_LEN)*APRS_MAX_DIGI + (APRS_MAX_DIGI-1)*2
