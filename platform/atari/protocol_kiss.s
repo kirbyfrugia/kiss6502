@@ -264,11 +264,25 @@ pk_send_message:
   sty tempy
   lda pk_source_addr,y
   jsr int_putchr_escaped
-  bcs @error
+  bcs @to_error
   ldy tempy
   iny
   cpy #7
   bne @src
+
+  lda pk_digi_len
+  beq @digi_done
+  ldy #0
+@digi:
+  sty tempy
+  lda pk_digi_addrs,y
+  jsr int_putchr_escaped
+  bcs @to_error
+  ldy tempy
+  iny
+  cpy pk_digi_len
+  bne @digi
+@digi_done:
 
   lda #$03 ; ui frame
   jsr int_putchr_escaped
@@ -887,6 +901,8 @@ pk_dest_addr: ; APKTY1
 pk_state:        .res 1
 pk_frame_header: .tag KissFrameHeader
 pk_source_addr:  .res .sizeof(KissFrameAddr)
+pk_digi_len:     .res 1
+pk_digi_addrs:   .res APRS_MAX_DIGI * .sizeof(KissFrameAddr)
 pk_error:        .res 1
 pk_broadcast_addressee: .byte "CQ",$00
 

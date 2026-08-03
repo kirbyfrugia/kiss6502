@@ -872,6 +872,17 @@ int_aprstab_config_to_text:
   jsr int_aprstab_callsign_to_text
   jsr int_aprstab_ssid_to_text
   jsr int_aprstab_digi_to_text
+
+  lda #0
+  sta cfg_callsign_li+LineInput::scr_cursor
+  sta cfg_callsign_li+LineInput::data_cursor
+  sta cfg_callsign_li+LineInput::first_visible
+  sta cfg_ssid_li+LineInput::scr_cursor
+  sta cfg_ssid_li+LineInput::data_cursor
+  sta cfg_ssid_li+LineInput::first_visible
+  sta cfg_digi_li+LineInput::scr_cursor
+  sta cfg_digi_li+LineInput::data_cursor
+  sta cfg_digi_li+LineInput::first_visible
   rts
 
 int_aprstab_callsign_to_text:

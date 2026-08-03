@@ -40,6 +40,8 @@ PCTL_KISS_INC = 1
 .global pk_broadcast_addressee
 .global pk_encode_addr
 .global pk_source_addr
+.global pk_digi_addrs
+.global pk_digi_len
 .global pk_text_to_ssid
 .global pk_parse_callsign
 .global pk_callsign

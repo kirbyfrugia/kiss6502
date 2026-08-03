@@ -218,6 +218,7 @@ int_reset_protocol:
 @aprs:
   jsr pk_reset
   jsr int_set_source_addr
+  jsr int_set_digi_addrs
   jsr int_set_tx_broadcast
   jmp @done
 @done:
@@ -234,9 +235,66 @@ int_set_source_addr:
   sta CMDDATA3
   lda cfg_saved_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
   sta CMDDATA4
-  lda #(KISS_ADDR_RESERVED | KISS_ADDR_LAST)
+  lda #KISS_ADDR_RESERVED
+  ldx cfg_saved_config+Cfg::aprs+CfgAprs::num_digi
+  bne @store_flags
+  ora #KISS_ADDR_LAST
+@store_flags:
   sta CMDDATA5
   jsr pk_encode_addr
+  rts
+
+; encodes the configured digipeaters into pk_digi_addrs, marking
+; the last one as the end of the address field.
+int_set_digi_addrs:
+  lda #0
+  sta pk_digi_len
+  sta digi_idx
+  sta digi_offset
+  lda cfg_saved_config+Cfg::aprs+CfgAprs::num_digi
+  beq @done
+@addr_loop:
+  lda #<(cfg_saved_config+Cfg::aprs+CfgAprs::digi)
+  clc
+  adc digi_offset
+  sta CMDDATA0
+  lda #>(cfg_saved_config+Cfg::aprs+CfgAprs::digi)
+  adc #0
+  sta CMDDATA1
+
+  lda #<pk_digi_addrs
+  clc
+  adc digi_offset
+  sta CMDDATA2
+  lda #>pk_digi_addrs
+  adc #0
+  sta CMDDATA3
+
+  ldy digi_offset
+  lda cfg_saved_config+Cfg::aprs+CfgAprs::digi+CfgAprsAddr::ssid,y
+  sta CMDDATA4
+
+  lda #KISS_ADDR_RESERVED
+  ldx digi_idx
+  inx
+  cpx cfg_saved_config+Cfg::aprs+CfgAprs::num_digi
+  bne @store_flags
+  ora #KISS_ADDR_LAST
+@store_flags:
+  sta CMDDATA5
+  jsr pk_encode_addr
+
+  lda digi_offset
+  clc
+  adc #.sizeof(CfgAprsAddr)
+  sta digi_offset
+  inc digi_idx
+  lda digi_idx
+  cmp cfg_saved_config+Cfg::aprs+CfgAprs::num_digi
+  bne @addr_loop
+  lda digi_offset
+  sta pk_digi_len
+@done:
   rts
 
 int_repaint:
@@ -941,6 +999,8 @@ tx_addressee:                .res KISS_ADDRESSEE_LEN+1
 cmd_char:                    .res 1
 cmd_arg_idx:                 .res 1
 cmd_ssid:                    .res 1
+digi_idx:                    .res 1
+digi_offset:                 .res 1
 
 command_error:               .byte 0
 
