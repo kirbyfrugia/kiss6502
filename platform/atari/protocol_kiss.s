@@ -1,6 +1,7 @@
 .setcpu "6502"
 .include "protocol_kiss.inc"
 .include "atari.inc"
+.include "crc.inc"
 .include "globals.inc"
 .include "rs232.inc"
 .include "utils.inc"
@@ -601,7 +602,7 @@ int_process_message:
   sta x_index_var_end
   lda #' '
   sta terminator
-  jsr int_read_until_terminator
+  jsr int_read_until_terminator_with_crc
 
   lda #KISS_TYPE_MSG_END_COLON_IDX
   sta x_index_var
@@ -609,7 +610,15 @@ int_process_message:
   sta x_index_var_end
   lda #'{'
   sta terminator
-  jsr int_read_until_terminator
+  jsr int_read_until_terminator_with_crc
+  bcc @finalize ; no message id
+  lda #'#'
+  sta g_disp_buf,y
+  iny
+  inx
+  stx x_index_var
+  jsr int_read_until_end_with_crc
+@finalize:
   sty y_index_var
   jsr int_finalize_disp
 @done:
@@ -779,26 +788,54 @@ int_all_digits:
 ; assumes x_index_var_end - x_index_var > 1
 ;
 ; inputs:
-;   terminator            - char to search for or $00 until
+;   terminator            - char to search for as terminator
 ;   g_temp_data_ptr_lo/hi - pointer to where to store output
 ;   x_index_var           - start index to check
 ;   x_index_var_end       - end index to check (one past)
 ;   y                     - start index to write to
 ; outputs:
-;   x - index of last read char + 1
+;   c - set if the terminator was found, clear if we hit the end
+;   x - index of the terminator, or x_index_var_end
 ;   y - index of last written char + 1
 int_read_until_terminator:
   ldx x_index_var
 @loop:
   lda g_rx_buf,x
   cmp terminator
-  beq @done
+  beq @found
   sta (g_temp_data_ptr_lo),y
   iny
   inx
   cpx x_index_var_end
   bne @loop
-@done:
+  clc
+  rts
+@found:
+  sec
+  rts
+
+; same as int_read_until_terminator, but updates the crc
+; only exists to avoid extra per-byte cost if we passed as an arg
+; modifies:
+;   same as above, plus ZPB0
+int_read_until_terminator_with_crc:
+  ldx x_index_var
+@loop:
+  lda g_rx_buf,x
+  cmp terminator
+  beq @found
+  sta (g_temp_data_ptr_lo),y
+  stx ZPB0
+  jsr crc_upd
+  ldx ZPB0
+  iny
+  inx
+  cpx x_index_var_end
+  bne @loop
+  clc
+  rts
+@found:
+  sec
   rts
 
 ; reads from rx_buf from x_index_var to x_index_var_end
@@ -818,6 +855,25 @@ int_read_until_end:
 @loop:
   lda g_rx_buf,x
   sta (g_temp_data_ptr_lo),y
+  iny
+  inx
+  cpx x_index_var_end
+  bne @loop
+@done:
+  rts
+
+; same as int_read_until_end, but updates the crc
+; only exists to avoid extra per-byte cost if we passed as an arg
+; modifies:
+;   same as above, plus ZPB0
+int_read_until_end_with_crc:
+  ldx x_index_var
+@loop:
+  lda g_rx_buf,x
+  sta (g_temp_data_ptr_lo),y
+  stx ZPB0
+  jsr crc_upd
+  ldx ZPB0
   iny
   inx
   cpx x_index_var_end
@@ -888,6 +944,7 @@ x_index_var:     .res 1
 x_index_var_end: .res 1
 y_index_var:     .res 1
 btwn_counter:    .res 1
+tempx:           .res 1
 tempy:           .res 1
 tempchr:         .res 1
 ssid_tmp:        .res 1

@@ -163,7 +163,6 @@ set_vbi_handler:
 
 init:
   jsr crc_make_table
-  brk
   lda #CTRL_SHIFT_FLAG_LOWER 
   sta ctrl_shift_lock_flag
 
