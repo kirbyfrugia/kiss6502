@@ -88,8 +88,8 @@ I'm old school-ish and I wanted to learn the way I used to learn and code the wa
 
 That's how I approached this project. However, I'm also aware of the advantages of AI, so I used it in a few ways as indicated below.
 
-Here's what I did:
-* I wrote *all* the 6502 assembly code.
+Here's what I did myself:
+* I wrote *almost all* the 6502 assembly code.
 * I wrote *most* of the rust code myself, very much as a learning exercise.
 * I did all the architecture myself.
 * I designed the user experience and UIs myself.

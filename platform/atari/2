@@ -45,15 +45,10 @@ CONFIG_FLAG_START    = %11000000
   protocol    .byte
 .endstruct
 
-.struct CfgAprsAddr
+.struct CfgAprs
   callsign    .res 6
   ssid        .res 1
-.endstruct
-
-.struct CfgAprs
-  me          .tag CfgAprsAddr
-  num_digi    .res 1
-  digi        .res 8*.sizeof(CfgAprsAddr)
+  digi        .res 
 .endstruct
 
 .struct Cfg

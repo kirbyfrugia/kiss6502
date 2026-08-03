@@ -44,11 +44,15 @@ int_load_default_config:
   ldx #APRS_CALLSIGN_LEN-1
   lda #' '
 @callsign_loop:
-  sta cfg_draft_config+Cfg::aprs+CfgAprs::callsign,x
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign,x
   dex
   bpl @callsign_loop
+
   lda #0
-  sta cfg_draft_config+Cfg::aprs+CfgAprs::ssid
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::num_digi
+
+  jsr int_aprstab_config_to_text
   rts
 
 cfg_init:
@@ -442,8 +446,6 @@ int_refresh_serial_tab:
   rts
 
 int_refresh_aprs_tab:
-  jsr int_aprstab_ssid_to_text
-
   lda #APRS_FOCUS_CALLSIGN
   sta aprstab_focus
 
@@ -457,6 +459,13 @@ int_refresh_aprs_tab:
   lda #<cfg_ssid_li
   sta CMDDATA0
   lda #>cfg_ssid_li
+  sta CMDDATA1
+  jsr li_set_context
+  jsr li_repaint
+
+  lda #<cfg_digi_li
+  sta CMDDATA0
+  lda #>cfg_digi_li
   sta CMDDATA1
   jsr li_set_context
   jsr li_repaint
@@ -540,15 +549,18 @@ FILE_FOCUS_BTN_END   = 3
 FILE_FOCUS_COUNT     = 4
 
 APRS_CALL_LABEL_OFFSET = 5*SCREEN_WIDTH+2
-APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+13
+APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+15
 APRS_SSID_LABEL_OFFSET = 7*SCREEN_WIDTH+2
-APRS_SSID_FIELD_OFFSET = 7*SCREEN_WIDTH+13
+APRS_SSID_FIELD_OFFSET = 7*SCREEN_WIDTH+15
+APRS_DIGI_LABEL_OFFSET = 9*SCREEN_WIDTH+2
+APRS_DIGI_FIELD_OFFSET = 9*SCREEN_WIDTH+15
 
 APRS_FOCUS_CALLSIGN  = 0
 APRS_FOCUS_FIRST     = 0
 APRS_FOCUS_SSID      = 1
-APRS_FOCUS_LAST      = 1
-APRS_FOCUS_COUNT     = 2
+APRS_FOCUS_DIGI      = 2
+APRS_FOCUS_LAST      = 2
+APRS_FOCUS_COUNT     = 3
 
 int_draw_menu_borders_file_tab:
   lda #<filename_label
@@ -616,6 +628,8 @@ int_filetab_file_input_set_context:
 int_filetab_save_file:
   jsr int_filetab_filename_valid
   bcs @invalid
+  jsr int_aprstab_form_to_config
+  bcs @invalid_aprs
   jsr cfg_save_config
   bcs @failed
   lda #<msg_saved
@@ -631,6 +645,9 @@ int_filetab_save_file:
   sta CMDDATA1
   jsr int_filetab_show_status
   rts
+@invalid_aprs:
+  jsr int_filetab_show_status
+  rts
 @invalid:
   jsr int_filetab_show_invalid
   rts
@@ -640,7 +657,7 @@ int_filetab_load:
   bcs @invalid
   jsr cfg_load_config
   bcs @failed
-  jsr int_aprstab_ssid_to_text
+  jsr int_aprstab_config_to_text
   lda #<msg_loaded
   sta CMDDATA0
   lda #>msg_loaded
@@ -774,9 +791,9 @@ int_aprstab_init:
   lda #>APRS_CALL_FIELD_OFFSET
   adc SCR_PTR_HI
   sta cfg_callsign_li+LineInput::scr_ptr+1
-  lda #<(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+  lda #<cfg_callsign_text
   sta cfg_callsign_li+LineInput::data_ptr
-  lda #>(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+  lda #>cfg_callsign_text
   sta cfg_callsign_li+LineInput::data_ptr+1
   lda #APRS_CALLSIGN_LEN
   sta cfg_callsign_li+LineInput::num_visible
@@ -800,6 +817,27 @@ int_aprstab_init:
   lda #APRS_SSID_LEN
   sta cfg_ssid_li+LineInput::num_visible
   sta cfg_ssid_li+LineInput::data_len
+
+  lda #0
+  sta cfg_digi_li+LineInput::scr_cursor
+  sta cfg_digi_li+LineInput::data_cursor
+  sta cfg_digi_li+LineInput::first_visible
+  lda #<APRS_DIGI_FIELD_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta cfg_digi_li+LineInput::scr_ptr
+  lda #>APRS_DIGI_FIELD_OFFSET
+  adc SCR_PTR_HI
+  sta cfg_digi_li+LineInput::scr_ptr+1
+  lda #<cfg_digi_text
+  sta cfg_digi_li+LineInput::data_ptr
+  lda #>cfg_digi_text
+  sta cfg_digi_li+LineInput::data_ptr+1
+  lda #24 ; fill to right of screen
+  sta cfg_digi_li+LineInput::num_visible
+  lda #APRS_DIGI_LEN
+  sta cfg_digi_li+LineInput::data_len
+
   rts
 
 ; points the line input at the currently focused field
@@ -830,10 +868,25 @@ int_aprstab_draw_focus:
   jsr li_show_cursor
   rts
 
+int_aprstab_config_to_text:
+  jsr int_aprstab_callsign_to_text
+  jsr int_aprstab_ssid_to_text
+  jsr int_aprstab_digi_to_text
+  rts
+
+int_aprstab_callsign_to_text:
+  ldy #APRS_CALLSIGN_LEN-1
+@copy_loop:
+  lda cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign,y
+  sta cfg_callsign_text,y
+  dey
+  bpl @copy_loop
+  rts
+
 ; converts the draft config ssid byte (0-15) into digits
 ; for the ssid field.
 int_aprstab_ssid_to_text:
-  lda cfg_draft_config+Cfg::aprs+CfgAprs::ssid
+  lda cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
   cmp #10
   bcc @single
   sbc #10
@@ -861,27 +914,296 @@ int_aprstab_text_to_ssid:
   sta CMDDATA1
   jsr pk_text_to_ssid
   bcs @error
-  sta cfg_draft_config+Cfg::aprs+CfgAprs::ssid
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
   clc
   rts
 @error:
   sec
   rts
 
-; checks if the callsign is valid: no leading or interior spaces.
+; validates and converts the callsign field, uppercasing it
+; on the way into the draft config.
 ; outputs:
-;   carry - set if invalid, clear if valid
-; modifies:
-;   CMDDATA0/1/2
-;   a,y
-int_aprstab_callsign_valid:
-  lda #<(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+;   carry - set if invalid callsign, clear otherwise
+int_aprstab_text_to_callsign:
+  lda #<cfg_callsign_text
   sta CMDDATA0
-  lda #>(cfg_draft_config+Cfg::aprs+CfgAprs::callsign)
+  lda #>cfg_callsign_text
   sta CMDDATA1
   lda #APRS_CALLSIGN_LEN
   sta CMDDATA2
+  jsr ut_str_trim_end_find
+  lda ut_result
+  beq @blank
   jsr ut_str_validate_no_gaps
+  bcs @error
+  ldy #APRS_CALLSIGN_LEN-1
+@upper_loop:
+  lda cfg_callsign_text,y
+  cmp #' '
+  beq @store
+  jsr ut_to_upper
+  jsr ut_is_alphanumeric
+  bcs @error
+@store:
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign,y
+  dey
+  bpl @upper_loop
+  clc
+  rts
+@blank:
+  ldy #APRS_CALLSIGN_LEN-1
+  lda #' '
+@blank_loop:
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign,y
+  dey
+  bpl @blank_loop
+  clc
+  rts
+@error:
+  sec
+  rts
+
+; validates and converts the digi field into an array of callsign+ssid.
+; splits the text on commas. an entry may have spaces around it but not
+; inside it, so it ends at its first space and the rest up to the comma
+; must be blank. empty text means no digipeaters and is valid.
+; outputs:
+;   carry - set if any entry was invalid, clear otherwise
+int_aprstab_text_to_digi:
+  ; clear stale slots
+  lda #0
+  ldx #.sizeof(CfgAprsAddr)*APRS_MAX_DIGI-1
+@clear_loop:
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::digi,x
+  dex
+  bpl @clear_loop
+
+  lda #<cfg_digi_text
+  sta CMDDATA0
+  lda #>cfg_digi_text
+  sta CMDDATA1
+  lda #APRS_DIGI_LEN
+  sta CMDDATA2
+  jsr ut_str_trim_end_find
+
+  lda #0
+  sta digi_count
+  sta digi_entry_start
+  sta digi_write_offset
+  lda ut_result
+  sta digi_text_end
+  bne @addr_loop
+  jmp @done
+@addr_loop:
+  ; skip any spaces in front of this entry
+  ldy digi_entry_start
+@skip_space_loop:
+  cpy digi_text_end
+  bne @skip_space_check
+  jmp @error
+@skip_space_check:
+  lda cfg_digi_text,y
+  cmp #' '
+  bne @skip_space_done
+  iny
+  bne @skip_space_loop
+@skip_space_done:
+  ; scan to the next comma or the end of the text
+  sty digi_entry_start
+@sep_loop:
+  cpy digi_text_end
+  beq @sep_done
+  lda cfg_digi_text,y
+  cmp #','
+  beq @sep_done
+  iny
+  bne @sep_loop
+@sep_done:
+  ; but it really ends at the first space inside it
+  sty digi_entry_sep
+  ldy digi_entry_start
+@entry_end_loop:
+  cpy digi_entry_sep
+  beq @entry_end_done
+  lda cfg_digi_text,y
+  cmp #' '
+  beq @entry_end_done
+  iny
+  bne @entry_end_loop
+@entry_end_done:
+  ; everything from there to the comma has to be spaces
+  sty digi_entry_end
+@gap_loop:
+  cpy digi_entry_sep
+  beq @gap_done
+  lda cfg_digi_text,y
+  cmp #' '
+  bne @error
+  iny
+  bne @gap_loop
+@gap_done:
+  lda digi_entry_end
+  sec
+  sbc digi_entry_start
+  beq @error
+  sta CMDDATA2
+
+  lda digi_count
+  cmp #APRS_MAX_DIGI
+  bcs @error
+
+  lda #<cfg_digi_text
+  clc
+  adc digi_entry_start
+  sta CMDDATA0
+  lda #>cfg_digi_text
+  adc #0
+  sta CMDDATA1
+  jsr pk_parse_callsign
+  bcs @error
+
+  jsr int_aprstab_store_digi
+  inc digi_count
+
+  ; step past the comma, a trailing one is an error
+  ldy digi_entry_sep
+  cpy digi_text_end
+  beq @done
+  iny
+  sty digi_entry_start
+  cpy digi_text_end
+  beq @error
+  jmp @addr_loop
+@error:
+  sec
+  rts
+@done:
+  lda digi_count
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::num_digi
+  clc
+  rts
+
+; converts all three aprs fields into the draft config. a blank
+; callsign is allowed here, callers that require one check for it.
+; outputs:
+;   CMDDATA0/1 - ptr to the error message when carry is set
+;   carry      - set if any field was invalid, clear otherwise
+int_aprstab_form_to_config:
+  jsr int_aprstab_text_to_callsign
+  bcs @callsign_error
+  jsr int_aprstab_text_to_ssid
+  bcs @ssid_error
+  jsr int_aprstab_text_to_digi
+  bcs @digi_error
+  clc
+  rts
+@callsign_error:
+  lda #<msg_invalid_callsign
+  sta CMDDATA0
+  lda #>msg_invalid_callsign
+  sta CMDDATA1
+  sec
+  rts
+@ssid_error:
+  lda #<msg_invalid_ssid
+  sta CMDDATA0
+  lda #>msg_invalid_ssid
+  sta CMDDATA1
+  sec
+  rts
+@digi_error:
+  lda #<msg_invalid_digi
+  sta CMDDATA0
+  lda #>msg_invalid_digi
+  sta CMDDATA1
+  sec
+  rts
+
+int_aprstab_store_digi:
+  ldy digi_write_offset
+  ldx #0
+@copy_loop:
+  lda pk_callsign,x
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::digi,y
+  iny
+  inx
+  cpx #APRS_CALLSIGN_LEN
+  bne @copy_loop
+  lda pk_ssid
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::digi,y
+  iny
+  sty digi_write_offset
+  rts
+
+; converts the draft config digi array into text
+; for the digi form field.
+int_aprstab_digi_to_text:
+  lda #0
+  sta digi_count
+  ldx #0
+  ldy #0
+@addr_loop:
+  lda digi_count
+  cmp cfg_draft_config+Cfg::aprs+CfgAprs::num_digi
+  bcs @fill
+  stx digi_entry_sep
+@call_loop:
+  lda cfg_draft_config+Cfg::aprs+CfgAprs::digi,x
+  cmp #' '
+  beq @call_done
+  sta cfg_digi_text,y
+  iny
+  inx
+  txa
+  sec
+  sbc digi_entry_sep
+  cmp #APRS_CALLSIGN_LEN
+  bcc @call_loop
+@call_done:
+  lda digi_entry_sep
+  clc
+  adc #APRS_CALLSIGN_LEN
+  tax
+  lda cfg_draft_config+Cfg::aprs+CfgAprs::digi,x
+  beq @addr_done
+  sta digi_entry_sep
+  lda #'-'
+  sta cfg_digi_text,y
+  iny
+  lda digi_entry_sep
+  cmp #10
+  bcc @ssid_ones
+  sbc #10
+  pha
+  lda #'1'
+  sta cfg_digi_text,y
+  iny
+  pla
+@ssid_ones:
+  clc
+  adc #'0'
+  sta cfg_digi_text,y
+  iny
+@addr_done:
+  inx
+  inc digi_count
+  lda digi_count
+  cmp cfg_draft_config+Cfg::aprs+CfgAprs::num_digi
+  bcs @fill
+  lda #','
+  sta cfg_digi_text,y
+  iny
+  jmp @addr_loop
+@fill:
+  lda #' '
+@fill_loop:
+  cpy #APRS_DIGI_LEN
+  bcs @done
+  sta cfg_digi_text,y
+  iny
+  jmp @fill_loop
+@done:
   rts
 
 int_draw_menu_borders_session_tab:
@@ -924,6 +1246,19 @@ int_draw_menu_borders_aprs_tab:
   lda #0
   sta CMDDATA4
   jsr scr_draw_str
+
+  lda #<aprs_digi_label
+  sta CMDDATA0
+  lda #>aprs_digi_label
+  sta CMDDATA1
+  lda #<APRS_DIGI_LABEL_OFFSET
+  sta CMDDATA2
+  lda #>APRS_DIGI_LABEL_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
+
   rts
 
 ; draws the chroma around the borders and the header
@@ -959,6 +1294,7 @@ cfg_activate:
   sta cfg_config_flag
 
   ut_copy_struct_abs_to_abs cfg_saved_config, cfg_draft_config, Cfg
+  jsr int_aprstab_config_to_text
 
   jsr int_draw_menu_borders
   jsr int_refresh_menus
@@ -1169,6 +1505,9 @@ int_cmd_protocol:
   rts
 
 int_cmd_start:
+  jsr int_aprstab_form_to_config
+  bcs @show_error
+
   lda cfg_draft_config+Cfg::session+CfgSession::protocol
   cmp #TERM_PROTOCOL::APRS
   bne @start
@@ -1176,24 +1515,16 @@ int_cmd_start:
   ; only allow line mode in aprs
   lda #TERM_MODE::LINE
   sta cfg_draft_config+Cfg::serial+CfgSerial::mode
-@aprs_check_callsign:
-  jsr int_aprstab_callsign_valid
-  bcc @aprs_check_ssid
+
+  lda cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign
+  cmp #' '
+  bne @start
   lda #<msg_invalid_callsign
   sta CMDDATA0
   lda #>msg_invalid_callsign
   sta CMDDATA1
+@show_error:
   jsr int_start_show_status
-  jmp @error
-@aprs_check_ssid:
-  jsr int_aprstab_text_to_ssid
-  bcc @start
-  lda #<msg_invalid_ssid
-  sta CMDDATA0
-  lda #>msg_invalid_ssid
-  sta CMDDATA1
-  jsr int_start_show_status
-@error:
   sec
   rts
 @start:
@@ -1447,53 +1778,30 @@ int_aprstab_handle_kbd:
 @backspace:
   jsr int_aprstab_input_set_context
   jsr li_backspace
-  jsr int_aprstab_text_to_ssid
   jmp @done
 @char_delete:
   jsr int_aprstab_input_set_context
   jsr li_char_delete
-  jsr int_aprstab_text_to_ssid
   jmp @done
 @char_insert:
   jsr int_aprstab_input_set_context
   jsr li_char_insert
-  jsr int_aprstab_text_to_ssid
   jmp @done
 @typechar:
-  lda aprstab_focus
-  cmp #APRS_FOCUS_SSID
-  beq @ssid_char
-@call_char:
   lda g_kbdcode_atascii
   cmp #' '
-  beq @type_callsign
+  beq @type
+  cmp #'-'
+  beq @type
+  cmp #','
+  beq @type
   jsr ut_is_alphanumeric
   bcs @done
-  cmp #'a'
-  bcc @type_callsign
-  cmp #'z'+1
-  bcs @type_callsign
-  sec
-  sbc #$20
-@type_callsign:
-  pha
-  jsr int_aprstab_input_set_context
-  pla
-  sta CMDDATA0
-  jsr li_type_char
-  jmp @done
-@ssid_char:
-  lda g_kbdcode_atascii
-  cmp #' '
-  beq @type_ssid
-  jsr ut_ascii_char_to_digit
-  bcs @done
-@type_ssid:
+@type:
   jsr int_aprstab_input_set_context
   lda g_kbdcode_atascii
   sta CMDDATA0
   jsr li_type_char
-  jsr int_aprstab_text_to_ssid
 @done:
   rts
 
@@ -1888,14 +2196,24 @@ filetab_focus:          .byte 0
 file_btn_idx:           .byte 0
 
 cfg_callsign_li:        .tag LineInput
+cfg_callsign_text:      .res APRS_CALLSIGN_LEN
 cfg_ssid_li:            .tag LineInput
 cfg_ssid_text:          .res APRS_SSID_LEN
+cfg_digi_li:            .tag LineInput
+cfg_digi_text:          .res APRS_DIGI_LEN
+digi_count:             .byte 0
+digi_write_offset:      .byte 0
+digi_text_end:          .byte 0
+digi_entry_start:       .byte 0
+digi_entry_end:         .byte 0
+digi_entry_sep:         .byte 0
 aprstab_focus:          .byte 0
 aprs_callsign_label:    .byte "Callsign:",$00
 aprs_ssid_label:        .byte "SSID:",$00
+aprs_digi_label:        .byte "Digipeaters:",$00
 
-cfg_aprs_li_ptrs_lo:    .byte <cfg_callsign_li, <cfg_ssid_li
-cfg_aprs_li_ptrs_hi:    .byte >cfg_callsign_li, >cfg_ssid_li
+cfg_aprs_li_ptrs_lo:    .byte <cfg_callsign_li, <cfg_ssid_li, <cfg_digi_li
+cfg_aprs_li_ptrs_hi:    .byte >cfg_callsign_li, >cfg_ssid_li, >cfg_digi_li
 
 filename_label:         .byte "File name:",$00
 file_cfg_suffix:        .byte ".CFG",$00
@@ -1910,6 +2228,7 @@ msg_load_failed:        .byte "Load failed",$00
 
 msg_invalid_callsign:   .byte "Invalid APRS callsign",$00
 msg_invalid_ssid:       .byte "Invalid APRS ssid",$00
+msg_invalid_digi:       .byte "Invalid APRS digipeaters",$00
 
 file_btn_offs_lo:       .byte <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
 file_btn_offs_hi:       .byte >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET

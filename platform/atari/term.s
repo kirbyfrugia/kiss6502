@@ -224,15 +224,15 @@ int_reset_protocol:
   rts
 
 int_set_source_addr:
-  lda #<(cfg_saved_config+Cfg::aprs+CfgAprs::callsign)
+  lda #<(cfg_saved_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign)
   sta CMDDATA0
-  lda #>(cfg_saved_config+Cfg::aprs+CfgAprs::callsign)
+  lda #>(cfg_saved_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign)
   sta CMDDATA1
   lda #<pk_source_addr
   sta CMDDATA2
   lda #>pk_source_addr
   sta CMDDATA3
-  lda cfg_saved_config+Cfg::aprs+CfgAprs::ssid
+  lda cfg_saved_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
   sta CMDDATA4
   lda #(KISS_ADDR_RESERVED | KISS_ADDR_LAST)
   sta CMDDATA5

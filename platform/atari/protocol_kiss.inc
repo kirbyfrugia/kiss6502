@@ -47,6 +47,8 @@ PCTL_KISS_INC = 1
 
 APRS_CALLSIGN_LEN = 6
 APRS_SSID_LEN     = 2
+APRS_MAX_DIGI     = 8
+APRS_DIGI_LEN     = (APRS_CALLSIGN_LEN+1+APRS_SSID_LEN)*APRS_MAX_DIGI + (APRS_MAX_DIGI-1)*2
 
 KISS_STATE_NEW           = %10000000 ; waiting for first FEND
 KISS_STATE_FESC          = %01000000 ; in an FESC waiting for next byte
