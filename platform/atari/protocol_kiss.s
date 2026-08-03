@@ -425,6 +425,9 @@ pk_send_message:
   jsr int_format_message
   jsr int_finalize_disp
 
+  lda send_flags
+  and #KISS_SEND_FLAG_BROADCAST
+  bne @done
   inc msg_id_lo
   bne @done
   inc msg_id_hi
