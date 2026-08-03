@@ -28,6 +28,10 @@ pk_reset:
   bpl @ttl_clear_loop
   lda #DEDUP_TICK_FRAMES
   sta dedup_tick
+  lda #1
+  sta msg_id_lo
+  lda #0
+  sta msg_id_hi
   jsr pk_next_frame
   rts
 
@@ -243,14 +247,15 @@ pk_parse_callsign:
 ;   CMDDATA2/3 - ptr to the addressee, null terminated or 9 chars.
 ;                shorter ones are padded out with spaces.
 ;   CMDDATA4   - size of buf
-;   CMDDATA5   - trim flag, set RS232_PUTBUF_TRIM to trim
+;   CMDDATA5   - KISS_SEND_FLAG_TRIM_END to trim, KISS_SEND_FLAG_BROADCAST
+;                to leave off the message id
 pk_send_message:
   data_ptr_lo = CMDDATA0
   addressee_ptr_lo = CMDDATA2
   buf_size = CMDDATA4
-  trim = CMDDATA5
+  send_flags = CMDDATA5
 
-  lda trim
+  lda send_flags
   bmi @trim
   lda buf_size
   beq @data_empty; was empty string
@@ -369,6 +374,13 @@ pk_send_message:
   cpy ut_result
   bne @info_loop
 
+  lda send_flags
+  and #KISS_SEND_FLAG_BROADCAST
+  bne @id_done
+  jsr int_putchr_msg_id
+  bcs @error
+@id_done:
+
   lda #KISS_FEND
   jsr rs232_putchr
   bcs @error
@@ -410,6 +422,55 @@ int_putchr_escaped:
   bcs @done
   lda tempchr
   jsr rs232_putchr
+@done:
+  rts
+
+; writes the byte as two hex chars
+;
+; inputs:
+;   a - the byte to write
+; outputs:
+;   carry - set on a putchr error
+; modifies:
+;   a,x
+int_putchr_hex:
+  pha
+  lsr
+  lsr
+  lsr
+  lsr
+  tax
+  lda ut_hex_table_atascii,x
+  jsr int_putchr_escaped
+  pla
+  bcs @done
+  and #%00001111
+  tax
+  lda ut_hex_table_atascii,x
+  jmp int_putchr_escaped
+@done:
+  rts
+
+; writes the message id suffix and bumps the counter
+;
+; outputs:
+;   carry - set on a putchr error
+; modifies:
+;   a,x
+int_putchr_msg_id:
+  lda #'{'
+  jsr int_putchr_escaped
+  bcs @done
+  lda msg_id_hi
+  jsr int_putchr_hex
+  bcs @done
+  lda msg_id_lo
+  jsr int_putchr_hex
+  bcs @done
+
+  inc msg_id_lo
+  bne @done
+  inc msg_id_hi
 @done:
   rts
 
@@ -1048,6 +1109,8 @@ pk_digi_addrs:   .res APRS_MAX_DIGI * .sizeof(KissFrameAddr)
 pk_error:        .res 1
 pk_broadcast_addressee: .byte "CQ",$00
 
+msg_id_lo:       .res 1
+msg_id_hi:       .res 1
 dedup_next:      .res 1
 dedup_tick:      .res 1
 dedup_crc_lo:    .res DEDUP_N

@@ -413,7 +413,8 @@ int_send_message:
   sta CMDDATA3
   lda tli_metadata+LineInput::data_len
   sta CMDDATA4
-  lda #KISS_SEND_FLAG_TRIM_END
+  lda tx_is_broadcast
+  ora #KISS_SEND_FLAG_TRIM_END
   sta CMDDATA5
   jsr pk_send_message
   bcc ism_success
@@ -531,6 +532,8 @@ int_cmd_tx:
   rts
 
 int_set_tx_broadcast:
+  lda #KISS_SEND_FLAG_BROADCAST
+  sta tx_is_broadcast
   ldy #0
 @copy_loop:
   lda pk_broadcast_addressee,y
@@ -542,6 +545,8 @@ int_set_tx_broadcast:
   rts
 
 int_build_tx_addressee:
+  lda #0
+  sta tx_is_broadcast
   ldx #0
   ldy #0
 @call_loop:
@@ -996,6 +1001,7 @@ str_tx_prefix:               .byte "tx: ",$00
 str_invalid_callsign:        .byte "invalid callsign",$00
 
 tx_addressee:                .res KISS_ADDRESSEE_LEN+1
+tx_is_broadcast:             .res 1
 cmd_char:                    .res 1
 cmd_arg_idx:                 .res 1
 cmd_ssid:                    .res 1
