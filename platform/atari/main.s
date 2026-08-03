@@ -1,6 +1,7 @@
 .setcpu "6502"
 .include "atari.inc" ; /usr/share/cc65/asminc/atari.inc
 .include "config.inc"
+.include "crc.inc"
 .include "globals.inc"
 .include "kbd.inc"
 .include "main.inc"
@@ -161,6 +162,8 @@ set_vbi_handler:
   rts
 
 init:
+  jsr crc_make_table
+  brk
   lda #CTRL_SHIFT_FLAG_LOWER 
   sta ctrl_shift_lock_flag
 

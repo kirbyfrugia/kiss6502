@@ -30,6 +30,7 @@ ATARI_CFG_DBG   = $(SRCDIR)/atari/config/atari-asm-xex-debug.cfg
 ATARI_SRCS      = main.s \
 		  boot850.s \
 		  config.s \
+		  crc.s \
 		  file.s \
 		  globals.s \
 		  kbd.s \

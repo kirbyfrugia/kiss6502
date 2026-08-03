@@ -1,4 +1,4 @@
-; Thanks to Brucke Clark
+; Thanks to Bruce Clark
 ; [Bruce Clark mem move](https://6502.org/source/general/memory_move.html)
 .setcpu "6502"
 
