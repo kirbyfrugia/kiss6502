@@ -545,14 +545,14 @@ pk_process_frame:
   lda g_rx_buf+0
   cmp #':'
   beq pkpf_message
-  cmp #'>'
-  beq pkpf_status
+;  cmp #'>'
+;  beq pkpf_status
   bne pkpf_done
+;pkpf_status:
+;  jsr int_process_status
+;  jmp pkpf_done
 pkpf_message:
   jsr int_process_message
-  jmp pkpf_done
-pkpf_status:
-  jsr int_process_status
 pkpf_done:
   rts
 
@@ -580,6 +580,8 @@ int_process_message:
   lda g_rx_buf_num_chars
   cmp #KISS_TYPE_MSG_END_COLON_IDX
   bcc @done ; not a valid message
+
+  jsr crc_reset
 
   lda #<g_disp_buf
   sta g_temp_data_ptr_lo
@@ -617,102 +619,105 @@ int_process_message:
   iny
   inx
   stx x_index_var
+  lda terminator
+  jsr crc_upd
   jsr int_read_until_end_with_crc
 @finalize:
   sty y_index_var
+  jsr int_add_header_bytes_to_crc
   jsr int_finalize_disp
 @done:
   rts
 
-int_process_status:
-  lda #<g_disp_buf
-  sta g_temp_data_ptr_lo
-  lda #>g_disp_buf
-  sta g_temp_data_ptr_hi
-
-  ldy #0
-  lda #'['
-  sta g_disp_buf,y
-
-  iny
-  ldx #KissFrameHeader::source
-  stx x_index_var
-  jsr int_addr_to_buf
-
-  lda #']'
-  sta g_disp_buf,y
-
-  iny
-
-  ; empty statuses are allowed, but we don't
-  ; want to try parsing the string
-  lda g_rx_buf_num_chars
-  cmp #2 ; first char is '>' no matter what
-  bcs @not_empty
-  jmp @finalize
-@not_empty:
-  lda #' '
-  sta g_disp_buf,y
-
-  lda g_rx_buf_num_chars
-  cmp #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
-  bcc @nozulu
-  ldx #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
-  lda g_rx_buf,x
-  cmp #'z'
-  beq @zulu
-  cmp #'Z'
-  beq @zulu
-  ldx #1
-  bne @nozulu
-@zulu:
-  ; might be a timestamp, confirm
-  ldx #1
-  stx x_index_var
-  ldx #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
-  stx x_index_var_end
-  jsr int_all_digits
-  bcc @nozulu
-
-  lda #' '
-  sta g_disp_buf,y
-
-  ; it's a timestamp. Convert from DDHHmm to HH:mm
-  ldx #3
-  iny
-  lda g_rx_buf,x
-  sta g_disp_buf,y
-  iny
-  inx
-  lda g_rx_buf,x
-  sta g_disp_buf,y
-  iny
-  lda #':'
-  sta g_disp_buf,y
-  iny
-  inx
-  lda g_rx_buf,x
-  sta g_disp_buf,y
-  iny
-  inx
-  lda g_rx_buf,x
-  sta g_disp_buf,y
-  iny
-  lda #' '
-  sta g_disp_buf,y
-  inx
-  inx
-@nozulu:
-  iny
-  stx x_index_var
-  lda g_rx_buf_num_chars
-  sta x_index_var_end
-  jsr int_read_until_end
-@finalize:
-  sty y_index_var
-  jsr int_finalize_disp
-@done:
-  rts
+;int_process_status:
+;  lda #<g_disp_buf
+;  sta g_temp_data_ptr_lo
+;  lda #>g_disp_buf
+;  sta g_temp_data_ptr_hi
+;
+;  ldy #0
+;  lda #'['
+;  sta g_disp_buf,y
+;
+;  iny
+;  ldx #KissFrameHeader::source
+;  stx x_index_var
+;  jsr int_addr_to_buf
+;
+;  lda #']'
+;  sta g_disp_buf,y
+;
+;  iny
+;
+;  ; empty statuses are allowed, but we don't
+;  ; want to try parsing the string
+;  lda g_rx_buf_num_chars
+;  cmp #2 ; first char is '>' no matter what
+;  bcs @not_empty
+;  jmp @finalize
+;@not_empty:
+;  lda #' '
+;  sta g_disp_buf,y
+;
+;  lda g_rx_buf_num_chars
+;  cmp #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
+;  bcc @nozulu
+;  ldx #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
+;  lda g_rx_buf,x
+;  cmp #'z'
+;  beq @zulu
+;  cmp #'Z'
+;  beq @zulu
+;  ldx #1
+;  bne @nozulu
+;@zulu:
+;  ; might be a timestamp, confirm
+;  ldx #1
+;  stx x_index_var
+;  ldx #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
+;  stx x_index_var_end
+;  jsr int_all_digits
+;  bcc @nozulu
+;
+;  lda #' '
+;  sta g_disp_buf,y
+;
+;  ; it's a timestamp. Convert from DDHHmm to HH:mm
+;  ldx #3
+;  iny
+;  lda g_rx_buf,x
+;  sta g_disp_buf,y
+;  iny
+;  inx
+;  lda g_rx_buf,x
+;  sta g_disp_buf,y
+;  iny
+;  lda #':'
+;  sta g_disp_buf,y
+;  iny
+;  inx
+;  lda g_rx_buf,x
+;  sta g_disp_buf,y
+;  iny
+;  inx
+;  lda g_rx_buf,x
+;  sta g_disp_buf,y
+;  iny
+;  lda #' '
+;  sta g_disp_buf,y
+;  inx
+;  inx
+;@nozulu:
+;  iny
+;  stx x_index_var
+;  lda g_rx_buf_num_chars
+;  sta x_index_var_end
+;  jsr int_read_until_end
+;@finalize:
+;  sty y_index_var
+;  jsr int_finalize_disp
+;@done:
+;  rts
 
 ; finalizes the output once all the real data
 ; has been added to the display buffer.
@@ -757,33 +762,10 @@ int_finalize_disp:
 @done:
   rts
 
-; reads from x_index_var to x_index_var_end
-; and sets the carry bit if it's all digits,
-; otherwise it clears the carry bit
-; inputs:
-;   x_index_var        - start index to check
-;   x_index_var_end    - end index to check (one past)
-; outputs:
-;   C - sec if all digits, clc otherwise
-int_all_digits:
-  ldx x_index_var
-@loop:
-  lda g_rx_buf,x
-  cmp $30 ; ascii 0
-  bcc @nozulu
-  cmp $39 ; ascii 9 + 1
-  bcs @nozulu
-  inx
-  cpx x_index_var_end
-  bne @loop
-  sec
-  rts
-@nozulu:
-  clc
-  rts
-
 ; reads from rx_buf from x_index_var to x_index_var_end
-; or the given terminator char appears
+; or the given terminator char appears, updating the crc
+; with each char written. the terminator itself is not
+; written or added to the crc.
 ;
 ; assumes x_index_var_end - x_index_var > 1
 ;
@@ -797,27 +779,8 @@ int_all_digits:
 ;   c - set if the terminator was found, clear if we hit the end
 ;   x - index of the terminator, or x_index_var_end
 ;   y - index of last written char + 1
-int_read_until_terminator:
-  ldx x_index_var
-@loop:
-  lda g_rx_buf,x
-  cmp terminator
-  beq @found
-  sta (g_temp_data_ptr_lo),y
-  iny
-  inx
-  cpx x_index_var_end
-  bne @loop
-  clc
-  rts
-@found:
-  sec
-  rts
-
-; same as int_read_until_terminator, but updates the crc
-; only exists to avoid extra per-byte cost if we passed as an arg
 ; modifies:
-;   same as above, plus ZPB0
+;   a, ZPB0
 int_read_until_terminator_with_crc:
   ldx x_index_var
 @loop:
@@ -838,7 +801,8 @@ int_read_until_terminator_with_crc:
   sec
   rts
 
-; reads from rx_buf from x_index_var to x_index_var_end
+; reads from rx_buf from x_index_var to x_index_var_end,
+; updating the crc with each char written.
 ;
 ; assumes x_index_var_end - x_index_var > 1
 ;
@@ -850,22 +814,8 @@ int_read_until_terminator_with_crc:
 ; outputs:
 ;   x - index of last read char + 1
 ;   y - index of last written char + 1
-int_read_until_end:
-  ldx x_index_var
-@loop:
-  lda g_rx_buf,x
-  sta (g_temp_data_ptr_lo),y
-  iny
-  inx
-  cpx x_index_var_end
-  bne @loop
-@done:
-  rts
-
-; same as int_read_until_end, but updates the crc
-; only exists to avoid extra per-byte cost if we passed as an arg
 ; modifies:
-;   same as above, plus ZPB0
+;   a, ZPB0
 int_read_until_end_with_crc:
   ldx x_index_var
 @loop:
@@ -881,16 +831,42 @@ int_read_until_end_with_crc:
 @done:
   rts
 
+; adds the dest and source addresses from the frame header
+; to the crc. digipeaters are not included because we use the
+; crc to detect duplicates, and we might have the same message
+; received from multiple digipeaters. control and pid never change
+; so aren't included, either.
+;
+; modifies:
+;   a,x,y
+int_add_header_bytes_to_crc:
+  ldy #KissFrameHeader::dest
+@dest_loop:
+  lda pk_frame_header,y
+  jsr crc_upd
+  iny
+  cpy #(KissFrameHeader::dest+.sizeof(KissFrameAddr))
+  bne @dest_loop
+
+  ldy #KissFrameHeader::source
+@source_loop:
+  lda pk_frame_header,y
+  jsr crc_upd
+  iny
+  cpy #(KissFrameHeader::source+.sizeof(KissFrameAddr))
+  bne @source_loop
+
+  rts
 
 int_ack_message:
   rts
 
 ; inputs:
 ;   g_temp_data_ptr_lo/hi - address of line
-;   x_index_var        - offset in KissFrameHeader to start of address
-;   y                  - offset in disp buffer to store address
+;   x_index_var           - offset in KissFrameHeader to start of address
+;   y                     - offset in disp buffer to store address
 ; modifies:
-;   x_index_var        - will be one past end of this address
+;   x_index_var           - will be one past end of this address
 ;   a,x,y
 int_addr_to_buf:
   lda x_index_var
@@ -938,7 +914,7 @@ int_addr_to_buf:
   inc x_index_var
   rts
 
-zulu:            .res 1
+;zulu:            .res 1
 terminator:      .res 1
 x_index_var:     .res 1
 x_index_var_end: .res 1

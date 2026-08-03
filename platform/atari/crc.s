@@ -3,6 +3,11 @@
 ;
 ; Modified to assemble with CA65
 
+; To use:
+; 1. Make sure you've called crc_make_table once on init
+; 2. To start fresh, call crc_reset
+; 3. For each byte, call crc_upd
+
 .setcpu "6502"
 .include "atari.inc"
 .include "crc.inc"
@@ -39,12 +44,23 @@ NOADD:    DEY
           BNE BYTELOOP        ; Do next byte
           RTS
 
+crc_reset:
+  lda #$ff
+  sta crc_lo
+  sta crc_hi
+  rts
+
+; updates the running crc with the byte in A
+; inputs:
+;   a - the byte
+; modifies:
+;   a,x
 crc_upd:
-          EOR crc_lo+1       ; Quick CRC computation with lookup tables
+          EOR crc_hi         ; Quick CRC computation with lookup tables
           TAX
           LDA crc_lo
           EOR CRCHI,X
-          STA crc_lo+1
+          STA crc_hi
           LDA CRCLO,X
           STA crc_lo
           RTS
