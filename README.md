@@ -58,8 +58,8 @@ In the rust version these are real modes. They change what you send and what you
 /help             # Hmmm, this one's also confusing. What could it be?
 ```
 
-The atari version has no modes. It always shows every message it decodes, whether or
-not it's addressed to you, and there's no way to filter yet. `/tx` picks who
+The atari version has no modes. It always shows every message (APRS `message` type
+it decodes, whether or not it's addressed to you, and there's no way to filter. `/tx` picks who
 your next messages will go to:
 
 ```
@@ -68,7 +68,7 @@ your next messages will go to:
 /h                # help
 ```
 
-There's no `/config` on the atari. Hit SELECT to enter the config screen.
+There's no `/config` on the atari. Hit `SELECT` to enter the config screen.
 
 ## Background
 
@@ -140,11 +140,11 @@ Here's what I did myself:
 Here's where I used AI:
 * OCR. Specifically, I wrote code that dumped memory to my screen and I took a photo with my phone. I had Claude convert that to text for a file on my PC.
 * I copied and pasted the keycode to ATASCII lookup table from the Atari OS User's manual and had Claude turn that into a lookup table for me.
-* I used it to tweak some of the instructions in my readme files, though I mostly wrote them. It's just a pain in the butt and I don't care if AI does it.
-* It wrote some of the helper scripts like `run-atari.sh` since I wanted to focus on the actual program code.
-* It did some non-logic-changing refactors, like renaming things. Boring toil work vs thinking work. I directed it in exactly what to do.
-* I asked it questions sometimes whent I banged my head on the wall a dozen times first.
-* I had claude write some unit tests and some docs for my rust app. It also wrote the scenario runner test tool entirely.
+* I used it to update some of the instructions in my readme files.
+* It wrote some of the helper scripts like `run-atari.sh`
+* It did some non-logic-changing refactors, like renaming things.
+* I asked it questions sometimes after banging my head on the wall a dozen times first.
+* It wrote most of the unit tests and the manual scenario runner.
 
 ## License
 
