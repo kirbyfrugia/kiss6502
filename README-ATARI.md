@@ -107,10 +107,10 @@ kisstty talks KISS to direwolf over a serial link. The use cases below differ
 only in where the Atari/Altirra and direwolf live, and how the serial link
 between them is made.
 
-To test without a radio, `tests/inject-test-packet.sh` decodes a generated packet
-through a temporary direwolf and injects it over serial KISS (use case 2);
-`kissutil` (ships with direwolf) does the same for the cross-machine cases
-(1 and 3).
+To test without a radio, the scenario runner starts its own direwolf, injects real
+packets, and walks you through what should show up on screen (use case 2). See
+[tests/README.md](tests/README.md). For the cross-machine cases (1 and 3), `kissutil`
+(ships with direwolf) can be used, too.
 
 ### Use case 1: Physical Atari, direwolf on a separate box
 
@@ -134,33 +134,39 @@ direwolf -c ~/.config/direwolf/direwolf.conf -t 0
 # Stop direwolf first so it isn't holding the port. Then:
 kissutil -v -p /dev/COM1 -s 9600
 
-# Then type this:
-W7TTY>DEST:this is a test
+# Then type this. kisstty only renders the APRS message data type, so it has to
+# be a message, and the addressee is padded to 9 chars and must match the
+# callsign you configured:
+NOCALL-7>APKTY1::NOCALL   :this is a test
 ```
 
 ### Use case 2: Altirra and direwolf on the same machine
 
-`tests/inject-test-packet.sh` handles the direwolf side: it fills SERIALKISS in
-`tests/direwolf.conf.template` with the PTY (`-s`, default `/tmp/altirra-tty`),
-runs a temporary direwolf, and injects the decoded frame over that serial KISS
-link. The packet then flows PTY -> socat -> TCP 9000 -> Altirra's 850 -> kisstty.
+The scenario runner handles the direwolf side: it fills SERIALKISS in
+`tests/direwolf.conf.template` with the PTY from the scenario's `serial` field
+(default `/tmp/altirra-tty`), runs direwolf for the length of the run, and injects
+packets over that serial KISS link. They flow PTY -> socat -> TCP 9000 -> Altirra's
+850 -> kisstty.
 
 ```
 # Run kisstty in Altirra and start APRS mode. This opens the 850 serial
 # port so Altirra starts listening on TCP 9000. Do this BEFORE socat
 # or it has nothing to connect to.
 
-# Bridge Altirra's TCP serial to the PTY direwolf writes to (the script's
-# default -s device):
+# Bridge Altirra's TCP serial to the PTY direwolf writes to (the default
+# serial device in the atari scenarios):
 socat -d -d PTY,link=/tmp/altirra-tty,raw,echo=0 TCP:127.0.0.1:9000
 
-# Send a test packet to kisstty:
-./tests/inject-test-packet.sh tests/aprs/position.txt
+# Run a scenario:
+cargo run -p scenario-runner -- tests/scenarios/atari/rendering.toml
 ```
 
-For ongoing two-way APRS (rather than a one-off test packet), skip
-inject-test-packet.sh and run a persistent direwolf against the same PTY, with a
-config containing `KISSPORT 8001` and `SERIALKISS /tmp/altirra-tty 9600`:
+The runner starts and stops direwolf itself, so don't have one already running. It
+refuses to start if anything is already listening on port 8001.
+
+For ongoing two-way APRS rather than a scenario, run a persistent direwolf against the
+same PTY, with a config containing `KISSPORT 8001` and
+`SERIALKISS /tmp/altirra-tty 9600`:
 
 ```
 direwolf -c ~/.config/direwolf/direwolf.conf -t 0
@@ -197,8 +203,8 @@ direwolf -c ~/.config/direwolf/direwolf.conf -t 0
 # straight at Altirra's serial:
 kissutil -v -p 9000
 
-# Then type this:
-W7TTY>DEST:this is a test
+# Then type this. See the note in use case 1 about the message format:
+NOCALL-7>APKTY1::NOCALL   :this is a test
 ```
 
 Note: the Altirra use cases assume Linux under Bottles/Wine. A native PC

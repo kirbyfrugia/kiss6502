@@ -18,29 +18,57 @@ The point is to have real, in-the-moment contacts.
 
 This means a few things:
 * I'm intentionally not including a history beyond the active session. When you exit the app, nothing is retained except your settings.
-* kisstty is designed around the APRS `message` data type. Other message types are ignored, but logged to the logfile for the rust version.
-* Related to the previous bullet, the 8-bit version will ONLY be for message (and status) types.
+* kisstty is designed around the APRS `message` data type. Other message types are shown (in monitor mode, rust version) and logged (rust version), but not yet parsed. I may remove them entirely.
+* Related to the previous bullet, the 8-bit version only handles `message` right now. All other frames are thrown away.
 
 ## Protocol / Usage notes
 
-kisstty has the concept of "net mode" (broadcast) and "qso mode" (conversations)
-for APRS `message` types.
+### Versions
 
-In net mode, it addresses all messages to `CQ`. Receiving stations read messages
+Because of platform limitations, there are some distinct differences between
+the rust version and the 8-bit version. You'll see some of that below.
+
+### Tocall
+
+APRS puts a "tocall" in the AX.25 destination field. It's a software identifier,
+so other stations can tell what app sent a packet.
+
+kisstty's is `APKTY1`. `AP` is the APRS prefix, `KTY` is kisstty, and `1` is the major
+version. It's registered, so if you see `APKTY1` on the air that's this app.
+
+### Broadcasting to CQ
+
+Both versions address broadcast messages to `CQ`. Receiving stations read messages
 addressed to `ALL`, `QST` or `CQ` as a general call, and none of the three are
 ever acked. I considered APRS bulletins (`BLN1`, `BLN2`, ...) instead, but other
-software gives those special handling. They get sorted onto a separate bulletins
-page rather than showing up in the normal message flow.
+software gives those special handling and I wanted to play nicely.
 
-You switch modes by entering:
-```
-# for net mode:
-/net
+### Net mode and qso mode (rust only)
 
-# for qso mode:
-/qso <callsign>
+In the rust version these are real modes. They change what you send and what you see:
 
 ```
+/net              # send to CQ, show only APRS messages
+/qso <callsign>   # send to that station, show only messages between you and them
+/monitor          # send to CQ, show every APRS data type (not all parsed yet)
+/dump             # every copy and ack seen for a packet
+/clear            # clears all messages from the terminal
+/config           # access the config screen
+/exit             # I wonder what this does
+/help             # Hmmm, this one's also confusing. What could it be?
+```
+
+The atari version has no modes. It always shows every message it decodes, whether or
+not it's addressed to you, and there's no way to filter yet. `/tx` picks who
+your next messages will go to:
+
+```
+/tx               # send subsequent messages to CQ
+/tx <callsign>    # send subsequent messaages to <callsign>
+/h                # help
+```
+
+There's no `/config` on the atari. Hit SELECT to enter the config screen.
 
 ## Background
 
@@ -50,30 +78,43 @@ at a weird distance from each other for having voice conversations.
 
 This program is still that, and I almost have that part fully working for the Atari 800.
 
-But what I realized was that what I really wanted was a way have real conversations. With people.
+But what I realized was that I really wanted a way have real conversations. With people.
 Ok, not voice conversations, but text conversations at least. I think some software exists out there,
-but I want this to be as dead simple as possible. No realtime maps, not fancy features. Just a simple
+but I wanted this to be as dead simple as possible. No realtime maps, not fancy features. Just a simple
 text interface that will work in a broadcast/monitor mode and a QSO mode.
 
 Basically, a purpose-built app to trade messages with people and a community.
 Kinda like IRC or discord, but over the air and even simpler.
 
 Target platforms in order:
-* Atari 800 (in active development). Can be used already as a standard terminal and with basic KISS message mode (rx).
+* Atari 800 (in active development). Works as a standard terminal, and sends and receives APRS messages.
 * Linux and Windows (next). Will be built in rust.
 * Apple II
 * Commodore 64
 
 ## Status
 
-The Atari version is far enough along that you can use it as a standard terminal. KISS/APRS in progress.
+Both versions send and receive APRS messages.
 
-The rust version is fairly functional now. You can send and receive messages. It still has some
-ugly UI stuff that isn't functional yet like the sidebar.
+The atari version handles `message` and drops everything else. It dedups messages
+and deals with acks appropriately, too. What it doesn't have is any of the extra
+rust modes, scrollback, or a session log. But I'd say it's nearly complete since
+I probably won't do any of that stuff given the system constraints.
+
+The rust version is nearly complete now.
+
+Apple and C64 are TODO. I may get to them, I may not. The code has modules that
+could reasonably be made 6502-machine agnostic, but there's definitely some
+atari-specific stuff blended in. I don't think it would be massive effort and
+claude could probably be used to split out any atari-specific stuff from the abstract.
 
 ## Docs
 
 Each platform-specific version has its own readme that tells you how to build, run, and debug it.
+
+There's no automated test for the atari build, so [tests/README.md](tests/README.md) covers
+the scenario tests instead. They drive a real direwolf, inject real packets, and walk you
+through checking what shows up on screen.
 
 ## Use of open source
 
