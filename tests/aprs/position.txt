@@ -1,2 +1,0 @@
-# Position report
-NOCALL>APZ001,WIDE1-1,WIDE2-1:!4433.37N/12318.23W-kisstty dev test

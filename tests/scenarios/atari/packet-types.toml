@@ -1,0 +1,40 @@
+name = "unhandled packet types"
+platform = "atari"
+serial = "/tmp/altirra-tty"
+mycall = "NOCALL"
+
+# pk_process_frame only dispatches on ':', and status parsing is commented out,
+# so none of these render. What we are checking is that they arrive, get
+# ignored, and leave the message path working.
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Before the unhandled"
+see          = "NOCALL-7>NOCALL:Before the unhandled"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:!4433.37N/12318.23W-kisstty dev test"
+see          = "nothing, position reports are not parsed yet"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:@111111z4433.37N/12318.23W_270/005g010t065r000p000b10150h65"
+see          = "nothing, weather reports are not parsed yet"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:`kisstty dev test"
+see          = "nothing, mic-e is not parsed yet"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:>kisstty dev test"
+see          = "nothing, status parsing is commented out"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:>092345zkisstty dev test"
+see          = "nothing, same for a status with a zulu timestamp"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:>"
+see          = "nothing, and no crash on an empty status"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :After the unhandled"
+see          = "NOCALL-7>NOCALL:After the unhandled, so the message path still works"

@@ -121,8 +121,7 @@ int_decode_addr:
   rts
 
 ; renders an address into addr_text as an aprs addressee, space
-; padded to KISS_ADDRESSEE_LEN so it can be compared against the
-; addressee field of a received frame.
+; padded to KISS_ADDRESSEE_LEN
 ;
 ; inputs:
 ;   CMDDATA0/1 - ptr to the KissFrameAddr
@@ -162,7 +161,6 @@ int_addr_to_text:
   iny
   cpy ut_ssid_len
   bne @digits_loop
-
 @pad_loop:
   cpx #KISS_ADDRESSEE_LEN
   beq @done
@@ -373,8 +371,9 @@ pk_parse_callsign:
 ;   CMDDATA2/3 - ptr to the addressee, null terminated or 9 chars.
 ;                shorter ones are padded out with spaces.
 ;   CMDDATA4   - size of buf
-;   CMDDATA5   - KISS_SEND_FLAG_TRIM_END to trim, KISS_SEND_FLAG_BROADCAST
-;                to leave off the message id
+;   CMDDATA5   - KISS_SEND_FLAG_TRIM_END to trim, KISS_SEND_FLAG_NO_MSG_ID
+;                to leave off the message id, KISS_SEND_FLAG_NO_ECHO to
+;                skip building the display line
 pk_send_message:
   data_ptr_lo = CMDDATA0
   addressee_ptr_lo = CMDDATA2
@@ -478,6 +477,10 @@ pk_send_message:
   jsr rs232_putchr
   bcs @error
 
+  lda send_flags
+  and #KISS_SEND_FLAG_NO_ECHO
+  bne @echo_done
+
   lda #<pk_tx_header
   sta fmt_hdr_lo
   lda #>pk_tx_header
@@ -491,9 +494,10 @@ pk_send_message:
 
   jsr int_format_message
   jsr int_finalize_disp
+@echo_done:
 
   lda send_flags
-  and #KISS_SEND_FLAG_BROADCAST
+  and #KISS_SEND_FLAG_NO_MSG_ID
   bne @done
   inc msg_id_lo
   bne @done
@@ -616,7 +620,7 @@ int_build_tx_buf:
   bne @data_loop
 
   lda send_flags
-  and #KISS_SEND_FLAG_BROADCAST
+  and #KISS_SEND_FLAG_NO_MSG_ID
   bne @id_done
   lda #'{'
   sta pk_tx_buf,x
@@ -863,15 +867,22 @@ int_format_message:
   sta x_index_var
   lda fmt_len
   sta x_index_var_end
+  lda #0
+  sta msg_id_idx
   lda #'{'
   sta terminator
   jsr int_read_until_terminator_with_crc
   bcc @finalize ; no message id
+  iny
+  cpy fmt_len
+  beq @finalize ; nothing after the brace
+  sty x_index_var
+  sty msg_id_idx
+
   lda #'#'
   sta g_disp_buf,x
   inx
-  iny
-  sty x_index_var
+
   stx tempx
   lda terminator
   jsr crc_upd
@@ -888,7 +899,7 @@ int_process_message:
   bcc @done ; not a valid message
 
   jsr int_is_our_source
-  bcs @done ; we showed it when we sent it
+  bcs @done ; ignore messages with us as the source, coming back from repeaters
 
   lda #<pk_frame_header
   sta fmt_hdr_lo
@@ -901,13 +912,24 @@ int_process_message:
   lda g_rx_buf_num_chars
   sta fmt_len
 
-  jsr int_format_message
-
-  ; todo: actually handle acks
   jsr int_is_ack
-  bcs @done
+  bcc @message
+
+  jsr int_is_our_addressee
+  bcc @done
+  jsr int_format_message
   jsr int_check_duplicate
   bcs @done
+  jsr int_build_ack_line
+  jmp @display
+@message:
+  jsr int_format_message
+  jsr int_check_duplicate
+  bcs @done
+  jsr int_is_our_addressee
+  bcc @display
+  jsr int_send_ack
+@display:
   jsr int_finalize_disp
 @done:
   rts
@@ -1162,11 +1184,124 @@ int_is_our_source:
   clc
   rts
 
+; checks whether the frame being handled is addressed to us
+;
+; inputs:
+;   fmt_data_lo/hi - ptr to the info field
+; outputs:
+;   c - set if the frame is addressed to us, clear otherwise
+; modifies:
+;   a,x,y
+int_is_our_addressee:
+  ldx #KISS_ADDRESSEE_LEN-1
+  ldy #(KISS_TYPE_MSG_ADDRESSEE_IDX+KISS_ADDRESSEE_LEN-1)
+@addressee_loop:
+  lda (fmt_data_lo),y
+  cmp my_addressee,x
+  bne @no
+  dey
+  dex
+  bpl @addressee_loop
+  sec
+  rts
+@no:
+  clc
+  rts
+
+; acks the message we received
+;
+; inputs:
+;   fmt_data_lo/hi - ptr to the info field
+;   fmt_len        - number of chars in the info field
+;   msg_id_idx     - start index of the message id in fmt_data, zero if no ID 
+; modifies:
+;   a,x,y
+;   CMDDATA0/1/2/3/4/5
+int_send_ack:
+  ldy msg_id_idx
+  beq @done
+
+  ldx #KISS_ACK_PREFIX_LEN
+@id_loop:
+  lda (fmt_data_lo),y
+  sta ack_text,x
+  inx
+  iny
+  cpx #(KISS_ACK_PREFIX_LEN+KISS_MSG_ID_MAX_LEN)
+  beq @id_done
+  cpy fmt_len
+  bne @id_loop
+@id_done:
+  stx CMDDATA4
+
+  lda #<(pk_frame_header+KissFrameHeader::source)
+  sta CMDDATA0
+  lda #>(pk_frame_header+KissFrameHeader::source)
+  sta CMDDATA1
+  jsr int_addr_to_text
+
+  lda #<ack_text
+  sta CMDDATA0
+  lda #>ack_text
+  sta CMDDATA1
+  lda #<addr_text
+  sta CMDDATA2
+  lda #>addr_text
+  sta CMDDATA3
+  lda #(KISS_SEND_FLAG_NO_MSG_ID|KISS_SEND_FLAG_NO_ECHO)
+  sta CMDDATA5
+  jsr pk_send_message
+@done:
+  rts
+
+; builds a display line for a ":msg #xxxx acked message"
+;
+; inputs:
+;   fmt_data_lo/hi - ptr to the info field
+;   fmt_len        - number of chars in the info field
+; outputs:
+;   y_index_var - one past the last char written
+; modifies:
+;   a,x,y
+int_build_ack_line:
+  ldx #0
+@prefix_loop:
+  lda str_msg_num,x
+  beq @id_loop
+  sta g_disp_buf,x
+  inx
+  bne @prefix_loop
+@id_loop:
+  ldy #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN)
+@id_copy_loop:
+  lda (fmt_data_lo),y
+  sta g_disp_buf,x
+  inx
+  iny
+  cpy fmt_len
+  bne @id_copy_loop
+
+  ldy #0
+@suffix_loop:
+  lda str_acked,y
+  beq @done
+  sta g_disp_buf,x
+  inx
+  iny
+  bne @suffix_loop
+@done:
+  stx y_index_var
+  rts
+
 ; checks whether the received message is an ack
+;
+; inputs:
+;   fmt_data_lo/hi - ptr to the info field
+;   fmt_len        - number of chars in the info field
 ; outputs:
 ;   c - set if the frame is an ack, clear otherwise
 ; modifies:
-;   a,x
+;   a,y
 int_is_ack:
   lda fmt_len
   cmp #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN+KISS_MSG_ID_MIN_LEN)
@@ -1309,10 +1444,16 @@ ssid_tmp:        .res 1
 ssid_text:       .res APRS_SSID_LEN
 addr_text:       .res KISS_ADDRESSEE_LEN
 my_addressee:    .res KISS_ADDRESSEE_LEN
+ack_text:        .byte "ack"
+                 .res KISS_MSG_ID_MAX_LEN
+msg_id_idx:      .res 1
+
+str_msg_num:     .byte ":msg #",$00
+str_acked:       .byte " acked",$00
 pk_callsign:     .res APRS_CALLSIGN_LEN
 pk_ssid:         .res 1
 
-pk_dest_addr: ; APKTY1
+pk_dest_addr:    ; APKTY1
   .byte $82,$A0,$96,$A8,$B2,$62,$E0
 
 pk_state:        .res 1

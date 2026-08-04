@@ -1,0 +1,40 @@
+name = "rendering"
+platform = "atari"
+serial = "/tmp/altirra-tty"
+mycall = "NOCALL"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1::NOCALL   :No digis"
+see          = "NOCALL-7>NOCALL:No digis"
+
+[[step]]
+to_kisstty   = "NOCALL-3>APKTY1,WIDE2-1::NOCALL   :One digi"
+see          = "NOCALL-3>NOCALL:One digi"
+
+[[step]]
+to_kisstty   = "NOCALL-9>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Single digit ssid"
+see          = "NOCALL-9>NOCALL:Single digit ssid"
+
+[[step]]
+to_kisstty   = "NOCALL-10>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Two digit ssid"
+see          = "NOCALL-10>NOCALL:Two digit ssid"
+
+[[step]]
+to_kisstty   = "NOCAL2>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Sender with no ssid"
+see          = "NOCAL2>NOCALL:Sender with no ssid, with no trailing dash"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL-15:Nine char addressee"
+see          = "NOCALL-7>NOCALL-15:Nine char addressee, a full field with no padding to trim. it also happens to fill line 1 exactly"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :This message should end mid line 2, my dude!"
+see          = "wraps onto a second line and stops part way along it"
+
+[[step]]
+to_kisstty   = "NOCALL-15>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :This message should end mid line 2, my dude!"
+see          = "the same wrap, one column further over because of the sender ssid"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Fill up this second line all the way out to its very end!!!!"
+see          = "fills line 2 to its last column, with nothing spilling onto a third"

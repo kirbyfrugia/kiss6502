@@ -1,0 +1,29 @@
+name = "dedup"
+platform = "atari"
+serial = "/tmp/altirra-tty"
+mycall = "NOCALL"
+
+# These have to land inside one 30s window, so they go out as a list with no
+# prompt in between. A prompt there would let the window expire while you type
+# and the duplicates would legitimately show.
+
+[[step]]
+to_kisstty = [
+  "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Repeat me",
+  "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Repeat me",
+  "NOCALL-7>APKTY1,WIDE2-1::NOCALL   :Repeat me",
+  "NOCALL-7>APKTY1::NOCALL   :Repeat me",
+  "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Repeat me too",
+]
+see          = "two lines only: one 'Repeat me' and one 'Repeat me too'. the three extra copies of 'Repeat me' are suppressed, including the two that took a different digi path"
+
+[[step]]
+wait         = 35
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Repeat me"
+see          = "'Repeat me' again, the window has expired so it is no longer a duplicate"
+
+[[step]]
+do           = 'send "echo check" to NOCALL-7'
+see          = "exactly one line for it, and no second copy when the tnc hands it back"

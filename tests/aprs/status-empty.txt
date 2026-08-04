@@ -1,2 +1,0 @@
-# Status report. No position data.
-NOCALL>APZ001,WIDE1-1,WIDE2-1:>

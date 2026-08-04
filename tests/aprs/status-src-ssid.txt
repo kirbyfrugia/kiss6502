@@ -1,2 +1,0 @@
-# Status report from a station with an SSID.
-NOCALL-7>APZ001,WIDE1-1,WIDE2-1:>kisstty dev test

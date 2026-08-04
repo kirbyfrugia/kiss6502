@@ -103,7 +103,7 @@ Here's where I used AI:
 * It wrote some of the helper scripts like `run-atari.sh` since I wanted to focus on the actual program code.
 * It did some non-logic-changing refactors, like renaming things. Boring toil work vs thinking work. I directed it in exactly what to do.
 * I asked it questions sometimes whent I banged my head on the wall a dozen times first.
-* I had claude write some unit tests and some docs for my rust app.
+* I had claude write some unit tests and some docs for my rust app. It also wrote the scenario runner test tool entirely.
 
 ## License
 

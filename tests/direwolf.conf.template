@@ -1,17 +1,15 @@
 #############################################################
 # direwolf.conf.template - kisstty dev/test
 #
-# Template for inject-test-packet.sh, which generates the direwolf.conf it runs.
+# Template for scenario-runner, which generates the direwolf.conf it runs.
+# See tests/README.md.
 #
-# Placeholder:
-#   %%SERIALKISS%%  Replaced with "SERIALKISS <device>" when run with
-#                   -s <device>, or removed when -s is not given.
+# Two lines below are substitution anchors and have to stay verbatim:
 #
-# Set MYCALL to your callsign before running, or pass it
-# via environment:  MYCALL=W7TTY inject-test-packet.sh ...
-#
-# This file is intentionally checked into the repo without
-# a real callsign.
+#   %%SERIALKISS%%  becomes "SERIALKISS <device>" from the scenario's serial
+#                   field, or is dropped for TCP KISS only.
+#   MYCALL NOCALL   becomes the scenario's mycall. Putting a real callsign
+#                   here instead breaks the substitution silently.
 #############################################################
 
 # RX from WAV via stdin; TX to system audio (PipeWire/pulse)
@@ -26,7 +24,7 @@ MODEM 1200
 # KISS TCP - kisstty connects here
 KISSPORT 8001
 
-# KISS over a serial device - filled in by inject-test-packet.sh -s <device>
+# KISS over a serial device - filled in from the scenario's serial field
 %%SERIALKISS%%
 
 # AGW port - for tools like YAAC if needed

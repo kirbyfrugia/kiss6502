@@ -1,0 +1,15 @@
+name = "soak"
+platform = "atari"
+serial = "/tmp/altirra-tty"
+mycall = "NOCALL"
+
+# Runs until you interrupt it, so there is nothing after the traffic step.
+# A trailing see would never be reached.
+
+[[step]]
+do           = "get kisstty on screen. pressing Enter starts a message every 5s from a random station, running until you ctrl-c. watch for torn lines, bad wrapping, scrolling trouble or a lockup"
+
+[[step]]
+random       = true
+repeat       = 0
+every        = 5

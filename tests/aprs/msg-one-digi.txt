@@ -1,2 +1,0 @@
-# simple message with one digi
-NOCALL-3>APZ001,WIDE2-1::NOCALL   :Test

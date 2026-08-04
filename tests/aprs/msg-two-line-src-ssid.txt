@@ -1,2 +1,0 @@
-# Message from an SSID station, long enough to wrap onto a second line.
-NOCALL-15>APZ001,WIDE1-1,WIDE2-1::NOCALL   :This message should end mid line 2, my dude!

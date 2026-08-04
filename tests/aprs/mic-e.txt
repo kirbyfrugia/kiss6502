@@ -1,2 +1,0 @@
-# Test mic-e message
-NOCALL>APZ001,WIDE1-1,WIDE2-1:`kisstty dev test

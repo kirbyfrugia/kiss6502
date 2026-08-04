@@ -1,0 +1,43 @@
+name = "acks"
+platform = "atari"
+serial = "/tmp/altirra-tty"
+mycall = "NOCALL"
+
+[[step]]
+do           = '/tx NOCALL-7 then send "hello there"'
+see          = "NOCALL>NOCALL-7:hello there#0001"
+from_kisstty = "::NOCALL-7 :hello there{0001"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :ack0001"
+see          = ":msg #0001 acked"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Test message{0002"
+see          = "NOCALL-7>NOCALL:Test message#0002"
+from_kisstty = "::NOCALL-7 :ack0002"
+
+[[step]]
+to_kisstty   = "NOCALL-15>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Two digit ssid{0003"
+see          = "NOCALL-15>NOCALL:Two digit ssid#0003"
+from_kisstty = "::NOCALL-15:ack0003"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :No id to ack"
+see          = "NOCALL-7>NOCALL:No id to ack, and no ack transmitted"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Bare brace{"
+see          = "NOCALL-7>NOCALL:Bare brace, with no # and no ack transmitted"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL-9 :ack0001"
+see          = "nothing new, this ack is for somebody else"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :ack12345"
+see          = ":msg #12345 acked, five chars is the longest id allowed"
+
+[[step]]
+to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :ack123456"
+see          = "NOCALL-7>NOCALL:ack123456, six chars is too long so this is a plain message"

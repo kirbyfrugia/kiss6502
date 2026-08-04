@@ -1,2 +1,0 @@
-# APRS message addressed to a mobile station. Sequence number 001.
-NOCALL-15>APZ001,WIDE1-1,WIDE2-1::NOCALL-1 :Test message{001

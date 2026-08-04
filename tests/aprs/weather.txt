@@ -1,2 +1,0 @@
-# Weather report with position. Wind 270° at 5kt, gust 10kt, temp 65°F, humidity 65%.
-NOCALL>APZ001,WIDE1-1,WIDE2-1:@111111z4433.37N/12318.23W_270/005g010t065r000p000b10150h65
