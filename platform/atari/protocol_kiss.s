@@ -492,6 +492,13 @@ pk_send_message:
   lda pk_tx_buf_num_chars
   sta fmt_len
 
+  jsr int_is_our_addressee
+  lda #KISS_HIGHLIGHT_SOURCE
+  bcc @highlight_set
+  ora #KISS_HIGHLIGHT_ADDRESSEE
+@highlight_set:
+  sta highlight_flags
+
   jsr int_format_message
   jsr int_finalize_disp
 @echo_done:
@@ -573,10 +580,10 @@ int_hex_to_tx_buf:
 ; builds the info field for the message we are sending
 ;
 ; inputs:
-;   CMDDATA0/1 - ptr to the data
-;   CMDDATA2/3 - ptr to the addressee
-;   CMDDATA4   - number of chars in the data
-;   CMDDATA5   - send flags
+;   CMDDATA0/1          - ptr to the data
+;   CMDDATA2/3          - ptr to the addressee
+;   CMDDATA4            - number of chars in the data
+;   CMDDATA5            - send flags
 ; outputs:
 ;   pk_tx_buf_num_chars - number of chars written
 ; modifies:
@@ -831,11 +838,13 @@ int_fend:
 ; renders a message into the display buffer and computes its crc.
 ;
 ; inputs:
-;   fmt_hdr_lo/hi  - ptr to the frame header
-;   fmt_data_lo/hi - ptr to the info field
-;   fmt_len        - number of chars in the info field
+;   fmt_hdr_lo/hi   - ptr to the frame header
+;   fmt_data_lo/hi  - ptr to the info field
+;   fmt_len         - number of chars in the info field
+;   highlight_flags - KISS_HIGHLIGHT_SOURCE and/or KISS_HIGHLIGHT_ADDRESSEE
+;                     to invert relevant chars
 ; outputs:
-;   y_index_var    - one past the last char written
+;   y_index_var     - one past the last char written
 ; modifies:
 ;   a,x,y
 int_format_message:
@@ -850,10 +859,12 @@ int_format_message:
   lda #KissFrameHeader::source
   sta x_index_var
   jsr int_addr_to_buf
+  stx highlight_src_end
 
   lda #'>'
   sta g_disp_buf,x
   inx
+  stx highlight_addr_start
 
   lda #KISS_TYPE_MSG_ADDRESSEE_IDX
   sta x_index_var
@@ -862,6 +873,7 @@ int_format_message:
   lda #' '
   sta terminator
   jsr int_read_until_terminator_with_crc
+  stx highlight_addr_end
 
   lda #KISS_TYPE_MSG_END_COLON_IDX
   sta x_index_var
@@ -891,6 +903,60 @@ int_format_message:
 @finalize:
   stx y_index_var
   jsr int_add_header_bytes_to_crc
+  ; make sure this is never called before the crc!
+  jsr int_apply_highlights
+  rts
+
+; inverts the relevant callsigns
+; NOTE to future me: this has to run after the crc is complete, or the inverse
+; bit would affect the crc.
+;
+; inputs:
+;   highlight_flags      - which callsigns to invert
+;   highlight_src_end    - one past the last char of the source
+;   highlight_addr_start - first char of the addressee
+;   highlight_addr_end   - one past the last char of the addressee
+; modifies:
+;   a,x,y
+int_apply_highlights:
+  lda highlight_flags
+  and #KISS_HIGHLIGHT_SOURCE
+  beq @addressee
+  lda #0
+  sta highlight_span_start
+  lda highlight_src_end
+  sta highlight_span_end
+  jsr int_invert_span
+@addressee:
+  lda highlight_flags
+  and #KISS_HIGHLIGHT_ADDRESSEE
+  beq @done
+  lda highlight_addr_start
+  sta highlight_span_start
+  lda highlight_addr_end
+  sta highlight_span_end
+  jsr int_invert_span
+@done:
+  rts
+
+; sets the inverse video bit on a span of the display buffer
+;
+; inputs:
+;   highlight_span_start - offset of the first char
+;   highlight_span_end   - offset one past the last char
+; modifies:
+;   a,x
+int_invert_span:
+  ldx highlight_span_start
+@invert_loop:
+  cpx highlight_span_end
+  beq @done
+  lda g_disp_buf,x
+  ora #$80
+  sta g_disp_buf,x
+  inx
+  bne @invert_loop
+@done:
   rts
 
 int_process_message:
@@ -917,17 +983,26 @@ int_process_message:
 
   jsr int_is_our_addressee
   bcc @done
+  lda #0
+  sta highlight_flags
   jsr int_format_message
   jsr int_check_duplicate
   bcs @done
   jsr int_build_ack_line
   jmp @display
 @message:
+  jsr int_is_our_addressee
+  lda #0
+  bcc @flags_set
+  lda #KISS_HIGHLIGHT_ADDRESSEE
+@flags_set:
+  sta highlight_flags
   jsr int_format_message
   jsr int_check_duplicate
   bcs @done
-  jsr int_is_our_addressee
-  bcc @display
+  lda highlight_flags
+  and #KISS_HIGHLIGHT_ADDRESSEE
+  beq @display
   jsr int_send_ack
 @display:
   jsr int_finalize_disp
@@ -1260,7 +1335,7 @@ int_send_ack:
 ;   fmt_data_lo/hi - ptr to the info field
 ;   fmt_len        - number of chars in the info field
 ; outputs:
-;   y_index_var - one past the last char written
+;   y_index_var    - one past the last char written
 ; modifies:
 ;   a,x,y
 int_build_ack_line:
@@ -1299,7 +1374,7 @@ int_build_ack_line:
 ;   fmt_data_lo/hi - ptr to the info field
 ;   fmt_len        - number of chars in the info field
 ; outputs:
-;   c - set if the frame is an ack, clear otherwise
+;   c              - set if the frame is an ack, clear otherwise
 ; modifies:
 ;   a,y
 int_is_ack:
@@ -1333,7 +1408,7 @@ int_is_ack:
 ; inputs:
 ;   crc_lo/crc_hi - crc of the frame just read
 ; outputs:
-;   c - set if we have already seen this frame, clear otherwise
+;   c             - set if we have seen this frame, clear otherwise
 ; modifies:
 ;   a,x,y
 int_check_duplicate:
@@ -1375,7 +1450,7 @@ int_check_duplicate:
 ;   x_index_var   - offset in KissFrameHeader to start of address
 ;   x             - offset in disp buffer to store address
 ; outputs:
-;   x - one past the last char written
+;   x             - one past the last char written
 ; modifies:
 ;   x_index_var   - will be one past end of this address
 ;   a,x,y
@@ -1395,8 +1470,8 @@ int_addr_to_buf:
   cpy x_index_var
   bne @loop
 @loop_done:
-  ldy x_index_var       ; index to ssid
-  lda (fmt_hdr_lo),y    ; ssid
+  ldy x_index_var    ; index to ssid
+  lda (fmt_hdr_lo),y ; ssid
   ; update our index to one past end of this address
   inc x_index_var
   jsr int_ssid_to_buf
@@ -1431,48 +1506,55 @@ int_ssid_to_buf:
 @done:
   rts
 
-;zulu:            .res 1
-terminator:      .res 1
-x_index_var:     .res 1
-x_index_var_end: .res 1
-y_index_var:     .res 1
-btwn_counter:    .res 1
-tempx:           .res 1
-tempy:           .res 1
-tempchr:         .res 1
-ssid_tmp:        .res 1
-ssid_text:       .res APRS_SSID_LEN
-addr_text:       .res KISS_ADDRESSEE_LEN
-my_addressee:    .res KISS_ADDRESSEE_LEN
-ack_text:        .byte "ack"
-                 .res KISS_MSG_ID_MAX_LEN
-msg_id_idx:      .res 1
+;zulu:                  .res 1
+terminator:             .res 1
+x_index_var:            .res 1
+x_index_var_end:        .res 1
+y_index_var:            .res 1
+btwn_counter:           .res 1
+tempx:                  .res 1
+tempy:                  .res 1
+tempchr:                .res 1
+ssid_tmp:               .res 1
+ssid_text:              .res APRS_SSID_LEN
+addr_text:              .res KISS_ADDRESSEE_LEN
+my_addressee:           .res KISS_ADDRESSEE_LEN
+ack_text:               .byte "ack"
+                        .res KISS_MSG_ID_MAX_LEN
+msg_id_idx:             .res 1
 
-str_msg_num:     .byte ":msg #",$00
-str_acked:       .byte " acked",$00
-pk_callsign:     .res APRS_CALLSIGN_LEN
-pk_ssid:         .res 1
+highlight_flags:        .res 1
+highlight_src_end:      .res 1
+highlight_addr_start:   .res 1
+highlight_addr_end:     .res 1
+highlight_span_start:   .res 1
+highlight_span_end:     .res 1
+
+str_msg_num:            .byte ":msg #",$00
+str_acked:              .byte " acked",$00
+pk_callsign:            .res APRS_CALLSIGN_LEN
+pk_ssid:                .res 1
 
 pk_dest_addr:    ; APKTY1
   .byte $82,$A0,$96,$A8,$B2,$62,$E0
 
-pk_state:        .res 1
-pk_frame_header: .tag KissFrameHeader
-pk_source_addr:  .res .sizeof(KissFrameAddr)
-pk_digi_len:     .res 1
-pk_digi_addrs:   .res APRS_MAX_DIGI * .sizeof(KissFrameAddr)
-pk_error:        .res 1
+pk_state:               .res 1
+pk_frame_header:        .tag KissFrameHeader
+pk_source_addr:         .res .sizeof(KissFrameAddr)
+pk_digi_len:            .res 1
+pk_digi_addrs:          .res APRS_MAX_DIGI * .sizeof(KissFrameAddr)
+pk_error:               .res 1
 pk_broadcast_addressee: .byte "CQ",$00
 
-fmt_len:         .res 1
-msg_id_lo:       .res 1
-msg_id_hi:       .res 1
-pk_tx_header:    .tag KissFrameHeader
-pk_tx_buf:       .res PK_TX_BUF_LEN
-pk_tx_buf_num_chars: .res 1
-dedup_next:      .res 1
-dedup_tick:      .res 1
-dedup_crc_lo:    .res DEDUP_N
-dedup_crc_hi:    .res DEDUP_N
-dedup_ttl:       .res DEDUP_N
+fmt_len:                .res 1
+msg_id_lo:              .res 1
+msg_id_hi:              .res 1
+pk_tx_header:           .tag KissFrameHeader
+pk_tx_buf:              .res PK_TX_BUF_LEN
+pk_tx_buf_num_chars:    .res 1
+dedup_next:             .res 1
+dedup_tick:             .res 1
+dedup_crc_lo:           .res DEDUP_N
+dedup_crc_hi:           .res DEDUP_N
+dedup_ttl:              .res DEDUP_N
 
