@@ -6,28 +6,30 @@
 .include "globals.inc"
 .include "main.inc"
 .include "line_input.inc"
-.include "term_line_input.inc"
-.include "term_multi_input.inc"
 .include "term_output.inc"
 .include "protocol_kiss.inc"
 .include "rs232.inc"
 .include "screen.inc"
 .include "term.inc"
-.include "text_area.inc"
 .include "utils.inc"
 
 .segment "CODE"
 
-RS232_CHANNEL     = 32 ; channel 2 (2 * 16)
+RS232_CHANNEL          = 32 ; channel 2 (2 * 16)
 
 PORT_STATUS_OK         = 0
 PORT_STATUS_OPENING    = 1
 PORT_STATUS_NO_HANDLER = 2
 
-BAR_TX_LABEL_COL     = 1
-BAR_TX_COL           = 5
-BAR_STATUS_LABEL_COL = 24
-BAR_STATUS_COL       = 32
+BAR_TX_LABEL_COL       = 1
+BAR_TX_COL             = 5
+BAR_STATUS_LABEL_COL   = 24
+BAR_STATUS_COL         = 32
+BAR_ROW_OFFSET         = SCREEN_WIDTH*22
+
+PROMPT_OFFSET          = SCREEN_WIDTH*23
+INPUT_OFFSET           = PROMPT_OFFSET+1
+INPUT_MAX_LEN          = 67
 
 trm_init:
   lda #PORT_STATUS_OK
@@ -36,60 +38,109 @@ trm_init:
   sta current_mode
 
   jsr to_init
-  jsr tmi_init
-  jsr tli_init
+  jsr int_init_cmd_line
 @done:
   rts
 
-; draws the line mode specific part of the ui
-int_draw_ui_multi_line_input:
-  jsr int_draw_ui_base
-  lda #<(SCREEN_WIDTH*19)
-  sta status_bar_offset
-  lda #>(SCREEN_WIDTH*19)
-  sta status_bar_offset+1
-  jsr int_draw_status_bar
+int_init_cmd_line:
+  lda #0
+  sta cmd_line+LineInput::scr_cursor
+  sta cmd_line+LineInput::data_cursor
+  sta cmd_line+LineInput::first_visible
+
+  lda #<INPUT_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta cmd_line+LineInput::scr_ptr
+  lda #>INPUT_OFFSET
+  adc SCR_PTR_HI
+  sta cmd_line+LineInput::scr_ptr+1
+
+  lda #<cmd_line_data
+  sta cmd_line+LineInput::data_ptr
+  lda #>cmd_line_data
+  sta cmd_line+LineInput::data_ptr+1
+  lda #TERMINAL_WIDTH
+  sta cmd_line+LineInput::num_visible
+  lda #INPUT_MAX_LEN
+  sta cmd_line+LineInput::data_size
+
+  jsr int_set_cmd_line_context
+  jsr li_shift_clear
   rts
 
-; draws the char mode specific part of the ui
-int_draw_ui_single_line_input:
-  jsr int_draw_ui_base
-  lda #<(SCREEN_WIDTH*22)
-  sta status_bar_offset
-  lda #>(SCREEN_WIDTH*22)
-  sta status_bar_offset+1
-  jsr int_draw_status_bar
+; points the line input context at the command line. config leaves it
+; on one of its own fields, so this runs on the way back.
+int_set_cmd_line_context:
+  lda CMDDATA0
+  pha
+  lda CMDDATA1
+  pha
+  lda #<cmd_line
+  sta CMDDATA0
+  lda #>cmd_line
+  sta CMDDATA1
+  jsr li_set_context
+  pla
+  sta CMDDATA1
+  pla
+  sta CMDDATA0
+  rts
 
-  CURSOR_POS .set (SCREEN_WIDTH*23)
+int_draw_ui:
   lda SCR_PTR_LO
-  clc
-  adc #<CURSOR_POS
   sta ZPB0
   lda SCR_PTR_HI
-  adc #>CURSOR_POS
+  sta ZPB1
+
+  ldy #(SCREEN_WIDTH-1)
+  lda #' '
+  eor #$80
+  jsr ut_atascii_to_icode
+@top_banner_clear_loop:
+  sta (ZPB0),y
+  dey
+  bpl @top_banner_clear_loop
+
+  ldy #0
+@top_banner_loop:
+  lda top_banner,y
+  beq @top_banner_done
+  eor #$80
+  jsr ut_atascii_to_icode
+  sta (ZPB0),y
+  iny
+  jmp @top_banner_loop
+@top_banner_done:
+  jsr int_draw_status_bar
+
+  lda SCR_PTR_LO
+  clc
+  adc #<PROMPT_OFFSET
+  sta ZPB0
+  lda SCR_PTR_HI
+  adc #>PROMPT_OFFSET
   sta ZPB1
   ldy #0
   lda #'>'
   jsr ut_atascii_to_icode
   sta (ZPB0),y
-
   rts
 
 ; draws a null terminated string into the bar in reverse text
 ;
 ; inputs:
-;   CMDDATA0/1        - ptr to the string
-;   CMDDATA2          - column in the bar
-;   status_bar_offset - screen offset of the bar row
+;   CMDDATA0/1 - ptr to the string
+;   CMDDATA2   - column in the bar
 ; modifies:
 ;   a,y
 ;   CMDDATA2/3/4
 int_bar_draw_str:
   lda CMDDATA2
   clc
-  adc status_bar_offset
+  adc #<BAR_ROW_OFFSET
   sta CMDDATA2
-  lda status_bar_offset+1
+  lda #>BAR_ROW_OFFSET
   adc #0
   sta CMDDATA3
   lda #ICODE_SPACE_INVERTED
@@ -97,19 +148,16 @@ int_bar_draw_str:
   jsr scr_draw_str
   rts
 
-; draws the parts of the bar that never change. the tx label only
-; shows for aprs, the status label always does.
+; redraws the full status bar.
 ;
-; inputs:
-;   status_bar_offset - screen offset of the bar row
 ; modifies:
 ;   a,x,y
 int_draw_status_bar:
-  lda status_bar_offset
+  lda #<BAR_ROW_OFFSET
   clc
   adc SCR_PTR_LO
   sta ZPB0
-  lda status_bar_offset+1
+  lda #>BAR_ROW_OFFSET
   adc SCR_PTR_HI
   sta ZPB1
 
@@ -147,19 +195,16 @@ int_draw_status_bar:
   lda #BAR_STATUS_LABEL_COL
   sta CMDDATA2
   jsr int_bar_draw_str
-
   jsr int_draw_status
   rts
 
-; draws the port status into the bar, either a known string
-; or an error code number.
+; draws the port status into the status bar
 ;
 ; modifies:
 ;   a,x,y
 int_draw_status:
   lda port_status
   sta last_status
-
   cmp #PORT_STATUS_OK
   beq @ok
   cmp #PORT_STATUS_OPENING
@@ -202,7 +247,7 @@ int_draw_status:
   jsr int_bar_draw_str
   rts
 
-; renders port_status into status_code_text.
+; renders port_status into status_code_text
 ;
 ; modifies:
 ;   a,x,y
@@ -230,8 +275,7 @@ int_status_code_to_text:
   sta status_code_text+2
   rts
 
-; redraws the bar only when the port status changed, so this can run
-; every tick
+; redraws the status bar if the status has changed.
 ;
 ; modifies:
 ;   a,x,y
@@ -243,45 +287,17 @@ int_update_status:
 @done:
   rts
 
-int_draw_ui_base:
-  lda SCR_PTR_LO
-  sta ZPB0
-  lda SCR_PTR_HI
-  sta ZPB1
-
-  ldy #(SCREEN_WIDTH-1)
-  lda #' '
-  eor #$80
-  jsr ut_atascii_to_icode
-@top_banner_clear_loop:
-  sta (ZPB0),y
-  dey
-  bpl @top_banner_clear_loop
-
-  ldy #0
-@top_banner_loop:
-  lda top_banner,y
-  beq @top_banner_done
-  eor #$80
-  jsr ut_atascii_to_icode
-  sta (ZPB0),y
-  iny
-  jmp @top_banner_loop
-@top_banner_done:
-@done:
-  rts
 
 int_repaint_char_mode:
   jsr to_repaint
-  jsr int_draw_ui_single_line_input
+  jsr int_draw_ui
 
-  CURSOR_POS .set (SCREEN_WIDTH*23)+1
   lda SCR_PTR_LO
   clc
-  adc #<CURSOR_POS
+  adc #<INPUT_OFFSET
   sta ZPB0
   lda SCR_PTR_HI
-  adc #>CURSOR_POS
+  adc #>INPUT_OFFSET
   sta ZPB1
   ldy #0
   lda (ZPB0),y
@@ -291,39 +307,22 @@ int_repaint_char_mode:
   rts
 
 int_reset_char_mode:
-  lda #TO_HEIGHT_SINGLE_LINE_INPUT
-  jsr to_resize
-  jsr int_draw_ui_single_line_input
+  jsr to_clear_and_home
+  jsr int_draw_ui
   rts
 
 int_repaint_line_mode:
   jsr to_repaint
-  jsr tli_hide_cursor
-  jsr tli_repaint
-  jsr tli_show_cursor
-  jsr int_draw_ui_single_line_input
+  jsr li_hide_cursor
+  jsr li_repaint
+  jsr li_show_cursor
+  jsr int_draw_ui
   rts
 
 int_reset_line_mode:
-  lda #TO_HEIGHT_SINGLE_LINE_INPUT
-  jsr to_resize
-  jsr tli_reset
-  jsr int_draw_ui_single_line_input
-  rts
-
-int_repaint_multi_mode:
-  jsr to_repaint
-  jsr tmi_hide_cursor
-  jsr tmi_repaint
-  jsr tmi_show_cursor
-  jsr int_draw_ui_multi_line_input
-  rts
-
-int_reset_multi_mode:
-  lda #TO_HEIGHT_MULTI_LINE_INPUT
-  jsr to_resize
-  jsr tmi_reset
-  jsr int_draw_ui_multi_line_input
+  jsr to_clear_and_home
+  jsr li_shift_clear
+  jsr int_draw_ui
   rts
 
 int_reset_protocol:
@@ -422,40 +421,30 @@ int_repaint:
   lda cfg_saved_config+Cfg::serial+CfgSerial::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
-  cmp #TERM_MODE::MULTI
-  beq @multi_mode
   jsr int_repaint_line_mode
   jmp @done
 @char_mode:
   jsr int_repaint_char_mode
-  jmp @done
-@multi_mode:
-  jsr int_repaint_multi_mode
 @done:
   rts
-
 
 int_reset:
   jsr int_reset_protocol
   lda cfg_saved_config+Cfg::serial+CfgSerial::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
-  cmp #TERM_MODE::MULTI
-  beq @multi_mode
   jsr int_reset_line_mode
   jmp @done
 @char_mode:
   jsr int_reset_char_mode
-  jmp @done
-@multi_mode:
-  jsr int_reset_multi_mode
 @done:
   rts
 
 trm_activate:
+  jsr int_set_cmd_line_context
   lda #CONFIG_FLAG_CANCELED
   bit cfg_config_flag
-  bvc @just_repaint ; canceled
+  bvc @just_repaint
   lda #PORT_STATUS_OPENING
   sta port_status
   jsr int_reset
@@ -484,15 +473,10 @@ trm_tick:
   lda cfg_saved_config+Cfg::serial+CfgSerial::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
-  cmp #TERM_MODE::MULTI
-  beq @multi_mode
   jsr int_handle_kbd_line_mode
   jmp @rs232
 @char_mode:
   jsr int_handle_kbd_char_mode
-  jmp @rs232
-@multi_mode:
-  jsr int_handle_kbd_multi_mode
 @rs232:
   lda port_status
   cmp #PORT_STATUS_OK
@@ -502,53 +486,28 @@ trm_tick:
   jsr int_update_status
   rts
 
-int_cmd_line_mode_move_cursor_left:
-  jsr tli_move_cursor_left
-  rts
-
-int_cmd_line_mode_move_cursor_right:
-  jsr tli_move_cursor_right
-  rts
-
 int_cmd_line_mode_handle_char:
   lda g_kbdcode_atascii
   beq @done
   sta CMDDATA0
-  jsr tli_type_char
+  jsr li_type_char
 @done:
   rts
-
-int_cmd_line_mode_backspace:
-  jsr tli_backspace
-  rts
-
-int_cmd_line_mode_shift_clear:
-  jsr tli_shift_clear
-  rts
-
-int_cmd_line_mode_char_insert:
-  jsr tli_char_insert
-  rts
-
-int_cmd_line_mode_char_delete:
-  jsr tli_char_delete
-  rts
-
 
 int_send_message:
   lda port_status
   cmp #PORT_STATUS_OK
   bne ism_port_closed
 
-  lda #<tli_data
+  lda #<cmd_line_data
   sta CMDDATA0
-  lda #>tli_data
+  lda #>cmd_line_data
   sta CMDDATA1
   lda #<tx_addressee
   sta CMDDATA2
   lda #>tx_addressee
   sta CMDDATA3
-  lda tli_metadata+LineInput::data_len
+  lda cmd_line+LineInput::data_size
   sta CMDDATA4
   lda tx_send_flags
   ora #KISS_SEND_FLAG_TRIM_END
@@ -576,7 +535,7 @@ ism_done:
   rts
 
 int_cmd_line_mode_return:
-  lda tli_data
+  lda cmd_line_data
   cmp #'/'
   bne @not_slash
   jsr int_run_command
@@ -584,7 +543,7 @@ int_cmd_line_mode_return:
 @not_slash:
   jsr int_send_message
 @done:
-  jsr tli_shift_clear
+  jsr li_shift_clear
   rts
 
 int_run_command:
@@ -608,22 +567,22 @@ int_run_command:
 ; inputs:
 ;   CMDDATA0/1 - ptr to the null terminated name, in uppercase
 ; outputs:
-;   carry - clear on a match, set otherwise
-;   y     - index into tli_data just past the name
+;   carry      - clear on a match, set otherwise
+;   y          - index into cmd_line_data just past the name
 int_cmd_name_matches:
   ldy #0
 @name_loop:
   lda (CMDDATA0),y
   beq @name_end
   sta cmd_char
-  lda tli_data,y
+  lda cmd_line_data,y
   jsr ut_to_upper
   cmp cmd_char
   bne @no_match
   iny
   bne @name_loop
 @name_end:
-  lda tli_data,y
+  lda cmd_line_data,y
   cmp #' '
   bne @no_match
   clc
@@ -632,16 +591,16 @@ int_cmd_name_matches:
   sec
   rts
 
-; points the tx addressee at the callsign given as the argument.
-; no argument goes back to the broadcast addressee.
+; points the tx addressee at the callsign given.
+; empty argument goes back to the broadcast addressee.
 ;
 ; inputs:
-;   y - index into tli_data just past the command name
+;   y - index into cmd_line_data just past the command name
 int_cmd_tx:
 @skip_loop:
-  cpy tli_metadata+LineInput::data_len
+  cpy cmd_line+LineInput::data_size
   beq @no_arg
-  lda tli_data,y
+  lda cmd_line_data,y
   cmp #' '
   bne @have_arg
   iny
@@ -653,12 +612,12 @@ int_cmd_tx:
   sty cmd_arg_idx
   tya
   clc
-  adc #<tli_data
+  adc #<cmd_line_data
   sta CMDDATA0
-  lda #>tli_data
+  lda #>cmd_line_data
   adc #0
   sta CMDDATA1
-  lda tli_metadata+LineInput::data_len
+  lda cmd_line+LineInput::data_size
   sec
   sbc cmd_arg_idx
   sta CMDDATA2
@@ -726,102 +685,13 @@ int_build_tx_addressee:
   sta tx_addressee,y
   rts
 
-int_cmd_multi_mode_move_cursor_up:
-  jsr tmi_edit_move_cursor_up
-  rts
-
-int_cmd_multi_mode_move_cursor_down:
-  jsr tmi_edit_move_cursor_down
-  rts
-
-int_cmd_multi_mode_move_cursor_left:
-  lda #CURSOR_BEHAVIOR_WRAP_SAME_LINE
-  sta CMDDATA0
-  jsr tmi_edit_move_cursor_left
-  rts
-
-int_cmd_multi_mode_move_cursor_right:
-  lda #CURSOR_BEHAVIOR_WRAP_SAME_LINE
-  sta CMDDATA0
-  jsr tmi_edit_move_cursor_right
-  rts
-
-int_cmd_multi_mode_handle_char:
-  lda g_kbdcode_atascii
-  beq @done
-  sta CMDDATA0
-  jsr tmi_edit_type_char
-@done:
-  rts
-
-int_cmd_multi_mode_backspace:
-  jsr tmi_edit_backspace
-  rts
-
-int_cmd_multi_mode_shift_clear:
-  jsr tmi_shift_clear
-  rts
-
-int_cmd_multi_mode_line_insert:
-  jsr tmi_edit_line_insert
-  rts
-
-int_cmd_multi_mode_char_insert:
-  jsr tmi_edit_char_insert
-  rts
-
-int_cmd_multi_mode_line_delete:
-  jsr tmi_edit_line_delete
-  rts
-
-int_cmd_multi_mode_char_delete:
-  jsr tmi_edit_char_delete
-  rts
-
-int_cmd_multi_mode_return:
-  lda port_status
-  cmp #PORT_STATUS_OK
-  bne @port_closed
-
-  lda #<tmi_data
-  sta CMDDATA0
-  lda #>tmi_data
-  sta CMDDATA1
-  lda tmi_metadata+TextArea::size
-  sta CMDDATA2
-  jsr ut_str_trim_end_find
-
-  lda ut_result
-  beq @done; was an empty string
-  sta CMDDATA2
-  jsr rs232_putchrs
-  bcc @done
-  sty command_error
-  sty port_status
-  print_str_with_code str_error_rs232_putchr, g_copy_buffer40, command_error
-  jmp @done
-@port_closed:
-  print_str str_port_not_open
-;  lda #<tmi_data
-;  sta CMDDATA0
-;  lda #>tmi_data
-;  sta CMDDATA1
-;  lda tmi_metadata+TextArea::height
-;  sta CMDDATA2
-;  lda #0
-;  sta CMDDATA3
-;  jsr to_append_lines
-@done:
-  jsr tmi_shift_clear
-  rts
-
 int_handle_kbd_char_mode:
   lda g_kbd_key_pressed
   beq @done
   lda g_kbdcode_atascii
   beq @done
   jsr int_cmd_put_rs232
-
+;  todo: implement echo
 ;  lda g_kbdcode_atascii
 ;  sta CMDDATA0
 ;  jsr to_append_char
@@ -854,95 +724,28 @@ int_handle_kbd_line_mode:
   jsr int_cmd_line_mode_handle_char
   jmp @done
 @left_arrow:
-  jmp int_cmd_line_mode_move_cursor_left
+  jsr li_move_cursor_left
   jmp @done
 @right_arrow:
-  jmp int_cmd_line_mode_move_cursor_right
+  jsr li_move_cursor_right
   jmp @done
 @backspace:
-  jsr int_cmd_line_mode_backspace
+  jsr li_backspace
   jmp @done
 @shift_clear:
-  jsr int_cmd_line_mode_shift_clear
+  jsr li_shift_clear
   jmp @done
 @char_insert:
-  jsr int_cmd_line_mode_char_insert
+  jsr li_char_insert
   jmp @done
 @char_delete:
-  jsr int_cmd_line_mode_char_delete
+  jsr li_char_delete
   jmp @done
 @return:
   jsr int_cmd_line_mode_return
 @done:
   rts
   
-int_handle_kbd_multi_mode:
-  lda g_kbd_key_pressed
-  beq @done
-  lda g_kbdcode_raw 
-  cmp #$8e
-  beq @up_arrow
-  cmp #$8f
-  beq @down_arrow
-  cmp #$86
-  beq @left_arrow
-  cmp #$87
-  beq @right_arrow
-  cmp #$0c
-  beq @return
-  cmp #$34
-  beq @backspace
-  cmp #$76 ; shift+clear ($b4 on atari 800 emulator)
-  beq @shift_clear
-  cmp #$b6 ; ctrl+clear
-  beq @shift_clear
-  cmp #$77 ; shift+insert on atari ($7c on atari800 emulator)
-  beq @line_insert
-  cmp #$b7 ; ctrl+insert
-  beq @char_insert
-  cmp #$74 ; shift+delete bs
-  beq @line_delete
-  cmp #$b4 ; ctrl+delete bs
-  beq @char_delete
-@output:
-  jsr int_cmd_multi_mode_handle_char
-  jmp @done
-@up_arrow:
-  jmp int_cmd_multi_mode_move_cursor_up
-  jmp @done
-@down_arrow:
-  jmp int_cmd_multi_mode_move_cursor_down
-  jmp @done
-@left_arrow:
-  jmp int_cmd_multi_mode_move_cursor_left
-  jmp @done
-@right_arrow:
-  jmp int_cmd_multi_mode_move_cursor_right
-  jmp @done
-@backspace:
-  jsr int_cmd_multi_mode_backspace
-  jmp @done
-@shift_clear:
-  jsr int_cmd_multi_mode_shift_clear
-  jmp @done
-@line_insert:
-  jsr int_cmd_multi_mode_line_insert
-  jmp @done
-@char_insert:
-  jsr int_cmd_multi_mode_char_insert
-  jmp @done
-@line_delete:
-  jsr int_cmd_multi_mode_line_delete
-  jmp @done
-@char_delete:
-  jsr int_cmd_multi_mode_char_delete
-  jmp @done
-@return:
-  jsr int_cmd_multi_mode_return
-@done:
-  rts
-
-
 int_cmd_boot850:
   jsr boot850_check
   bcc @done
@@ -994,7 +797,6 @@ int_handle_byte_read:
 
 int_handle_kiss_frame:
   jsr pk_process_frame
-
   lda g_disp_buf_num_lines
   beq @done
 
@@ -1007,44 +809,6 @@ int_handle_kiss_frame:
   lda #1
   sta CMDDATA3
   jsr to_append_lines
-
-;  ; for now, I'm testing a 4 line message.
-;  ; it's just a hack for now, get over it.
-;  
-;  ; clear out the first 4 lines of the display buf
-;
-;  ldy #0
-;  lda #' '
-;@clear_loop:
-;  sta g_disp_buf, y
-;  iny
-;  cpy #(38*4)
-;  bne @clear_loop
-;
-;  ldy #0
-;  lda #KissFrameHeader::source
-;  jsr int_addr_to_disp_buf
-;  
-;  iny
-;  lda #'>'
-;  sta g_disp_buf,y
-;
-;  iny
-;  lda #KissFrameHeader::dest
-;  jsr int_addr_to_disp_buf
-;
-;  iny
-;  lda #':'
-;  sta g_disp_buf,y
-;
-;  lda #<g_disp_buf
-;  sta CMDDATA0
-;  lda #>g_disp_buf
-;  sta CMDDATA1
-;  lda #4
-;  sta CMDDATA2
-;  jsr to_append_lines
-;
 @done:
   rts
 
@@ -1062,9 +826,7 @@ int_cmd_get_rs232:
   jmp @error_getchr
 @read_success:
   sta rs232_byte_read
-
   jsr int_handle_byte_read
-
   jmp @done
 @error_status:
   sty command_error
@@ -1077,7 +839,6 @@ int_cmd_get_rs232:
   print_str_with_code str_error_rs232_getchr, g_copy_buffer40, command_error
 @done:
   rts
-
 
 ; writes a single char from kbd to rs232
 int_cmd_put_rs232:
@@ -1096,41 +857,43 @@ int_cmd_put_rs232:
 @done:
   rts
 
-top_banner:                  .byte ' ','S'|$80,'E'|$80,'L'|$80,"config "
-                             .byte $00
-current_mode:                .res 1
+top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"config "
+                        .byte $00
+current_mode:           .res 1
 
-str_error_rs232_status:      .byte "Error on RS232 status",$00
-str_error_rs232_getchr:      .byte "Error on RS232 getchr",$00
-str_error_rs232_putchr:      .byte "Error on RS232 putchr",$00
+str_error_rs232_status: .byte "Error on RS232 status",$00
+str_error_rs232_getchr: .byte "Error on RS232 getchr",$00
+str_error_rs232_putchr: .byte "Error on RS232 putchr",$00
 
-str_cmd_tx:                  .byte "/TX",$00
-str_tx_label:                .byte "tx: ",$00
-str_invalid_callsign:        .byte "invalid callsign",$00
-str_unknown_command:         .byte "unknown command",$00
-str_port_not_open:           .byte "port not open",$00
+str_cmd_tx:             .byte "/TX",$00
+str_tx_label:           .byte "tx: ",$00
+str_invalid_callsign:   .byte "invalid callsign",$00
+str_unknown_command:    .byte "unknown command",$00
+str_port_not_open:      .byte "port not open",$00
 
-str_status_label:            .byte "status: ",$00
-str_status_ok:               .byte "ok",$00
-str_status_opening:          .byte "opening",$00
-str_status_no_850:           .byte "no 850",$00
-str_status_no_handler:       .byte "no r:",$00
-str_status_timeout:          .byte "timeout",$00
+str_status_label:       .byte "status: ",$00
+str_status_ok:          .byte "ok",$00
+str_status_opening:     .byte "opening",$00
+str_status_no_850:      .byte "no 850",$00
+str_status_no_handler:  .byte "no r:",$00
+str_status_timeout:     .byte "timeout",$00
 
-status_code_text:            .res 3
-                             .byte $00
-status_bar_offset:           .res 2
-last_status:                 .res 1
+status_code_text:       .res 3
+                        .byte $00
+last_status:            .res 1
 
-tx_addressee:                .res KISS_ADDRESSEE_LEN+1
-tx_send_flags:               .res 1
-cmd_char:                    .res 1
-cmd_arg_idx:                 .res 1
-cmd_ssid:                    .res 1
-digi_idx:                    .res 1
-digi_offset:                 .res 1
+tx_addressee:           .res KISS_ADDRESSEE_LEN+1
+tx_send_flags:          .res 1
+cmd_char:               .res 1
+cmd_arg_idx:            .res 1
+cmd_ssid:               .res 1
+digi_idx:               .res 1
+digi_offset:            .res 1
 
-command_error:               .byte 0
+cmd_line:               .tag LineInput
+cmd_line_data:          .res INPUT_MAX_LEN
 
-rs232_byte_read:             .byte 0
-port_status:                 .byte 0
+command_error:          .byte 0
+
+rs232_byte_read:        .byte 0
+port_status:            .byte 0

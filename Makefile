@@ -39,10 +39,7 @@ ATARI_SRCS      = main.s \
 		  protocol_kiss.s \
 		  screen.s \
 		  term.s \
-		  term_line_input.s \
-		  term_multi_input.s \
 		  term_output.s \
-		  text_area.s \
 		  rs232.s \
 		  utils.s \
 		  wozmon.s

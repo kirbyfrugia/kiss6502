@@ -36,13 +36,3 @@ g_kbd_key_pressed:       .res 1 ; nonzero if pressed
 g_kbdcode_raw:           .res 1 ; raw keyboard code currently pressed
 g_kbdcode_raw_stripped:  .res 1 ; raw minus ctrl bits
 g_kbdcode_atascii:       .res 1 ; keyboard code in atascii
-
-g_disp_buf_line_ptrs_lo:
-  .repeat G_DISP_BUF_MAX_LINES, i
-    .byte <(g_disp_buf + i * TERMINAL_WIDTH)
-  .endrepeat
-
-g_disp_buf_line_ptrs_hi:
-  .repeat G_DISP_BUF_MAX_LINES, i
-    .byte >(g_disp_buf + i * TERMINAL_WIDTH)
-  .endrepeat

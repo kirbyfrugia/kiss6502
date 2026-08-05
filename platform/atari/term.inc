@@ -9,7 +9,6 @@ TERM_INC = 1
   NONE  = %00000000
   CHAR  = %10000000
   LINE  = %01000000
-  MULTI = %00100000
 .endenum
 
 .enum TERM_PROTOCOL

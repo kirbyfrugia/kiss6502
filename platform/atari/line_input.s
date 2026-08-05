@@ -57,7 +57,7 @@ li_repaint:
   ldy #0
 @loop:
   sty tempy
-  cpx li_metadata+LineInput::data_len
+  cpx li_metadata+LineInput::data_size
   bcs @fill_char ; past end of data 
   txa
   tay
@@ -127,8 +127,8 @@ li_char_delete:
   sbc #0
   sta MM_TO+1
 
-  ; MM_SIZE = data_len - data_cursor - 1
-  lda li_metadata+LineInput::data_len
+  ; MM_SIZE = data_size - data_cursor - 1
+  lda li_metadata+LineInput::data_size
   sec
   sbc li_metadata+LineInput::data_cursor
   sta MM_SIZEL
@@ -139,7 +139,7 @@ li_char_delete:
   jsr li_hide_cursor
   jsr MM_MOVEDOWN
   ; fill last char with a blank
-  ldy li_metadata+LineInput::data_len
+  ldy li_metadata+LineInput::data_size
   dey
   lda #' '
   sta (data_ptr_lo),y
@@ -154,7 +154,7 @@ li_char_insert:
   ; check if at far right. In that case just blank last char
   ldy li_metadata+LineInput::data_cursor
   iny
-  cpy li_metadata+LineInput::data_len
+  cpy li_metadata+LineInput::data_size
   beq @blank; already at end
 
   ; MM_FROM = data_ptr + cursor
@@ -175,8 +175,8 @@ li_char_insert:
   adc #0
   sta MM_TO+1
 
-  ; MM_SIZE = data_len - data_cursor +1
-  lda li_metadata+LineInput::data_len
+  ; MM_SIZE = data_size - data_cursor +1
+  lda li_metadata+LineInput::data_size
   sec
   sbc li_metadata+LineInput::data_cursor
   clc
@@ -244,7 +244,7 @@ int_update_char:
 ; modifies:
 ;   a,y
 int_clear:
-  ldy li_metadata+LineInput::data_len
+  ldy li_metadata+LineInput::data_size
   dey
   lda #' '
 @loop:
@@ -276,7 +276,7 @@ int_move_cursor_left:
 int_move_cursor_right:
   ldy li_metadata+LineInput::data_cursor
   iny
-  cpy li_metadata+LineInput::data_len
+  cpy li_metadata+LineInput::data_size
   bcc @move_allowed
   bcs @done
 @move_allowed:
@@ -294,7 +294,7 @@ int_move_cursor_right:
   lda li_metadata+LineInput::first_visible
   clc
   adc li_metadata+LineInput::num_visible
-  cmp li_metadata+LineInput::data_len
+  cmp li_metadata+LineInput::data_size
   bcs @done; can't scroll
   inc li_metadata+LineInput::first_visible
   inc li_metadata+LineInput::data_cursor

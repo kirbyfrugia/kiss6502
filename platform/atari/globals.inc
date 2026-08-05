@@ -30,13 +30,10 @@ COMMON_INC = 1
 
 .global   g_rx_buf
 .global   g_disp_buf
-.global   g_disp_buf_line_ptrs_lo
-.global   g_disp_buf_line_ptrs_hi
 .global   g_disp_buf_num_lines
 .globalzp g_rx_buf_num_chars
 
 G_DISP_BUF_MAX_LINES = 12
 TERMINAL_WIDTH       = 38
-
 
 .endif

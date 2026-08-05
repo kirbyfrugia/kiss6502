@@ -126,7 +126,7 @@ cfg_init:
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
   OFFSET        .set (MENU_MARGIN_TOP+8)*SCREEN_WIDTH + 22
-  NUM_ITEMS     .set 3
+  NUM_ITEMS     .set 2
   BORDER_WIDTH  .set 10
   make_menu mode_menu, mode_menu_header, \
             mode_menu_item_values, mode_menu_item_labels, \
@@ -614,7 +614,7 @@ int_filetab_init:
   lda #CFG_NAME_LEN
   sta cfg_li+LineInput::num_visible
   lda #CFG_NAME_LEN
-  sta cfg_li+LineInput::data_len
+  sta cfg_li+LineInput::data_size
   rts
 
 int_filetab_file_input_set_context:
@@ -797,7 +797,7 @@ int_aprstab_init:
   sta cfg_callsign_li+LineInput::data_ptr+1
   lda #APRS_CALLSIGN_LEN
   sta cfg_callsign_li+LineInput::num_visible
-  sta cfg_callsign_li+LineInput::data_len
+  sta cfg_callsign_li+LineInput::data_size
 
   lda #0
   sta cfg_ssid_li+LineInput::scr_cursor
@@ -816,7 +816,7 @@ int_aprstab_init:
   sta cfg_ssid_li+LineInput::data_ptr+1
   lda #APRS_SSID_LEN
   sta cfg_ssid_li+LineInput::num_visible
-  sta cfg_ssid_li+LineInput::data_len
+  sta cfg_ssid_li+LineInput::data_size
 
   lda #0
   sta cfg_digi_li+LineInput::scr_cursor
@@ -836,7 +836,7 @@ int_aprstab_init:
   lda #24 ; fill to right of screen
   sta cfg_digi_li+LineInput::num_visible
   lda #APRS_DIGI_LEN
-  sta cfg_digi_li+LineInput::data_len
+  sta cfg_digi_li+LineInput::data_size
 
   rts
 
@@ -2149,12 +2149,10 @@ mode_menu_header:              .byte 'M'|$80,"ode",$00
 mode_menu_item_values:
   .byte TERM_MODE::LINE
   .byte TERM_MODE::CHAR
-  .byte TERM_MODE::MULTI
 mode_menu_item_values_end:
 mode_menu_item_labels:
 mode_menu_item_label_line:     .byte "Line",$00
 mode_menu_item_label_char:     .byte "Char",$00
-mode_menu_item_label_multi:    .byte "Multi",$00
 
 protocol_menu:                 .tag Menu
 protocol_menu_header:          .byte '0'|$80,"Protocol",$00

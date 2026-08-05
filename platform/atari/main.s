@@ -9,7 +9,6 @@
 .include "term.inc"
 .include "line_input.inc"
 .include "protocol_kiss.inc"
-.include "text_area.inc"
 .include "utils.inc"
 
 .ifdef DEBUG
@@ -194,7 +193,6 @@ init:
 
   jsr set_vbi_handler
   jsr li_init_context
-  jsr ta_init_context
   jsr cfg_init
   jsr trm_init
 

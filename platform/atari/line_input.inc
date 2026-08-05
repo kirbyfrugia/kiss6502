@@ -5,7 +5,7 @@ LINE_INPUT_INC = 1
   scr_ptr         .res 2 ; ptr to the mem location of leftmost char
   data_ptr        .res 2 ; ptr to the start of the data
   num_visible     .res 1 ; max number of chars visible on screen
-  data_len        .res 1 ; length of the data
+  data_size       .res 1 ; size of the data buffer
   scr_cursor      .res 1 ; idx to cursor in screen
   data_cursor     .res 1 ; idx to cursor in data array
   first_visible   .res 1 ; first char idx visible on screen
