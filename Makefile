@@ -32,6 +32,7 @@ ATARI_SRCS      = main.s \
 		  config.s \
 		  crc.s \
 		  file.s \
+		  form.s \
 		  globals.s \
 		  kbd.s \
 		  line_input.s \

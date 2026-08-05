@@ -418,7 +418,7 @@ int_set_digi_addrs:
   rts
 
 int_repaint:
-  lda cfg_saved_config+Cfg::serial+CfgSerial::mode
+  lda cfg_saved_config+Cfg::term+CfgTerm::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
   jsr int_repaint_line_mode
@@ -430,7 +430,7 @@ int_repaint:
 
 int_reset:
   jsr int_reset_protocol
-  lda cfg_saved_config+Cfg::serial+CfgSerial::mode
+  lda cfg_saved_config+Cfg::term+CfgTerm::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
   jsr int_reset_line_mode
@@ -470,7 +470,7 @@ trm_activate:
   rts
 
 trm_tick:
-  lda cfg_saved_config+Cfg::serial+CfgSerial::mode
+  lda cfg_saved_config+Cfg::term+CfgTerm::mode
   cmp #TERM_MODE::CHAR
   beq @char_mode
   jsr int_handle_kbd_line_mode

@@ -9,6 +9,18 @@ CONFIG_INC = 1
 .global cfg_select_fired
 .global cfg_start_fired
 
+.global cfg_field_kind
+.global cfg_field_scr_lo
+.global cfg_field_scr_hi
+.global cfg_field_width
+.global cfg_field_data_lo
+.global cfg_field_data_hi
+.global cfg_field_values_lo
+.global cfg_field_values_hi
+.global cfg_field_labels_lo
+.global cfg_field_labels_hi
+.global cfg_field_extra
+
 CONFIG_FLAG_EDITING  = %00000000
 CONFIG_FLAG_CANCELED = %10000000
 CONFIG_FLAG_START    = %11000000
@@ -26,7 +38,6 @@ CONFIG_FLAG_START    = %11000000
 .endstruct
 
 .struct CfgSerial
-  mode        .byte
   baud        .byte
   data_bits   .byte
   stop_bits   .byte
@@ -45,6 +56,11 @@ CONFIG_FLAG_START    = %11000000
   protocol    .byte
 .endstruct
 
+.struct CfgTerm
+  mode        .byte
+  line_ending .byte
+.endstruct
+
 .struct CfgAprsAddr
   callsign    .res 6
   ssid        .res 1
@@ -59,6 +75,7 @@ CONFIG_FLAG_START    = %11000000
 .struct Cfg
   version     .res 1
   session     .tag CfgSession
+  term        .tag CfgTerm
   serial      .tag CfgSerial
   aprs        .tag CfgAprs
 .endstruct
@@ -121,12 +138,14 @@ CONFIG_FLAG_START    = %11000000
   jsr int_highlight_selected_menu_item
 .endmacro
 
-.macro make_config  config, _protocol, _mode, _baud, _data_bits, \
+.macro make_config  config, _protocol, _mode, _line_ending, _baud, _data_bits, \
                    _stop_bits, _parity, _cts, _dsr, _dtr, _rets
   lda #_protocol
   sta config+Cfg::session+CfgSession::protocol
   lda #_mode
-  sta config+Cfg::serial+CfgSerial::mode
+  sta config+Cfg::term+CfgTerm::mode
+  lda #_line_ending
+  sta config+Cfg::term+CfgTerm::line_ending
   lda #_baud
   sta config+Cfg::serial+CfgSerial::baud
   lda #_data_bits

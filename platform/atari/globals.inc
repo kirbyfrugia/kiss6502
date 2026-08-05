@@ -1,5 +1,5 @@
-.ifndef COMMON_INC
-COMMON_INC = 1
+.ifndef GLOBALS_INC
+GLOBALS_INC = 1
 
 .globalzp ZPB0
 .globalzp ZPB1

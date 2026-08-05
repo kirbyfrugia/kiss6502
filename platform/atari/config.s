@@ -3,6 +3,7 @@
 .include "atari.inc" ; /usr/share/cc65/asminc/atari.inc
 .include "config.inc"
 .include "file.inc"
+.include "form.inc"
 .include "globals.inc"
 .include "line_input.inc"
 .include "protocol_kiss.inc"
@@ -29,6 +30,7 @@ int_load_default_config:
   make_config cfg_draft_config, \
                   TERM_PROTOCOL::APRS, \
                   TERM_MODE::LINE, \
+                  TERM_LINE_ENDING::CR, \
                   RS232_BAUD::B9600, \
                   RS232_WORDSIZE::N8, \
                   RS232_STOPBITS::N1, \
@@ -125,16 +127,19 @@ cfg_init:
             protocol_menu_item_values, protocol_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
 
-  OFFSET        .set (MENU_MARGIN_TOP+8)*SCREEN_WIDTH + 22
-  NUM_ITEMS     .set 2
-  BORDER_WIDTH  .set 10
-  make_menu mode_menu, mode_menu_header, \
-            mode_menu_item_values, mode_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
   jsr int_filetab_init
+  jsr int_termtab_init
   jsr int_aprstab_init
 
+  rts
+
+int_termtab_init:
+  lda #TERM_FIELD_FIRST
+  sta term_form+Form::first
+  lda #TERM_FIELD_COUNT
+  sta term_form+Form::count
+  lda #0
+  sta term_form+Form::focus
   rts
 
 int_draw_menu_items:
@@ -442,7 +447,15 @@ int_refresh_serial_tab:
   refresh_menu dsr_menu,      cfg_draft_config+Cfg::serial+CfgSerial::dsr
   refresh_menu dtr_menu,      cfg_draft_config+Cfg::serial+CfgSerial::dtr
   refresh_menu rts_menu,      cfg_draft_config+Cfg::serial+CfgSerial::rets
-  refresh_menu mode_menu,     cfg_draft_config+Cfg::serial+CfgSerial::mode
+  rts
+
+int_refresh_term_tab:
+  lda #<term_form
+  sta CMDDATA0
+  lda #>term_form
+  sta CMDDATA1
+  jsr fm_set_context
+  jsr fm_draw_all
   rts
 
 int_refresh_aprs_tab:
@@ -482,6 +495,8 @@ int_refresh_menus:
   cmp #2
   beq @serial
   cmp #3
+  beq @term
+  cmp #4
   beq @aprs
   ; file menu
   jsr int_refresh_file_tab
@@ -491,6 +506,9 @@ int_refresh_menus:
   jmp @done
 @serial:
   jsr int_refresh_serial_tab
+  jmp @done
+@term:
+  jsr int_refresh_term_tab
   jmp @done
 @aprs:
   jsr int_refresh_aprs_tab
@@ -531,22 +549,22 @@ int_start_clear_status:
   bpl @loop
   rts
 
-FILE_LABEL_OFFSET    = 5*SCREEN_WIDTH+2
-FILE_FIELD_OFFSET    = 5*SCREEN_WIDTH+13
-FILE_SUFFIX_OFFSET   = FILE_FIELD_OFFSET+CFG_NAME_LEN
-FILE_BTN_LOAD_OFFSET = 8*SCREEN_WIDTH+31
-FILE_BTN_SAVE_OFFSET = 9*SCREEN_WIDTH+31
-FILE_BTN_DEF_OFFSET  = 11*SCREEN_WIDTH+22
-FILE_STATUS_OFFSET   = 13*SCREEN_WIDTH+2
-FILE_STATUS_WIDTH    = 36
+FILE_LABEL_OFFSET      = 5*SCREEN_WIDTH+2
+FILE_FIELD_OFFSET      = 5*SCREEN_WIDTH+13
+FILE_SUFFIX_OFFSET     = FILE_FIELD_OFFSET+CFG_NAME_LEN
+FILE_BTN_LOAD_OFFSET   = 8*SCREEN_WIDTH+31
+FILE_BTN_SAVE_OFFSET   = 9*SCREEN_WIDTH+31
+FILE_BTN_DEF_OFFSET    = 11*SCREEN_WIDTH+22
+FILE_STATUS_OFFSET     = 13*SCREEN_WIDTH+2
+FILE_STATUS_WIDTH      = 36
 
-FILE_FOCUS_NAME      = 0
-FILE_FOCUS_BTN_START = 1
-FILE_FOCUS_LOAD      = 1
-FILE_FOCUS_SAVE      = 2
-FILE_FOCUS_DEFAULT   = 3
-FILE_FOCUS_BTN_END   = 3
-FILE_FOCUS_COUNT     = 4
+FILE_FOCUS_NAME        = 0
+FILE_FOCUS_BTN_START   = 1
+FILE_FOCUS_LOAD        = 1
+FILE_FOCUS_SAVE        = 2
+FILE_FOCUS_DEFAULT     = 3
+FILE_FOCUS_BTN_END     = 3
+FILE_FOCUS_COUNT       = 4
 
 APRS_CALL_LABEL_OFFSET = 5*SCREEN_WIDTH+2
 APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+15
@@ -555,12 +573,22 @@ APRS_SSID_FIELD_OFFSET = 7*SCREEN_WIDTH+15
 APRS_DIGI_LABEL_OFFSET = 9*SCREEN_WIDTH+2
 APRS_DIGI_FIELD_OFFSET = 9*SCREEN_WIDTH+15
 
-APRS_FOCUS_CALLSIGN  = 0
-APRS_FOCUS_FIRST     = 0
-APRS_FOCUS_SSID      = 1
-APRS_FOCUS_DIGI      = 2
-APRS_FOCUS_LAST      = 2
-APRS_FOCUS_COUNT     = 3
+APRS_FOCUS_CALLSIGN    = 0
+APRS_FOCUS_FIRST       = 0
+APRS_FOCUS_SSID        = 1
+APRS_FOCUS_DIGI        = 2
+APRS_FOCUS_LAST        = 2
+APRS_FOCUS_COUNT       = 3
+
+TERM_MODE_LABEL_OFFSET = 5*SCREEN_WIDTH+2
+TERM_MODE_FIELD_OFFSET = 5*SCREEN_WIDTH+15
+TERM_EOL_LABEL_OFFSET  = 7*SCREEN_WIDTH+2
+TERM_EOL_FIELD_OFFSET  = 7*SCREEN_WIDTH+15
+TERM_LF_LABEL_OFFSET   = 9*SCREEN_WIDTH+2
+TERM_LF_FIELD_OFFSET   = 9*SCREEN_WIDTH+15
+
+TERM_FIELD_FIRST       = 0
+TERM_FIELD_COUNT       = 3
 
 int_draw_menu_borders_file_tab:
   lda #<filename_label
@@ -1230,7 +1258,27 @@ int_draw_menu_borders_serial_tab:
   draw_menu_border dsr_menu
   draw_menu_border dtr_menu
   draw_menu_border rts_menu
-  draw_menu_border mode_menu
+  rts
+
+int_draw_menu_borders_term_tab:
+  ldx #0
+@labels_loop:
+  stx term_label_idx
+  lda term_label_ptrs_lo,x
+  sta CMDDATA0
+  lda term_label_ptrs_hi,x
+  sta CMDDATA1
+  lda term_label_offs_lo,x
+  sta CMDDATA2
+  lda term_label_offs_hi,x
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
+  ldx term_label_idx
+  inx
+  cpx #TERM_FIELD_COUNT
+  bne @labels_loop
   rts
 
 int_draw_menu_borders_aprs_tab:
@@ -1280,6 +1328,8 @@ int_draw_menu_borders:
   cmp #2
   beq @serial
   cmp #3
+  beq @term
+  cmp #4
   beq @aprs
   ; file menu
   jsr int_draw_menu_borders_file_tab
@@ -1290,9 +1340,12 @@ int_draw_menu_borders:
 @serial:
   jsr int_draw_menu_borders_serial_tab
   jmp @done
+@term:
+  jsr int_draw_menu_borders_term_tab
+  jmp @done
 @aprs:
   jsr int_draw_menu_borders_aprs_tab
-@done: 
+@done:
   rts
 
 cfg_activate:
@@ -1441,8 +1494,20 @@ int_select_next_menu_item:
   rts
 
 int_cmd_cancel:
+  ; make sure they've started at least once
+  ; or config will be invalid
+  lda started_once
+  beq @never_started
   lda #CONFIG_FLAG_CANCELED
   sta cfg_config_flag
+  jmp @done
+@never_started:
+  lda #<msg_start_first
+  sta CMDDATA0
+  lda #>msg_start_first
+  sta CMDDATA1
+  jsr int_start_show_status
+@done:
   rts
 
 int_cmd_baud:
@@ -1501,13 +1566,6 @@ int_cmd_rets:
   sta cfg_draft_config+Cfg::serial+CfgSerial::rets
   rts
 
-int_cmd_mode:
-  handle_menu_next mode_menu
-  ldy mode_menu+Menu::selected_index
-  lda mode_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::mode
-  rts
-
 int_cmd_protocol:
   handle_menu_next protocol_menu
   ldy protocol_menu+Menu::selected_index
@@ -1525,7 +1583,7 @@ int_cmd_start:
 
   ; only allow line mode in aprs
   lda #TERM_MODE::LINE
-  sta cfg_draft_config+Cfg::serial+CfgSerial::mode
+  sta cfg_draft_config+Cfg::term+CfgTerm::mode
 
   lda cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign
   cmp #' '
@@ -1542,6 +1600,8 @@ int_cmd_start:
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
   lda #CONFIG_FLAG_START
   sta cfg_config_flag
+  lda #1
+  sta started_once
   clc
   rts
 
@@ -1711,8 +1771,6 @@ int_serial_handle_kbd:
   beq @dtr
   cmp #$28
   beq @rets
-  cmp #$25
-  beq @mode
   cmp #$1c
   beq @escape
   bne @done
@@ -1740,8 +1798,16 @@ int_serial_handle_kbd:
 @rets:
   jsr int_cmd_rets
   jmp @done
-@mode:
-  jsr int_cmd_mode
+@escape:
+  jsr int_cmd_cancel
+@done:
+  rts
+
+int_term_handle_kbd:
+  lda g_kbdcode_raw
+  cmp #KEY_ESC
+  beq @escape
+  jsr fm_handle_key
   jmp @done
 @escape:
   jsr int_cmd_cancel
@@ -1827,6 +1893,8 @@ int_handle_kbd:
   cmp #2
   beq @serial
   cmp #3
+  beq @term
+  cmp #4
   beq @aprs
   jsr int_filetab_handle_kbd
   jmp @done
@@ -1835,6 +1903,9 @@ int_handle_kbd:
   jmp @done
 @serial:
   jsr int_serial_handle_kbd
+  jmp @done
+@term:
+  jsr int_term_handle_kbd
   jmp @done
 @aprs:
   jsr int_aprstab_handle_kbd
@@ -2144,16 +2215,6 @@ parity_menu_item_label0:       .byte "None",$00
 parity_menu_item_label1:       .byte "Even",$00
 parity_menu_item_label2:       .byte "Odd",$00
 
-mode_menu:                     .tag Menu
-mode_menu_header:              .byte 'M'|$80,"ode",$00
-mode_menu_item_values:
-  .byte TERM_MODE::LINE
-  .byte TERM_MODE::CHAR
-mode_menu_item_values_end:
-mode_menu_item_labels:
-mode_menu_item_label_line:     .byte "Line",$00
-mode_menu_item_label_char:     .byte "Char",$00
-
 protocol_menu:                 .tag Menu
 protocol_menu_header:          .byte '0'|$80,"Protocol",$00
 protocol_menu_item_values:
@@ -2164,16 +2225,80 @@ protocol_menu_item_labels:
 protocol_menu_item_label_aprs: .byte "APRS",$00
 protocol_menu_item_label_term: .byte "Terminal",$00
 
+; the form field table for all tabs
+cfg_field_kind:
+  .byte FIELD_SELECT, FIELD_SELECT, FIELD_SELECT
+cfg_field_scr_lo:
+  .byte <TERM_MODE_FIELD_OFFSET,<TERM_EOL_FIELD_OFFSET,<TERM_LF_FIELD_OFFSET
+cfg_field_scr_hi:
+  .byte >TERM_MODE_FIELD_OFFSET,>TERM_EOL_FIELD_OFFSET,>TERM_LF_FIELD_OFFSET
+cfg_field_width:
+  .byte 7, 7, 7
+cfg_field_data_lo:
+  .byte <(cfg_draft_config+Cfg::term+CfgTerm::mode),<(cfg_draft_config+Cfg::term+CfgTerm::line_ending),<(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
+cfg_field_data_hi:
+  .byte >(cfg_draft_config+Cfg::term+CfgTerm::mode),>(cfg_draft_config+Cfg::term+CfgTerm::line_ending),>(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
+cfg_field_values_lo:
+  .byte <term_mode_field_values, <term_eol_field_values, <term_lf_field_values
+cfg_field_values_hi:
+  .byte >term_mode_field_values, >term_eol_field_values, >term_lf_field_values
+cfg_field_labels_lo:
+  .byte <term_mode_field_labels_lo, <term_eol_field_labels_lo, <term_lf_field_labels_lo
+cfg_field_labels_hi:
+  .byte >term_mode_field_labels_lo, >term_eol_field_labels_lo, >term_lf_field_labels_lo
+cfg_field_extra:
+  .byte 2, 4, 2
+
+term_mode_field_values:
+  .byte TERM_MODE::LINE, TERM_MODE::CHAR
+term_mode_field_labels_lo:
+  .byte <item_line, <item_char
+term_mode_field_labels_hi:
+  .byte >item_line, >item_char
+
+term_eol_field_values:
+  .byte TERM_LINE_ENDING::CR, TERM_LINE_ENDING::LF, TERM_LINE_ENDING::CRLF, TERM_LINE_ENDING::ATASCII
+term_eol_field_labels_lo:
+  .byte <item_cr, <item_lf, <item_crlf, <item_atascii
+term_eol_field_labels_hi:
+  .byte >item_cr, >item_lf, >item_crlf, >item_atascii
+
+term_lf_field_values:
+  .byte RS232_LINE_FEED::NO_APPEND_LF, RS232_LINE_FEED::APPEND_LF
+term_lf_field_labels_lo:
+  .byte <item_no, <item_yes
+term_lf_field_labels_hi:
+  .byte >item_no, >item_yes
+
+item_line:              .byte "Line",$00
+item_char:              .byte "Char",$00
+item_cr:                .byte "CR",$00
+item_lf:                .byte "LF",$00
+item_crlf:              .byte "CR+LF",$00
+item_atascii:           .byte "ATASCII",$00
+item_no:                .byte "No",$00
+item_yes:               .byte "Yes",$00
+
+
+term_form:              .tag Form
+term_mode_label:        .byte "Mode:",$00
+term_eol_label:         .byte "Line ending:",$00
+term_lf_label:          .byte "Append LF:",$00
+term_label_idx:         .byte 0
+term_label_ptrs_lo:     .byte <term_mode_label, <term_eol_label, <term_lf_label
+term_label_ptrs_hi:     .byte >term_mode_label, >term_eol_label, >term_lf_label
+term_label_offs_lo:     .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_LF_LABEL_OFFSET
+term_label_offs_hi:     .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_LF_LABEL_OFFSET
+
 top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"tab-> "
                         .byte "          "
                         .byte 'E'|$80,'S'|$80,'C'|$80,"cancel "
                         .byte 'S'|$80,'T'|$80,'A'|$80,'R'|$80,'T'|$80,"start"
                         .byte $00
-tabs_banner:            .byte " File|Session|Serial|APRS"
-                        .byte $00
-tabs_highlight_starts:  .byte 1,6,14,21
-tabs_highlight_ends:    .byte 5,13,20,25
-num_tabs:               .byte 4
+tabs_banner:            .byte " File|Session|Serial|Term|APRS",$00
+tabs_highlight_starts:  .byte 1,6,14,21,26
+tabs_highlight_ends:    .byte 5,13,20,25,30
+num_tabs:               .byte 5
 selected_tab:           .byte 0
 draw_menu_tempy:        .byte 0
 draw_menu_border_width: .byte 0
@@ -2193,6 +2318,7 @@ cfg_saved_config:       .tag Cfg
 cfg_config_flag:        .byte 0
 cfg_select_fired:       .byte 0
 cfg_start_fired:        .byte 0
+started_once:           .byte 0
 
 cfg_drive:              .byte 1
 cfg_basename:           .res CFG_NAME_LEN
@@ -2235,6 +2361,7 @@ msg_save_failed:        .byte "Save failed",$00
 msg_loaded:             .byte "Loaded",$00
 msg_load_failed:        .byte "Load failed",$00
 
+msg_start_first:        .byte "Press START to begin",$00
 msg_invalid_callsign:   .byte "Invalid APRS callsign",$00
 msg_invalid_ssid:       .byte "Invalid APRS ssid",$00
 msg_invalid_digi:       .byte "Invalid APRS digipeaters",$00

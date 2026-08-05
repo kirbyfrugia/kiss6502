@@ -11,6 +11,13 @@ TERM_INC = 1
   LINE  = %01000000
 .endenum
 
+.enum TERM_LINE_ENDING
+  CR      = 1
+  LF      = 2
+  CRLF    = 3
+  ATASCII = 4
+.endenum
+
 .enum TERM_PROTOCOL
   TERM = %10000000
   APRS = %01000000
