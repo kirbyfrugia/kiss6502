@@ -20,8 +20,13 @@
 
 RS232_CHANNEL     = 32 ; channel 2 (2 * 16)
 
-PORT_STATUS_OK    = %00000000
-PORT_STATUS_ERROR = %10000000
+PORT_STATUS_OK      = 0
+PORT_STATUS_OPENING = 1
+
+BAR_TX_LABEL_COL     = 1
+BAR_TX_COL           = 5
+BAR_STATUS_LABEL_COL = 24
+BAR_STATUS_COL       = 32
 
 trm_init:
   lda #PORT_STATUS_OK
@@ -35,34 +40,24 @@ trm_init:
 @done:
   rts
 
-.macro draw_divider line_offset
-  lda SCR_PTR_LO
-  clc
-  adc #<line_offset
-  sta ZPB0
-  lda SCR_PTR_HI
-  adc #>line_offset
-  sta ZPB1
-
-  lda #$52 ; horizontal bar
-  ldy #(SCREEN_WIDTH-1)
-@loop:
-  sta (ZPB0),y
-  dey
-  bpl @loop
-.endmacro
-
-
 ; draws the line mode specific part of the ui
 int_draw_ui_multi_line_input:
   jsr int_draw_ui_base
-  draw_divider (SCREEN_WIDTH*19)
+  lda #<(SCREEN_WIDTH*19)
+  sta status_bar_offset
+  lda #>(SCREEN_WIDTH*19)
+  sta status_bar_offset+1
+  jsr int_draw_status_bar
   rts
 
 ; draws the char mode specific part of the ui
 int_draw_ui_single_line_input:
   jsr int_draw_ui_base
-  jsr int_draw_tx_status
+  lda #<(SCREEN_WIDTH*22)
+  sta status_bar_offset
+  lda #>(SCREEN_WIDTH*22)
+  sta status_bar_offset+1
+  jsr int_draw_status_bar
 
   CURSOR_POS .set (SCREEN_WIDTH*23)
   lda SCR_PTR_LO
@@ -79,47 +74,165 @@ int_draw_ui_single_line_input:
 
   rts
 
-TX_STATUS_OFFSET = 22*SCREEN_WIDTH+1
+; draws a null terminated string into the bar in reverse text
+;
+; inputs:
+;   CMDDATA0/1        - ptr to the string
+;   CMDDATA2          - column in the bar
+;   status_bar_offset - screen offset of the bar row
+; modifies:
+;   a,y
+;   CMDDATA2/3/4
+int_bar_draw_str:
+  lda CMDDATA2
+  clc
+  adc status_bar_offset
+  sta CMDDATA2
+  lda status_bar_offset+1
+  adc #0
+  sta CMDDATA3
+  lda #ICODE_SPACE_INVERTED
+  sta CMDDATA4
+  jsr scr_draw_str
+  rts
 
-; redraws the divider above the input line, with the current tx
-; addressee sunk into it in reverse text.
-int_draw_tx_status:
-  draw_divider (SCREEN_WIDTH*22)
+; draws the parts of the bar that never change. the tx label only
+; shows for aprs, the status label always does.
+;
+; inputs:
+;   status_bar_offset - screen offset of the bar row
+; modifies:
+;   a,x,y
+int_draw_status_bar:
+  lda status_bar_offset
+  clc
+  adc SCR_PTR_LO
+  sta ZPB0
+  lda status_bar_offset+1
+  adc SCR_PTR_HI
+  sta ZPB1
+
+  lda #ICODE_HORIZONTAL_BAR
+  ldy #(SCREEN_WIDTH-1)
+@col_loop:
+  sta (ZPB0),y
+  dey
+  bpl @col_loop
 
   lda cfg_saved_config+Cfg::session+CfgSession::protocol
   cmp #TERM_PROTOCOL::APRS
-  bne @done
+  bne @status_label
 
-  lda SCR_PTR_LO
-  clc
-  adc #<TX_STATUS_OFFSET
-  sta ZPB0
-  lda SCR_PTR_HI
-  adc #>TX_STATUS_OFFSET
-  sta ZPB1
+  lda #<str_tx_label
+  sta CMDDATA0
+  lda #>str_tx_label
+  sta CMDDATA1
+  lda #BAR_TX_LABEL_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
 
-  ldy #0
-  ldx #0
-@prefix_loop:
-  lda str_tx_prefix,x
-  beq @addressee
-  eor #$80
-  jsr ut_atascii_to_icode
-  sta (ZPB0),y
-  inx
-  iny
-  bne @prefix_loop
-@addressee:
-  ldx #0
-@addressee_loop:
-  lda tx_addressee,x
+  lda #<tx_addressee
+  sta CMDDATA0
+  lda #>tx_addressee
+  sta CMDDATA1
+  lda #BAR_TX_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
+@status_label:
+  lda #<str_status_label
+  sta CMDDATA0
+  lda #>str_status_label
+  sta CMDDATA1
+  lda #BAR_STATUS_LABEL_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
+
+  jsr int_draw_status
+  rts
+
+; draws the port status into the bar, either a known string
+; or an error code number.
+;
+; modifies:
+;   a,x,y
+int_draw_status:
+  lda port_status
+  sta last_status
+
+  cmp #PORT_STATUS_OK
+  beq @ok
+  cmp #PORT_STATUS_OPENING
+  beq @opening
+  cmp #NONDEV
+  beq @no_850
+  cmp #TIMOUT
+  beq @timeout
+@code:
+  jsr int_status_code_to_text
+  lda #<status_code_text
+  ldx #>status_code_text
+  jmp @draw
+@ok:
+  lda #<str_status_ok
+  ldx #>str_status_ok
+  jmp @draw
+@opening:
+  lda #<str_status_opening
+  ldx #>str_status_opening
+  jmp @draw
+@no_850:
+  lda #<str_status_no_850
+  ldx #>str_status_no_850
+  jmp @draw
+@timeout:
+  lda #<str_status_timeout
+  ldx #>str_status_timeout
+@draw:
+  sta CMDDATA0
+  stx CMDDATA1
+  lda #BAR_STATUS_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
+  rts
+
+; renders port_status into status_code_text.
+;
+; modifies:
+;   a,x,y
+int_status_code_to_text:
+  lda port_status
+  jsr ut_bin_to_bcd
+
+  ldy ut_result+1
+  lda ut_hex_table_atascii,y
+  sta status_code_text+0
+
+  lda ut_result
+  lsr
+  lsr
+  lsr
+  lsr
+  tay
+  lda ut_hex_table_atascii,y
+  sta status_code_text+1
+
+  lda ut_result
+  and #%00001111
+  tay
+  lda ut_hex_table_atascii,y
+  sta status_code_text+2
+  rts
+
+; redraws the bar only when the port status changed, so this can run
+; every tick
+;
+; modifies:
+;   a,x,y
+int_update_status:
+  lda port_status
+  cmp last_status
   beq @done
-  eor #$80
-  jsr ut_atascii_to_icode
-  sta (ZPB0),y
-  inx
-  iny
-  bne @addressee_loop
+  jsr int_draw_status_bar
 @done:
   rts
 
@@ -333,16 +446,27 @@ int_reset:
   rts
 
 trm_activate:
-  lda #PORT_STATUS_OK
-  sta port_status
   lda #CONFIG_FLAG_CANCELED
   bit cfg_config_flag
   bvc @just_repaint ; canceled
+  lda #PORT_STATUS_OPENING
+  sta port_status
   jsr int_reset
   jsr int_repaint
   jsr int_cmd_boot850
+  lda port_status
+  cmp #PORT_STATUS_OPENING
+  bne @port_error
   jsr int_cmd_open_rs232
-  jsr int_print_usage
+  lda port_status
+  cmp #PORT_STATUS_OPENING
+  bne @port_error
+  lda #PORT_STATUS_OK
+  sta port_status
+  jsr int_update_status
+  jmp @done
+@port_error:
+  jsr int_update_status
   jmp @done
 @just_repaint:
   jsr int_repaint
@@ -365,9 +489,10 @@ trm_tick:
 @rs232:
   lda port_status
   cmp #PORT_STATUS_OK
-  bne @done
+  bne @status
   jsr int_cmd_get_rs232
-@done:
+@status:
+  jsr int_update_status
   rts
 
 int_cmd_line_mode_move_cursor_left:
@@ -404,6 +529,10 @@ int_cmd_line_mode_char_delete:
 
 
 int_send_message:
+  lda port_status
+  cmp #PORT_STATUS_OK
+  bne ism_port_closed
+
   lda #<tli_data
   sta CMDDATA0
   lda #>tli_data
@@ -420,6 +549,9 @@ int_send_message:
   jsr pk_send_message
   bcc ism_success
   print_str_with_code str_error_rs232_putchr, g_copy_buffer40, pk_error
+  jmp ism_done
+ism_port_closed:
+  print_str str_port_not_open
   jmp ism_done
 ism_success:
   lda g_disp_buf_num_lines
@@ -539,7 +671,7 @@ int_cmd_tx:
   bcs @invalid
   jsr int_build_tx_addressee
 @show:
-  jsr int_draw_tx_status
+  jsr int_draw_status_bar
   rts
 @invalid:
   print_str str_invalid_callsign
@@ -652,6 +784,10 @@ int_cmd_multi_mode_char_delete:
   rts
 
 int_cmd_multi_mode_return:
+  lda port_status
+  cmp #PORT_STATUS_OK
+  bne @port_closed
+
   lda #<tmi_data
   sta CMDDATA0
   lda #>tmi_data
@@ -665,7 +801,12 @@ int_cmd_multi_mode_return:
   sta CMDDATA2
   jsr rs232_putchrs
   bcc @done
-  print_str_with_code str_error_rs232_putchr, g_copy_buffer40, pk_error
+  sty command_error
+  sty port_status
+  print_str_with_code str_error_rs232_putchr, g_copy_buffer40, command_error
+  jmp @done
+@port_closed:
+  print_str str_port_not_open
 ;  lda #<tmi_data
 ;  sta CMDDATA0
 ;  lda #>tmi_data
@@ -809,38 +950,25 @@ int_handle_kbd_multi_mode:
 
 int_cmd_boot850:
   jsr boot850_check
-  bcc @rhandler_loaded
-  print_str str_loading_850
+  bcc @done
   jsr boot850_bootstrap
-  bcc @rhandler_bootstrapped
-  print_str str_error_loading_850
-  jmp @error
-@rhandler_bootstrapped:
+  bcs @error
   jsr boot850_check
-  bcc @rhandler_loaded
-  print_str str_error_missing_850
-  jmp @error
-@rhandler_loaded:
-  print_str str_loaded_850
-  jmp @done
+  bcc @done
 @error:
-  lda #PORT_STATUS_ERROR 
+  lda #NONDEV
   sta port_status
 @done:
   rts
 
 int_cmd_open_rs232:
-  print_str str_opening_rs232
   ldx #RS232_CHANNEL
   jsr rs232_open
   bcs @error
-  print_str str_opened_rs232
   jmp @done
 @error:
   sty command_error
   sty port_status
-  print_str_with_code str_error_rs232_open, g_copy_buffer40, command_error
-  jsr int_print_status
 @done:
   rts
 
@@ -925,12 +1053,6 @@ int_handle_kiss_frame:
 @done:
   rts
 
-int_print_status:
-  jsr rs232_status
-  print_str_with_code str_last_status, g_copy_buffer40, rs232_last_status
-@done:
-  rts
-
 int_cmd_get_rs232:
   jsr rs232_status
   bcs @error_status
@@ -953,13 +1075,11 @@ int_cmd_get_rs232:
   sty command_error
   sty port_status
   print_str_with_code str_error_rs232_status, g_copy_buffer40, command_error
-  jsr int_print_status
   jmp @done
 @error_getchr:
   sty command_error
   sty port_status
   print_str_with_code str_error_rs232_getchr, g_copy_buffer40, command_error
-  jsr int_print_status
 @done:
   rts
 
@@ -978,7 +1098,6 @@ int_cmd_put_rs232:
   sty command_error
   sty port_status
   print_str_with_code str_error_rs232_putchr, g_copy_buffer40, command_error
-  jsr int_print_status
 @done:
   rts
 
@@ -986,22 +1105,9 @@ top_banner:                  .byte ' ','S'|$80,'E'|$80,'L'|$80,"config "
                              .byte $00
 current_mode:                .res 1
 
-str_loading_850:             .byte "Loading 850...",$00
-str_loaded_850:              .byte "850 handler loaded",$00
-str_error_missing_850:       .byte "850 not in HATABS",$00
-str_error_loading_850:       .byte "850 load error",$00
-str_error:                   .byte "Error",$00
-str_last_status:             .byte "Last status",$00
-str_opening_rs232:           .byte "Opening RS232 port...",$00
-str_opened_rs232:            .byte "RS232 port opened",$00
-str_error_rs232_open:        .byte "Error opening RS232 port",$00
-str_error_rs232_open_code:   ; used as index to print error code for above str
 str_error_rs232_status:      .byte "Error on RS232 status",$00
-str_error_rs232_status_code: ; used as index to print error code for above str
 str_error_rs232_getchr:      .byte "Error on RS232 getchr",$00
-str_error_rs232_getchr_code: ; used as index to print error code for above str
 str_error_rs232_putchr:      .byte "Error on RS232 putchr",$00
-str_error_rs232_putchr_code: ; used as index to print error code for above str
 
 str_help:
   .byte "usage:                                "
@@ -1011,11 +1117,23 @@ str_help:
 str_help_num_lines:          .byte 4
 
 str_cmd_tx:                  .byte "/TX",$00
-str_tx_prefix:               .byte "tx: ",$00
+str_tx_label:                .byte "tx: ",$00
 str_invalid_callsign:        .byte "invalid callsign",$00
+str_port_not_open:           .byte "port not open",$00
+
+str_status_label:            .byte "status: ",$00
+str_status_ok:               .byte "ok",$00
+str_status_opening:          .byte "opening",$00
+str_status_no_850:           .byte "no 850",$00
+str_status_timeout:          .byte "timeout",$00
+
+status_code_text:            .res 3
+                             .byte $00
+status_bar_offset:           .res 2
+last_status:                 .res 1
 
 tx_addressee:                .res KISS_ADDRESSEE_LEN+1
-tx_send_flags:             .res 1
+tx_send_flags:               .res 1
 cmd_char:                    .res 1
 cmd_arg_idx:                 .res 1
 cmd_ssid:                    .res 1

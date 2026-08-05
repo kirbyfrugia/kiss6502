@@ -168,6 +168,9 @@ rs232_putchr:
 ; inputs:
 ;   CMDDATA0/1 - ptr to data
 ;   CMDDATA2   - size of buf
+; outputs:
+;   c - set on error, clear otherwise
+;   y - the cio error code when carry is set
 rs232_putchrs:
   data_ptr_lo = CMDDATA0
   buf_size    = CMDDATA2
@@ -184,7 +187,6 @@ rs232_putchrs:
   clc
   rts
 @error:
-  ldy tempy
   sec
   rts
 
