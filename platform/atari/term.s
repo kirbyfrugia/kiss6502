@@ -20,8 +20,9 @@
 
 RS232_CHANNEL     = 32 ; channel 2 (2 * 16)
 
-PORT_STATUS_OK      = 0
-PORT_STATUS_OPENING = 1
+PORT_STATUS_OK         = 0
+PORT_STATUS_OPENING    = 1
+PORT_STATUS_NO_HANDLER = 2
 
 BAR_TX_LABEL_COL     = 1
 BAR_TX_COL           = 5
@@ -163,6 +164,8 @@ int_draw_status:
   beq @ok
   cmp #PORT_STATUS_OPENING
   beq @opening
+  cmp #PORT_STATUS_NO_HANDLER
+  beq @no_handler
   cmp #NONDEV
   beq @no_850
   cmp #TIMOUT
@@ -179,6 +182,10 @@ int_draw_status:
 @opening:
   lda #<str_status_opening
   ldx #>str_status_opening
+  jmp @draw
+@no_handler:
+  lda #<str_status_no_handler
+  ldx #>str_status_no_handler
   jmp @draw
 @no_850:
   lda #<str_status_no_850
@@ -568,18 +575,6 @@ ism_success:
 ism_done:
   rts
 
-int_print_usage:
-  lda #<str_help
-  sta CMDDATA0
-  lda #>str_help
-  sta CMDDATA1
-  lda str_help_num_lines
-  sta CMDDATA2
-  lda #1
-  sta CMDDATA3
-  jsr to_append_lines
-  rts
-
 int_cmd_line_mode_return:
   lda tli_data
   cmp #'/'
@@ -599,7 +594,7 @@ int_run_command:
   sta CMDDATA1
   jsr int_cmd_name_matches
   bcc @tx
-  jsr int_print_usage
+  print_str str_unknown_command
   jmp @done
 @tx:
   jsr int_cmd_tx
@@ -956,7 +951,7 @@ int_cmd_boot850:
   jsr boot850_check
   bcc @done
 @error:
-  lda #NONDEV
+  lda #PORT_STATUS_NO_HANDLER
   sta port_status
 @done:
   rts
@@ -1109,22 +1104,17 @@ str_error_rs232_status:      .byte "Error on RS232 status",$00
 str_error_rs232_getchr:      .byte "Error on RS232 getchr",$00
 str_error_rs232_putchr:      .byte "Error on RS232 putchr",$00
 
-str_help:
-  .byte "usage:                                "
-  .byte "/h          - print help              "
-  .byte "/tx <call>  - send messages to <call> "
-  .byte "/tx         - send messages to CQ     "
-str_help_num_lines:          .byte 4
-
 str_cmd_tx:                  .byte "/TX",$00
 str_tx_label:                .byte "tx: ",$00
 str_invalid_callsign:        .byte "invalid callsign",$00
+str_unknown_command:         .byte "unknown command",$00
 str_port_not_open:           .byte "port not open",$00
 
 str_status_label:            .byte "status: ",$00
 str_status_ok:               .byte "ok",$00
 str_status_opening:          .byte "opening",$00
 str_status_no_850:           .byte "no 850",$00
+str_status_no_handler:       .byte "no r:",$00
 str_status_timeout:          .byte "timeout",$00
 
 status_code_text:            .res 3
