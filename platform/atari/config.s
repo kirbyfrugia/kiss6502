@@ -586,9 +586,11 @@ TERM_EOL_LABEL_OFFSET  = 7*SCREEN_WIDTH+2
 TERM_EOL_FIELD_OFFSET  = 7*SCREEN_WIDTH+15
 TERM_LF_LABEL_OFFSET   = 9*SCREEN_WIDTH+2
 TERM_LF_FIELD_OFFSET   = 9*SCREEN_WIDTH+15
+TERM_HINT_OFFSET       = 19*SCREEN_WIDTH+2
 
 TERM_FIELD_FIRST       = 0
 TERM_FIELD_COUNT       = 3
+TERM_STATIC_COUNT      = 4
 
 int_draw_menu_borders_file_tab:
   lda #<filename_label
@@ -705,7 +707,7 @@ int_filetab_load:
 
 ; checks if the file name is valid
 ; outputs:
-;   carry - set if invalid, clear if valid
+;   c     - set if invalid, clear if valid
 ;         - e.g. space in the middle of the file name
 ; modifies:
 ;   CMDDATA0/1/2
@@ -945,7 +947,7 @@ int_aprstab_ssid_to_text:
 
 ; validates and converts the ssid field into a hex value for saving
 ; outputs:
-;   carry - set if invalid ssid, clear otherwise
+;   c - set if invalid ssid, clear otherwise
 int_aprstab_text_to_ssid:
   lda #<cfg_ssid_text
   sta CMDDATA0
@@ -963,7 +965,7 @@ int_aprstab_text_to_ssid:
 ; validates and converts the callsign field, uppercasing it
 ; on the way into the draft config.
 ; outputs:
-;   carry - set if invalid callsign, clear otherwise
+;   c - set if invalid callsign, clear otherwise
 int_aprstab_text_to_callsign:
   lda #<cfg_callsign_text
   sta CMDDATA0
@@ -1008,7 +1010,7 @@ int_aprstab_text_to_callsign:
 ; inside it, so it ends at its first space and the rest up to the comma
 ; must be blank. empty text means no digipeaters and is valid.
 ; outputs:
-;   carry - set if any entry was invalid, clear otherwise
+;   c - set if any entry was invalid, clear otherwise
 int_aprstab_text_to_digi:
   ; clear stale slots
   lda #0
@@ -1127,7 +1129,7 @@ int_aprstab_text_to_digi:
 ; callsign is allowed here, callers that require one check for it.
 ; outputs:
 ;   CMDDATA0/1 - ptr to the error message when carry is set
-;   carry      - set if any field was invalid, clear otherwise
+;   c          - set if any field was invalid, clear otherwise
 int_aprstab_form_to_config:
   jsr int_aprstab_text_to_callsign
   bcs @callsign_error
@@ -1262,23 +1264,23 @@ int_draw_menu_borders_serial_tab:
 
 int_draw_menu_borders_term_tab:
   ldx #0
-@labels_loop:
-  stx term_label_idx
-  lda term_label_ptrs_lo,x
+@static_loop:
+  stx term_static_idx
+  lda term_static_ptrs_lo,x
   sta CMDDATA0
-  lda term_label_ptrs_hi,x
+  lda term_static_ptrs_hi,x
   sta CMDDATA1
-  lda term_label_offs_lo,x
+  lda term_static_offs_lo,x
   sta CMDDATA2
-  lda term_label_offs_hi,x
+  lda term_static_offs_hi,x
   sta CMDDATA3
   lda #0
   sta CMDDATA4
   jsr scr_draw_str
-  ldx term_label_idx
+  ldx term_static_idx
   inx
-  cpx #TERM_FIELD_COUNT
-  bne @labels_loop
+  cpx #TERM_STATIC_COUNT
+  bne @static_loop
   rts
 
 int_draw_menu_borders_aprs_tab:
@@ -1966,7 +1968,7 @@ cfg_build_filespec:
 
 ; writes the draft config to Dn:<name>.CFG and updates the lastfile
 ; outputs:
-;   carry - clear on success, set on error
+;   c - clear on success, set on error
 cfg_save_config:
   jsr cfg_build_filespec
 
@@ -1994,7 +1996,7 @@ cfg_save_config:
 
 ; reads Dn:<name>.CFG into the draft config.
 ; outputs:
-;   carry - clear on success, set on error
+;   c - clear on success, set on error
 cfg_load_config:
   jsr cfg_build_filespec
 
@@ -2034,7 +2036,7 @@ cfg_load_config:
 ; stores the last saved or loaded filename in a hard-coded
 ; file so we can load their last file on boot.
 ; outputs:
-;   carry - clear on success, set on error
+;   c - clear on success, set on error
 cfg_save_lastfile:
   lda cfg_drive
   sta cfg_lastfile_data
@@ -2068,7 +2070,7 @@ cfg_save_lastfile:
 ;    XXXXXXXX - file name (CFG_NAME_LEN chars), trailing space padded
 ;
 ; outputs:
-;   carry - clear on success, set on error
+;   c - clear on success, set on error
 int_load_lastfile:
   lda #<cfg_lastfile_filespec
   sta CMDDATA0
@@ -2284,11 +2286,12 @@ term_form:              .tag Form
 term_mode_label:        .byte "Mode:",$00
 term_eol_label:         .byte "Line ending:",$00
 term_lf_label:          .byte "Append LF:",$00
-term_label_idx:         .byte 0
-term_label_ptrs_lo:     .byte <term_mode_label, <term_eol_label, <term_lf_label
-term_label_ptrs_hi:     .byte >term_mode_label, >term_eol_label, >term_lf_label
-term_label_offs_lo:     .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_LF_LABEL_OFFSET
-term_label_offs_hi:     .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_LF_LABEL_OFFSET
+term_hint:              .byte 'T'|$80,'A'|$80,'B'|$80," next field",$00
+term_static_idx:        .byte 0
+term_static_ptrs_lo:    .byte <term_mode_label, <term_eol_label, <term_lf_label, <term_hint
+term_static_ptrs_hi:    .byte >term_mode_label, >term_eol_label, >term_lf_label, >term_hint
+term_static_offs_lo:    .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_LF_LABEL_OFFSET, <TERM_HINT_OFFSET
+term_static_offs_hi:    .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_LF_LABEL_OFFSET, >TERM_HINT_OFFSET
 
 top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"tab-> "
                         .byte "          "
