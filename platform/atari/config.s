@@ -80,7 +80,7 @@ cfg_init:
 
   OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+12
   NUM_ITEMS     .set 4
-  BORDER_WIDTH  .set 8 
+  BORDER_WIDTH  .set 8
   make_menu data_menu, data_menu_header, \
             data_menu_item_values, data_menu_item_labels, \
             NUM_ITEMS, BORDER_WIDTH, OFFSET
@@ -426,12 +426,13 @@ int_draw_main:
   rts
 
 int_refresh_file_tab:
-  lda #FILE_FOCUS_NAME
-  sta filetab_focus
   jsr int_filetab_clear_status
-  jsr int_filetab_file_input_set_context
-  jsr li_repaint
-  jsr int_filetab_draw_focus
+  lda #<file_form
+  sta CMDDATA0
+  lda #>file_form
+  sta CMDDATA1
+  jsr fm_set_context
+  jsr fm_draw_all
   rts
 
 int_refresh_session_tab:
@@ -550,21 +551,21 @@ int_start_clear_status:
   rts
 
 FILE_LABEL_OFFSET      = 5*SCREEN_WIDTH+2
-FILE_FIELD_OFFSET      = 5*SCREEN_WIDTH+13
-FILE_SUFFIX_OFFSET     = FILE_FIELD_OFFSET+CFG_NAME_LEN
+FILE_FIELD_OFFSET      = 5*SCREEN_WIDTH+14
+FILE_SUFFIX_OFFSET     = FILE_FIELD_OFFSET+CFG_NAME_LEN+1
 FILE_BTN_LOAD_OFFSET   = 8*SCREEN_WIDTH+31
 FILE_BTN_SAVE_OFFSET   = 9*SCREEN_WIDTH+31
 FILE_BTN_DEF_OFFSET    = 11*SCREEN_WIDTH+22
+FILE_HINT_OFFSET       = 19*SCREEN_WIDTH+2
 FILE_STATUS_OFFSET     = 13*SCREEN_WIDTH+2
 FILE_STATUS_WIDTH      = 36
 
-FILE_FOCUS_NAME        = 0
-FILE_FOCUS_BTN_START   = 1
-FILE_FOCUS_LOAD        = 1
-FILE_FOCUS_SAVE        = 2
-FILE_FOCUS_DEFAULT     = 3
-FILE_FOCUS_BTN_END     = 3
-FILE_FOCUS_COUNT       = 4
+FILE_FIELD_FIRST       = 0
+FILE_FIELD_COUNT       = 4
+
+FILE_ACTION_LOAD       = 1
+FILE_ACTION_SAVE       = 2
+FILE_ACTION_DEFAULT    = 3
 
 APRS_CALL_LABEL_OFFSET = 5*SCREEN_WIDTH+2
 APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+15
@@ -588,7 +589,7 @@ TERM_LF_LABEL_OFFSET   = 9*SCREEN_WIDTH+2
 TERM_LF_FIELD_OFFSET   = 9*SCREEN_WIDTH+15
 TERM_HINT_OFFSET       = 19*SCREEN_WIDTH+2
 
-TERM_FIELD_FIRST       = 0
+TERM_FIELD_FIRST       = 4
 TERM_FIELD_COUNT       = 3
 TERM_STATIC_COUNT      = 4
 
@@ -616,43 +617,51 @@ int_draw_menu_borders_file_tab:
   lda #0
   sta CMDDATA4
   jsr scr_draw_str
+
+  lda #<form_hint
+  sta CMDDATA0
+  lda #>form_hint
+  sta CMDDATA1
+  lda #<FILE_HINT_OFFSET
+  sta CMDDATA2
+  lda #>FILE_HINT_OFFSET
+  sta CMDDATA3
+  lda #0
+  sta CMDDATA4
+  jsr scr_draw_str
   rts
 
 int_filetab_init:
   jsr int_load_lastfile
 
-  lda #FILE_FOCUS_NAME
-  sta filetab_focus
+  lda #FILE_FIELD_FIRST
+  sta file_form+Form::first
+  lda #FILE_FIELD_COUNT
+  sta file_form+Form::count
+  lda #0
+  sta file_form+Form::focus
 
   lda #0
-  sta cfg_li+LineInput::scr_cursor
-  sta cfg_li+LineInput::data_cursor
-  sta cfg_li+LineInput::first_visible
+  sta cfg_filename_li+LineInput::scr_cursor
+  sta cfg_filename_li+LineInput::data_cursor
+  sta cfg_filename_li+LineInput::first_visible
 
   lda #<FILE_FIELD_OFFSET
   clc
   adc SCR_PTR_LO
-  sta cfg_li+LineInput::scr_ptr
+  sta cfg_filename_li+LineInput::scr_ptr
   lda #>FILE_FIELD_OFFSET
   adc SCR_PTR_HI
-  sta cfg_li+LineInput::scr_ptr+1
+  sta cfg_filename_li+LineInput::scr_ptr+1
 
-  lda #<cfg_basename
-  sta cfg_li+LineInput::data_ptr
-  lda #>cfg_basename
-  sta cfg_li+LineInput::data_ptr+1
+  lda #<cfg_filename_text
+  sta cfg_filename_li+LineInput::data_ptr
+  lda #>cfg_filename_text
+  sta cfg_filename_li+LineInput::data_ptr+1
   lda #CFG_NAME_LEN
-  sta cfg_li+LineInput::num_visible
+  sta cfg_filename_li+LineInput::num_visible
   lda #CFG_NAME_LEN
-  sta cfg_li+LineInput::data_size
-  rts
-
-int_filetab_file_input_set_context:
-  lda #<cfg_li
-  sta CMDDATA0
-  lda #>cfg_li
-  sta CMDDATA1
-  jsr li_set_context
+  sta cfg_filename_li+LineInput::data_size
   rts
 
 int_filetab_save_file:
@@ -713,9 +722,9 @@ int_filetab_load:
 ;   CMDDATA0/1/2
 ;   a,y
 int_filetab_filename_valid:
-  lda #<cfg_basename
+  lda #<cfg_filename_text
   sta CMDDATA0
-  lda #>cfg_basename
+  lda #>cfg_filename_text
   sta CMDDATA1
   lda #CFG_NAME_LEN
   sta CMDDATA2
@@ -761,51 +770,10 @@ int_filetab_clear_status:
   bpl @loop
   rts
 
-; draws the buttons for the file tab
+; draws the buttons for the aprs tab
 ; modifies:
 ;   a,x,y
 ;   CMDDATA0-4
-int_filetab_draw_buttons:
-  ldx #0
-@loop:
-  stx file_btn_idx
-  lda file_btn_ptrs_lo,x
-  sta CMDDATA0
-  lda file_btn_ptrs_hi,x
-  sta CMDDATA1
-  lda file_btn_offs_lo,x
-  sta CMDDATA2
-  lda file_btn_offs_hi,x
-  sta CMDDATA3
-
-  lda #0
-  sta CMDDATA4
-  txa
-  clc
-  adc #FILE_FOCUS_BTN_START
-  cmp filetab_focus
-  bne @nofocus
-  lda #$80
-  sta CMDDATA4
-@nofocus:
-  jsr scr_draw_str
-  ldx file_btn_idx
-  inx
-  cpx #FILE_FOCUS_BTN_END
-  bne @loop
-  rts
-
-int_filetab_draw_focus:
-  jsr int_filetab_draw_buttons
-  jsr int_filetab_file_input_set_context
-  lda filetab_focus
-  bne @hide
-  jsr li_show_cursor
-  rts
-@hide:
-  jsr li_hide_cursor
-  rts
-
 int_aprstab_init:
   lda #APRS_FOCUS_CALLSIGN
   sta aprstab_focus
@@ -1643,73 +1611,14 @@ int_handle_console_keys:
   rts
 
 int_filetab_handle_kbd:
-  lda g_kbdcode_raw
-  cmp #KEY_ESC
-  beq @escape
-  cmp #KEY_TAB
-  beq @focus_next
-  cmp #KEY_RETURN
-  beq @activate
-  ldx filetab_focus
-  beq @name_focused
-  jmp @done
-@name_focused:
-  cmp #$86 ; ctrl+left arrow
-  beq @cursor_left
-  cmp #$87 ; ctrl+right arrow
-  beq @cursor_right
-  cmp #KEY_DELETE ; backspace
-  beq @backspace
-  cmp #$b4 ; ctrl+delete
-  beq @char_delete
-  cmp #$b7 ; ctrl+insert
-  beq @char_insert
-  jmp @typechar
-@escape:
-  jsr int_cmd_cancel
-  jmp @done
-@focus_next:
-  ldx filetab_focus
-  inx
-  cpx #FILE_FOCUS_COUNT
-  bne @focus_store
-  ldx #FILE_FOCUS_NAME
-@focus_store:
-  stx filetab_focus
-  jsr int_filetab_draw_focus
-  jmp @done
-@cursor_left:
-  jsr int_filetab_file_input_set_context
-  jsr li_move_cursor_left
-  jmp @done
-@cursor_right:
-  jsr int_filetab_file_input_set_context
-  jsr li_move_cursor_right
-  jmp @done
-@backspace:
-  jsr int_filetab_file_input_set_context
-  jsr li_backspace
-  jmp @done
-@char_delete:
-  jsr int_filetab_file_input_set_context
-  jsr li_char_delete
-  jmp @done
-@char_insert:
-  jsr int_filetab_file_input_set_context
-  jsr li_char_insert
-  jmp @done
-@activate:
-  lda filetab_focus
-  cmp #FILE_FOCUS_DEFAULT
-  beq @do_default
-  cmp #FILE_FOCUS_LOAD
+  jsr int_form_handle_kbd
+  lda fm_action
+  cmp #FILE_ACTION_LOAD
   beq @do_load
-  cmp #FILE_FOCUS_SAVE
+  cmp #FILE_ACTION_SAVE
   beq @do_save
-  jmp @done
-@do_default:
-  jsr int_filetab_clear_status
-  jsr int_load_default_config
+  cmp #FILE_ACTION_DEFAULT
+  beq @do_default
   jmp @done
 @do_load:
   jsr int_filetab_clear_status
@@ -1719,24 +1628,9 @@ int_filetab_handle_kbd:
   jsr int_filetab_clear_status
   jsr int_filetab_save_file
   jmp @done
-@typechar:
-  lda g_kbdcode_atascii
-  cmp #' '
-  beq @type
-  jsr ut_is_alphanumeric
-  bcs @done
-  cmp #'a'
-  bcc @type
-  cmp #'z'+1
-  bcs @type
-  sec
-  sbc #$20
-@type:
-  pha
-  jsr int_filetab_file_input_set_context
-  pla
-  sta CMDDATA0
-  jsr li_type_char
+@do_default:
+  jsr int_filetab_clear_status
+  jsr int_load_default_config
 @done:
   rts
 
@@ -1805,7 +1699,9 @@ int_serial_handle_kbd:
 @done:
   rts
 
-int_term_handle_kbd:
+int_form_handle_kbd:
+  lda #FM_ACTION_NONE
+  sta fm_action
   lda g_kbdcode_raw
   cmp #KEY_ESC
   beq @escape
@@ -1907,7 +1803,7 @@ int_handle_kbd:
   jsr int_serial_handle_kbd
   jmp @done
 @term:
-  jsr int_term_handle_kbd
+  jsr int_form_handle_kbd
   jmp @done
 @aprs:
   jsr int_aprstab_handle_kbd
@@ -1925,7 +1821,7 @@ cfg_tick:
   rts
 
 ; assembles "Dn:<name>.CFG",EOL into cfg_filespec from cfg_drive and
-; the space-padded name in cfg_basename.
+; the space-padded name in cfg_filename_text.
 cfg_build_filespec:
   lda #'D'
   sta cfg_filespec
@@ -1938,7 +1834,7 @@ cfg_build_filespec:
 
   ldx #0
 @name_loop:
-  lda cfg_basename,x
+  lda cfg_filename_text,x
   cmp #' '
   beq @name_done
   sta cfg_filespec+3,x
@@ -2042,7 +1938,7 @@ cfg_save_lastfile:
   sta cfg_lastfile_data
   ldx #CFG_NAME_LEN-1
 @copy:
-  lda cfg_basename,x
+  lda cfg_filename_text,x
   sta cfg_lastfile_data+1,x
   dex
   bpl @copy
@@ -2062,7 +1958,7 @@ cfg_save_lastfile:
   jsr file_save
   rts
 
-; loads the last file saved or loaded into cfg_drive and cfg_basename.
+; loads the last file saved or loaded into cfg_drive and cfg_filename_text.
 ; on error (e.g. first boot) falls back to drive 1 and a blank name.
 ;
 ; on-disk format: "DXXXXXXXX"
@@ -2098,7 +1994,7 @@ int_load_lastfile:
   ldx #CFG_NAME_LEN-1
 @copy:
   lda cfg_lastfile_data+1,x
-  sta cfg_basename,x
+  sta cfg_filename_text,x
   dex
   bpl @copy
   clc
@@ -2109,7 +2005,7 @@ int_load_lastfile:
   ldx #CFG_NAME_LEN-1
   lda #' '
 @blank_loop:
-  sta cfg_basename,x
+  sta cfg_filename_text,x
   dex
   bpl @blank_loop
   sec
@@ -2227,29 +2123,46 @@ protocol_menu_item_labels:
 protocol_menu_item_label_aprs: .byte "APRS",$00
 protocol_menu_item_label_term: .byte "Terminal",$00
 
+file_form:              .tag Form
+term_form:              .tag Form
+
 ; the form field table for all tabs
 cfg_field_kind:
+  .byte FIELD_TEXT, FIELD_BUTTON, FIELD_BUTTON, FIELD_BUTTON
   .byte FIELD_SELECT, FIELD_SELECT, FIELD_SELECT
 cfg_field_scr_lo:
-  .byte <TERM_MODE_FIELD_OFFSET,<TERM_EOL_FIELD_OFFSET,<TERM_LF_FIELD_OFFSET
+  .byte <FILE_FIELD_OFFSET, <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
+  .byte <TERM_MODE_FIELD_OFFSET, <TERM_EOL_FIELD_OFFSET, <TERM_LF_FIELD_OFFSET
 cfg_field_scr_hi:
-  .byte >TERM_MODE_FIELD_OFFSET,>TERM_EOL_FIELD_OFFSET,>TERM_LF_FIELD_OFFSET
+  .byte >FILE_FIELD_OFFSET, >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
+  .byte >TERM_MODE_FIELD_OFFSET, >TERM_EOL_FIELD_OFFSET, >TERM_LF_FIELD_OFFSET
 cfg_field_width:
+  .byte CFG_NAME_LEN, 6, 6, 15
   .byte 7, 7, 7
 cfg_field_data_lo:
+  .byte <cfg_filename_li, <btn_load, <btn_save, <btn_default
   .byte <(cfg_draft_config+Cfg::term+CfgTerm::mode),<(cfg_draft_config+Cfg::term+CfgTerm::line_ending),<(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
 cfg_field_data_hi:
+  .byte >cfg_filename_li, >btn_load, >btn_save, >btn_default
   .byte >(cfg_draft_config+Cfg::term+CfgTerm::mode),>(cfg_draft_config+Cfg::term+CfgTerm::line_ending),>(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
 cfg_field_values_lo:
+  .byte 0, 0, 0, 0
   .byte <term_mode_field_values, <term_eol_field_values, <term_lf_field_values
 cfg_field_values_hi:
+  .byte 0, 0, 0, 0
   .byte >term_mode_field_values, >term_eol_field_values, >term_lf_field_values
 cfg_field_labels_lo:
+  .byte 0, 0, 0, 0
   .byte <term_mode_field_labels_lo, <term_eol_field_labels_lo, <term_lf_field_labels_lo
 cfg_field_labels_hi:
+  .byte 0, 0, 0, 0
   .byte >term_mode_field_labels_lo, >term_eol_field_labels_lo, >term_lf_field_labels_lo
-cfg_field_extra:
+cfg_field_arg0:
+  .byte CHAR_ALNUM|CHAR_SPACE, FILE_ACTION_LOAD, FILE_ACTION_SAVE, FILE_ACTION_DEFAULT
   .byte 2, 4, 2
+cfg_field_arg1:
+  .byte INPUT_UPPER, 0, 0, 0
+  .byte 0, 0, 0
 
 term_mode_field_values:
   .byte TERM_MODE::LINE, TERM_MODE::CHAR
@@ -2281,15 +2194,13 @@ item_atascii:           .byte "ATASCII",$00
 item_no:                .byte "No",$00
 item_yes:               .byte "Yes",$00
 
-
-term_form:              .tag Form
 term_mode_label:        .byte "Mode:",$00
 term_eol_label:         .byte "Line ending:",$00
 term_lf_label:          .byte "Append LF:",$00
-term_hint:              .byte 'T'|$80,'A'|$80,'B'|$80," next field",$00
+form_hint:              .byte 'T'|$80,'A'|$80,'B'|$80," next field",$00
 term_static_idx:        .byte 0
-term_static_ptrs_lo:    .byte <term_mode_label, <term_eol_label, <term_lf_label, <term_hint
-term_static_ptrs_hi:    .byte >term_mode_label, >term_eol_label, >term_lf_label, >term_hint
+term_static_ptrs_lo:    .byte <term_mode_label, <term_eol_label, <term_lf_label, <form_hint
+term_static_ptrs_hi:    .byte >term_mode_label, >term_eol_label, >term_lf_label, >form_hint
 term_static_offs_lo:    .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_LF_LABEL_OFFSET, <TERM_HINT_OFFSET
 term_static_offs_hi:    .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_LF_LABEL_OFFSET, >TERM_HINT_OFFSET
 
@@ -2324,15 +2235,12 @@ cfg_start_fired:        .byte 0
 started_once:           .byte 0
 
 cfg_drive:              .byte 1
-cfg_basename:           .res CFG_NAME_LEN
 cfg_filespec:           .res 3+CFG_NAME_LEN+4+1; "Dn:"+name+".CFG"+EOL
 cfg_lastfile_filespec:  .byte "D1:KISSTTY.LST", EOL
 cfg_lastfile_data:      .res CFG_LASTFILE_LEN
 
-cfg_li:                 .tag LineInput
-filetab_focus:          .byte 0
-file_btn_idx:           .byte 0
-
+cfg_filename_li:        .tag LineInput
+cfg_filename_text:      .res CFG_NAME_LEN
 cfg_callsign_li:        .tag LineInput
 cfg_callsign_text:      .res APRS_CALLSIGN_LEN
 cfg_ssid_li:            .tag LineInput
@@ -2368,9 +2276,4 @@ msg_start_first:        .byte "Press START to begin",$00
 msg_invalid_callsign:   .byte "Invalid APRS callsign",$00
 msg_invalid_ssid:       .byte "Invalid APRS ssid",$00
 msg_invalid_digi:       .byte "Invalid APRS digipeaters",$00
-
-file_btn_offs_lo:       .byte <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
-file_btn_offs_hi:       .byte >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
-file_btn_ptrs_lo:       .byte <btn_load, <btn_save, <btn_default
-file_btn_ptrs_hi:       .byte >btn_load, >btn_save, >btn_default
 

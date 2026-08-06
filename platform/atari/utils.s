@@ -3,7 +3,6 @@
 .include "globals.inc"
 .include "utils.inc"
 
-
 .segment "ZEROPAGE"
 
 bcd_tmp:   .res 1

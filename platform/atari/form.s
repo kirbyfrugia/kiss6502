@@ -4,6 +4,7 @@
 .include "atari.inc"
 .include "config.inc"
 .include "globals.inc"
+.include "line_input.inc"
 .include "screen.inc"
 .include "utils.inc"
 
@@ -89,27 +90,130 @@ int_set_focused_flag:
 ; modifies:
 ;   a,x,y
 int_draw_field:
-  jsr int_set_field_table_index
+  jsr int_set_current_field
   lda cfg_field_kind,x
   cmp #FIELD_SELECT
   beq @select
+  cmp #FIELD_TEXT
+  beq @text
+  cmp #FIELD_BUTTON
+  beq @button
   jmp @done
 @select:
   jsr int_draw_select
+  jmp @done
+@text:
+  jsr int_draw_text
+  jmp @done
+@button:
+  jsr int_draw_button
 @done:
   jsr int_draw_hint
   rts
 
-; draws the hint to the right of its cell, or blanks that space when
-; the field is not focused.
+; repaints the field's line input, showing its cursor only while the
+; field has focus.
 ;
 ; inputs:
-;   field_table_index - index into the field table
+;   current_field_idx - index into the field table
+;   focused_flag      - $80 if the field is focused, $00 otherwise
+; modifies:
+;   a,x,y
+int_draw_text:
+  jsr int_draw_brackets
+  jsr int_text_set_context
+  jsr li_repaint
+  lda focused_flag
+  beq @hide
+  jsr li_show_cursor
+  jmp @done
+@hide:
+  jsr li_hide_cursor
+@done:
+  rts
+
+; draws brackets around a field.
+;
+; inputs:
+;   current_field_idx - index into the field table
+; modifies:
+;   a,x,y
+int_draw_brackets:
+  ldx current_field_idx
+  lda cfg_field_scr_lo,x
+  clc
+  adc SCR_PTR_LO
+  sta g_temp_scr_ptr_lo
+  lda cfg_field_scr_hi,x
+  adc SCR_PTR_HI
+  sta g_temp_scr_ptr_hi
+
+  lda g_temp_scr_ptr_lo
+  bne @no_borrow
+  dec g_temp_scr_ptr_hi
+@no_borrow:
+  dec g_temp_scr_ptr_lo
+
+  ldy #0
+  lda #ICODE_BRACKET_OPEN
+  sta (g_temp_scr_ptr_lo),y
+  ldy cfg_field_width,x
+  iny
+  lda #ICODE_BRACKET_CLOSE
+  sta (g_temp_scr_ptr_lo),y
+  rts
+
+; sets the context for the selected line input
+;
+; inputs:
+;   current_field_idx - index into the field table
+; modifies:
+;   a,x,y
+int_text_set_context:
+  ldx current_field_idx
+  lda cfg_field_data_lo,x
+  sta CMDDATA0
+  lda cfg_field_data_hi,x
+  sta CMDDATA1
+  jsr li_set_context
+  rts
+
+; draws the button's label, inverted while the field has focus.
+;
+; inputs:
+;   current_field_idx - index into the field table
+;   focused_flag      - $80 if the field is focused, $00 otherwise
+; modifies:
+;   a,x,y
+int_draw_button:
+  ldx current_field_idx
+  lda cfg_field_data_lo,x
+  sta CMDDATA0
+  lda cfg_field_data_hi,x
+  sta CMDDATA1
+  lda cfg_field_scr_lo,x
+  sta CMDDATA2
+  lda cfg_field_scr_hi,x
+  sta CMDDATA3
+  lda focused_flag
+  sta CMDDATA4
+  jsr scr_draw_str
+  rts
+
+; draws the hint to the right of the cell if the field type
+; has a hint and the field is focused
+;
+; inputs:
+;   current_field_idx - index into the field table
 ;   focused_flag      - $80 if the field is focused, $00 otherwise
 ; modifies:
 ;   a,x,y
 int_draw_hint:
-  ldx field_table_index
+  ldx current_field_idx
+  lda cfg_field_kind,x
+  cmp #FIELD_SELECT
+  bne @done
+
   lda #<hint_blank
   sta CMDDATA0
   lda #>hint_blank
@@ -117,9 +221,6 @@ int_draw_hint:
 
   lda focused_flag
   beq @position
-  lda cfg_field_kind,x
-  cmp #FIELD_SELECT
-  bne @position
   lda #<hint_select
   sta CMDDATA0
   lda #>hint_select
@@ -136,23 +237,23 @@ int_draw_hint:
   lda #0
   sta CMDDATA4
   jsr scr_draw_str
+@done:
   rts
 
-; sets the field_table_index based on the position within
-; the form
+; sets current_field_idx based on the given form_item
 ;
 ; inputs:
 ;   form_item         - position within the form
 ; outputs:
-;   field_table_index - index into the field table
+;   current_field_idx - index into the field table
 ;   x                 - the same index
 ; modifies:
 ;   a,x
-int_set_field_table_index:
+int_set_current_field:
   lda metadata+Form::first
   clc
   adc form_item
-  sta field_table_index
+  sta current_field_idx
   tax
   rts
 
@@ -165,15 +266,23 @@ int_set_field_table_index:
 ; modifies:
 ;   a,x,y
 fm_handle_key:
+  lda #FM_ACTION_NONE
+  sta fm_action
+
   lda g_kbdcode_raw
   cmp #KEY_TAB
   beq @focus_next
   cmp #KEY_SHIFT_TAB
   beq @focus_prev
-  cmp #KEY_CTRL_UP
-  beq @value_prev
-  cmp #KEY_CTRL_DOWN
-  beq @value_next
+
+  jsr int_set_current_to_focused
+  lda cfg_field_kind,x
+  cmp #FIELD_SELECT
+  beq @select_key
+  cmp #FIELD_TEXT
+  beq @text_key
+  cmp #FIELD_BUTTON
+  beq @button_key
   clc
   jmp @done
 @focus_next:
@@ -184,12 +293,67 @@ fm_handle_key:
   jsr int_focus_prev
   sec
   jmp @done
-@value_prev:
+@select_key:
+  jsr int_select_handle_key
+  jmp @done
+@text_key:
+  jsr int_edit_text_field
+  jmp @done
+@button_key:
+  jsr int_button_handle_key
+@done:
+  rts
+
+; up and down arrows scroll a select's values
+;
+; inputs:
+;   current_field_idx - index into the field table
+;   g_kbdcode_raw     - the key
+; outputs:
+;   c                 - set if the key was used, clear otherwise
+; modifies:
+;   a,x,y
+int_select_handle_key:
+  lda g_kbdcode_raw
+  cmp #KEY_CTRL_UP
+  beq @prev
+  cmp #KEY_CTRL_DOWN
+  beq @next
+  clc
+  jmp @done
+@prev:
   jsr int_select_prev_value
   sec
   jmp @done
-@value_next:
+@next:
   jsr int_select_next_value
+  sec
+@done:
+  rts
+
+; handles button presses. If return or space were pressed, it
+; sets the action to be taken based on the field table.
+;
+; inputs:
+;   current_field_idx - index into the field table
+;   g_kbdcode_raw     - the key
+; outputs:
+;   fm_action         - the button's action when carry is set
+;   c                 - set if the key was activated, clear otherwise
+; modifies:
+;   a,x
+int_button_handle_key:
+  lda g_kbdcode_raw
+  cmp #KEY_RETURN
+  beq @activate
+  cmp #KEY_SPACE
+  beq @activate
+  clc
+  jmp @done
+@activate:
+  ldx current_field_idx
+  lda cfg_field_arg0,x
+  sta fm_action
   sec
 @done:
   rts
@@ -224,15 +388,130 @@ int_focus_prev:
   jsr int_move_focus
   rts
 
+; handles a key press on a text field. Can filter keys but doesn't
+; do any validation.
+;
+; inputs:
+;   current_field_idx - index into the field table
+;   g_kbdcode_raw     - the key
+; outputs:
+;   c                 - set if the key was accepted, clear if rejected
+; modifies:
+;   a,x,y
+int_edit_text_field:
+  lda g_kbdcode_raw
+  cmp #KEY_CTRL_LEFT
+  beq @cursor_left
+  cmp #KEY_CTRL_RIGHT
+  beq @cursor_right
+  cmp #KEY_DELETE
+  beq @backspace
+  cmp #KEY_CTRL_DELETE
+  beq @char_delete
+  cmp #KEY_CTRL_INSERT
+  beq @char_insert
+  jmp @typechar
+@cursor_left:
+  jsr int_text_set_context
+  jsr li_move_cursor_left
+  jmp @handled
+@cursor_right:
+  jsr int_text_set_context
+  jsr li_move_cursor_right
+  jmp @handled
+@backspace:
+  jsr int_text_set_context
+  jsr li_backspace
+  jmp @handled
+@char_delete:
+  jsr int_text_set_context
+  jsr li_char_delete
+  jmp @handled
+@char_insert:
+  jsr int_text_set_context
+  jsr li_char_insert
+  jmp @handled
+@typechar:
+  jsr int_filter_char
+  bcs @unused
+  sta typed_char
+  jsr int_text_set_context
+  lda typed_char
+  sta CMDDATA0
+  jsr li_type_char
+@handled:
+  sec
+  rts
+@unused:
+  clc
+  rts
+
+; tests the typed character against the set of characters the field
+; allows and optionally modifies the typed char if any mods are set.
+; arg0 in the field table indicates the filter. arg1 is the mods.
+;
+; inputs:
+;   current_field_idx - index into the field table
+;   g_kbdcode_atascii - the character
+; outputs:
+;   a                 - the character to type, when carry is clear
+;   c                 - set if the field does not take the character
+; modifies:
+;   a,x
+int_filter_char:
+  ldx current_field_idx
+  lda cfg_field_arg0,x
+  sta char_classes
+  and #CHAR_ALL
+  bne @accept
+
+  lda g_kbdcode_atascii
+  cmp #' '
+  beq @space
+  cmp #'-'
+  beq @dash
+  cmp #','
+  beq @comma
+  jsr ut_is_alphanumeric
+  bcc @alnum
+  jmp @reject
+@alnum:
+  lda #CHAR_ALNUM
+  jmp @test
+@space:
+  lda #CHAR_SPACE
+  jmp @test
+@dash:
+  lda #CHAR_DASH
+  jmp @test
+@comma:
+  lda #CHAR_COMMA
+@test:
+  and char_classes
+  beq @reject
+@accept:
+  lda cfg_field_arg1,x
+  and #INPUT_UPPER
+  beq @as_typed
+  lda g_kbdcode_atascii
+  jsr ut_to_upper
+  clc
+  rts
+@as_typed:
+  lda g_kbdcode_atascii
+  clc
+  rts
+@reject:
+  sec
+  rts
+
 ; moves the focused select field to the next value, wrapping to its first.
 ;
+; inputs:
+;   current_field_idx - index into the field table
 ; modifies:
 ;   a,x,y
 int_select_next_value:
-  jsr int_set_focused_field
-  lda cfg_field_kind,x
-  cmp #FIELD_SELECT
-  bne @done
   jsr int_select_find_item
   iny
   cpy select_num_items
@@ -241,7 +520,6 @@ int_select_next_value:
 @store:
   sty select_item_index
   jsr int_select_store_item
-@done:
   rts
 
 ; moves the focused select field to the previous value, wrapping to its last.
@@ -249,10 +527,6 @@ int_select_next_value:
 ; modifies:
 ;   a,x,y
 int_select_prev_value:
-  jsr int_set_focused_field
-  lda cfg_field_kind,x
-  cmp #FIELD_SELECT
-  bne @done
   jsr int_select_find_item
   dey
   bpl @store
@@ -261,21 +535,20 @@ int_select_prev_value:
 @store:
   sty select_item_index
   jsr int_select_store_item
-@done:
   rts
 
-; points form_item and field_table_index at the focused field.
+; sets the current field and form_item to the field that is focused.
 ;
 ; outputs:
 ;   form_item         - the focused position
-;   field_table_index - index into the field table
+;   current_field_idx - index into the field table
 ;   x                 - the same index
 ; modifies:
 ;   a,x
-int_set_focused_field:
+int_set_current_to_focused:
   lda metadata+Form::focus
   sta form_item
-  jsr int_set_field_table_index
+  jsr int_set_current_field
   rts
 
 ; writes the item's value into the field's config byte and redraws the
@@ -323,17 +596,17 @@ int_move_focus:
 ; items holds it.
 ;
 ; inputs:
-;   field_table_index - index into the field table
+;   current_field_idx - index into the field table
 ; outputs:
 ;   y                 - the item's position in the field
-;   x                 - field_table_index
+;   x                 - current_field_idx
 ;   select_num_items  - how many items the field has
 ;   field_ptr_lo/hi   - points at the field's config byte
 ;   g_temp_data_ptr   - points at the field's value table
 ; modifies:
 ;   a,x,y
 int_select_find_item:
-  ldx field_table_index
+  ldx current_field_idx
   lda cfg_field_data_lo,x
   sta field_ptr_lo
   lda cfg_field_data_hi,x
@@ -342,7 +615,7 @@ int_select_find_item:
   lda (field_ptr_lo),y
   sta select_value
 
-  lda cfg_field_extra,x
+  lda cfg_field_arg0,x
   sta select_num_items
   lda cfg_field_values_lo,x
   sta g_temp_data_ptr_lo
@@ -364,12 +637,12 @@ int_select_find_item:
 ; value cell, padded with spaces out to the field width.
 ;
 ; inputs:
-;   field_table_index - index into the field table
+;   current_field_idx - index into the field table
 ;   focused_flag      - $80 to draw it focused, $00 otherwise
 ; modifies:
 ;   a,x,y
 int_draw_select:
-  ldx field_table_index
+  ldx current_field_idx
   lda cfg_field_width,x
   sta width
 
@@ -422,7 +695,7 @@ int_draw_select:
 
 metadata:          .tag Form
 form_item:         .res 1
-field_table_index: .res 1
+current_field_idx: .res 1
 focused_flag:      .res 1
 new_focus:         .res 1
 
@@ -430,6 +703,9 @@ width:             .res 1
 select_value:      .res 1
 select_num_items:  .res 1
 select_item_index: .res 1
+typed_char:        .res 1
+char_classes:      .res 1
+fm_action:         .res 1
 
 hint_select:       .byte $1c|$80,$1d|$80,$00
 hint_blank:        .byte "  ",$00

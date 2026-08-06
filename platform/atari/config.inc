@@ -19,7 +19,8 @@ CONFIG_INC = 1
 .global cfg_field_values_hi
 .global cfg_field_labels_lo
 .global cfg_field_labels_hi
-.global cfg_field_extra
+.global cfg_field_arg0
+.global cfg_field_arg1
 
 CONFIG_FLAG_EDITING  = %00000000
 CONFIG_FLAG_CANCELED = %10000000
