@@ -42,7 +42,9 @@ ACK_ICON_ACKED         = '+'
 
 PROMPT_OFFSET          = SCREEN_WIDTH*23
 INPUT_OFFSET           = PROMPT_OFFSET+1
-INPUT_MAX_LEN          = 67
+APRS_INPUT_MAX_LEN     = 67
+TERM_INPUT_MAX_LEN     = 80
+INPUT_BUF_LEN          = TERM_INPUT_MAX_LEN
 
 trm_init:
   lda #PORT_STATUS_OK
@@ -77,10 +79,9 @@ int_init_cmd_line:
   sta cmd_line+LineInput::data_ptr+1
   lda #TERMINAL_WIDTH
   sta cmd_line+LineInput::num_visible
-  lda #INPUT_MAX_LEN
-  sta cmd_line+LineInput::data_size
 
   jsr int_set_cmd_line_context
+  jsr int_update_input_len
   jsr li_shift_clear
   rts
 
@@ -592,6 +593,24 @@ int_update_terminal_eol:
   sta eol_second
   rts
 
+; outputs:
+;   cmd_line data_size - the protocol's line length limit
+; modifies:
+;   a,CMDDATA0
+int_update_input_len:
+  lda cfg_saved_config+Cfg::session+CfgSession::protocol
+  cmp #TERM_PROTOCOL::TERM
+  beq @term
+  lda #APRS_INPUT_MAX_LEN
+  jmp @done
+@term:
+  lda #TERM_INPUT_MAX_LEN
+@done:
+  sta cmd_line+LineInput::data_size
+  sta CMDDATA0
+  jsr li_set_data_size
+  rts
+
 ; every terminator ends a line, no matter what the configured ending is.
 ; last_eol drops the tail of a two byte pair without also swallowing a
 ; deliberate blank line.
@@ -664,6 +683,7 @@ trm_activate:
   jsr int_set_cmd_line_context
   jsr int_update_terminal_mode
   jsr int_update_terminal_eol
+  jsr int_update_input_len
   lda #PORT_STATUS_OPENING
   sta port_status
   lda #CONFIG_FLAG_CANCELED
@@ -1103,7 +1123,6 @@ int_handle_kiss_frame:
 @done:
   rts
 
-; drains what the status call says is waiting, capped at RX_BATCH_MAX
 int_cmd_get_rs232:
   jsr rs232_status
   bcc @have_status
@@ -1232,7 +1251,7 @@ digi_idx:               .res 1
 digi_offset:            .res 1
 
 cmd_line:               .tag LineInput
-cmd_line_data:          .res INPUT_MAX_LEN
+cmd_line_data:          .res INPUT_BUF_LEN
 
 command_error:          .byte 0
 rx_remaining:           .byte 0

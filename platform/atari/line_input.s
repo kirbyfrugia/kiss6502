@@ -52,6 +52,13 @@ no_cache:
 set_context_done:
   rts
 
+; inputs:
+;   CMDDATA0 - the new data size
+li_set_data_size:
+  lda CMDDATA0
+  sta li_metadata+LineInput::data_size
+  rts
+
 li_repaint:
   ldx li_metadata+LineInput::first_visible
   ldy #0

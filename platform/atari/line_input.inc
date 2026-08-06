@@ -14,6 +14,7 @@ LINE_INPUT_INC = 1
 .globalzp li_metadata
 .global   li_init_context
 .global   li_set_context
+.global   li_set_data_size
 .global   li_repaint
 .global   li_hide_cursor
 .global   li_show_cursor
