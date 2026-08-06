@@ -48,6 +48,9 @@ PCTL_KISS_INC = 1
 .global pk_parse_callsign
 .global pk_callsign
 .global pk_ssid
+.global pk_ack_state
+.global pk_repeats
+.global pk_have_sent
 
 APRS_CALLSIGN_LEN = 6
 APRS_MAX_MSG_LEN  = 67
@@ -84,6 +87,12 @@ KISS_ADDRESSEE_LEN             = 9
 KISS_ACK_PREFIX_LEN = 3
 KISS_MSG_ID_MIN_LEN = 1
 KISS_MSG_ID_MAX_LEN = 5
+KISS_MSG_ID_LEN     = 4
+
+KISS_ACK_STATE_NONE    = 0
+KISS_ACK_STATE_PENDING = 1
+KISS_ACK_STATE_ACKED   = 2
+KISS_REPEATS_MAX       = 99
 
 KISS_SEND_FLAG_TRIM_END  = %10000000
 KISS_SEND_FLAG_NO_MSG_ID = %01000000

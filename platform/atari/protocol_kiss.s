@@ -15,10 +15,10 @@ fmt_data_lo:  .res 1
 fmt_data_hi:  .res 1
 
 ; ':' + addressee + ':' + text + '{' + 4 hex digits
-PK_TX_BUF_LEN = 1 + KISS_ADDRESSEE_LEN + 1 + APRS_MAX_MSG_LEN + 1 + 4
+PK_TX_BUF_LEN     = 1 + KISS_ADDRESSEE_LEN + 1 + APRS_MAX_MSG_LEN + 1 + 4
 
-DEDUP_N = 32            ; must be a power of 2, the write index wraps with an AND
-DEDUP_TTL_SECS = 30
+DEDUP_N           = 32  ; must be a power of 2, the write index wraps with an AND
+DEDUP_TTL_SECS    = 30
 DEDUP_TICK_FRAMES = 60  ; number of VBIs before running the dedup ttl expire function
 
 .segment "CODE"
@@ -39,6 +39,10 @@ pk_reset:
   sta msg_id_lo
   lda #0
   sta msg_id_hi
+  sta pk_repeats
+  sta pk_have_sent
+  lda #KISS_ACK_STATE_NONE
+  sta pk_ack_state
   jsr pk_next_frame
   rts
 
@@ -386,7 +390,7 @@ pk_send_message:
   lda send_flags
   bmi @trim
   lda buf_size
-  beq @data_empty; was empty string
+  beq @data_empty
   bne @ready
 @data_empty:
   jmp @done
@@ -400,7 +404,7 @@ pk_send_message:
   sta CMDDATA2
   lda ut_result
   sta buf_size
-  beq @all_spaces; was an empty string
+  beq @all_spaces
   bne @ready
 @all_spaces:
   jmp @done
@@ -417,7 +421,6 @@ pk_send_message:
   jsr int_putchr_escaped
   bcs @to_error
 
-  ; TODO: don't hard-code the header
   ldy #0
 @dest_loop:
   sty tempy
@@ -453,7 +456,6 @@ pk_send_message:
   cpy pk_digi_len
   bne @digi_loop
 @digi_done:
-
   lda #$03 ; ui frame
   jsr int_putchr_escaped
   bcs @error
@@ -498,11 +500,19 @@ pk_send_message:
   ora #KISS_HIGHLIGHT_ADDRESSEE
 @highlight_set:
   sta highlight_flags
-
+  jsr int_compute_frame_crc
   jsr int_format_message
   jsr int_finalize_disp
 @echo_done:
-
+  lda send_flags
+  and #KISS_SEND_FLAG_NO_ECHO
+  bne @id_done
+  jsr int_track_sent_msg
+  lda send_flags
+  and #KISS_SEND_FLAG_NO_MSG_ID
+  bne @id_done
+  jsr int_track_sent_msg_id
+@id_done:
   lda send_flags
   and #KISS_SEND_FLAG_NO_MSG_ID
   bne @done
@@ -797,6 +807,8 @@ int_process_byte:
   rts
 
 pk_process_frame:
+  lda #0
+  sta g_disp_buf_num_lines
   lda #<g_disp_buf
   sta g_temp_data_ptr_lo
   lda #>g_disp_buf
@@ -806,12 +818,7 @@ pk_process_frame:
   lda g_rx_buf+0
   cmp #':'
   beq pkpf_message
-;  cmp #'>'
-;  beq pkpf_status
   bne pkpf_done
-;pkpf_status:
-;  jsr int_process_status
-;  jmp pkpf_done
 pkpf_message:
   jsr int_process_message
 pkpf_done:
@@ -835,7 +842,7 @@ int_fend:
 @done:
   rts
 
-; renders a message into the display buffer and computes its crc.
+; renders a message into the display buffer.
 ;
 ; inputs:
 ;   fmt_hdr_lo/hi   - ptr to the frame header
@@ -845,11 +852,10 @@ int_fend:
 ;                     to invert relevant chars
 ; outputs:
 ;   y_index_var     - one past the last char written
+;   msg_id_idx      - start index of the message id in fmt_data, zero if none
 ; modifies:
 ;   a,x,y
 int_format_message:
-  jsr crc_reset
-
   lda #<g_disp_buf
   sta g_temp_data_ptr_lo
   lda #>g_disp_buf
@@ -872,7 +878,7 @@ int_format_message:
   sta x_index_var_end
   lda #' '
   sta terminator
-  jsr int_read_until_terminator_with_crc
+  jsr int_read_until_terminator
   stx highlight_addr_end
 
   lda #KISS_TYPE_MSG_END_COLON_IDX
@@ -883,7 +889,7 @@ int_format_message:
   sta msg_id_idx
   lda #'{'
   sta terminator
-  jsr int_read_until_terminator_with_crc
+  jsr int_read_until_terminator
   bcc @finalize ; no message id
   iny
   cpy fmt_len
@@ -895,21 +901,13 @@ int_format_message:
   sta g_disp_buf,x
   inx
 
-  stx tempx
-  lda terminator
-  jsr crc_upd
-  ldx tempx
-  jsr int_read_until_end_with_crc
+  jsr int_read_until_end
 @finalize:
   stx y_index_var
-  jsr int_add_header_bytes_to_crc
-  ; make sure this is never called before the crc!
   jsr int_apply_highlights
   rts
 
 ; inverts the relevant callsigns
-; NOTE to future me: this has to run after the crc is complete, or the inverse
-; bit would affect the crc.
 ;
 ; inputs:
 ;   highlight_flags      - which callsigns to invert
@@ -964,9 +962,6 @@ int_process_message:
   cmp #KISS_TYPE_MSG_END_COLON_IDX
   bcc @done ; not a valid message
 
-  jsr int_is_our_source
-  bcs @done ; ignore messages with us as the source, coming back from repeaters
-
   lda #<pk_frame_header
   sta fmt_hdr_lo
   lda #>pk_frame_header
@@ -978,18 +973,17 @@ int_process_message:
   lda g_rx_buf_num_chars
   sta fmt_len
 
+  jsr int_is_our_source
+  bcc @not_ours
+  jsr int_count_repeat
+  jmp @done
+@not_ours:
   jsr int_is_ack
   bcc @message
-
   jsr int_is_our_addressee
   bcc @done
-  lda #0
-  sta highlight_flags
-  jsr int_format_message
-  jsr int_check_duplicate
-  bcs @done
-  jsr int_build_ack_line
-  jmp @display
+  jsr int_match_sent_ack
+  jmp @done
 @message:
   jsr int_is_our_addressee
   lda #0
@@ -997,9 +991,10 @@ int_process_message:
   lda #KISS_HIGHLIGHT_ADDRESSEE
 @flags_set:
   sta highlight_flags
-  jsr int_format_message
+  jsr int_compute_frame_crc
   jsr int_check_duplicate
   bcs @done
+  jsr int_format_message
   lda highlight_flags
   and #KISS_HIGHLIGHT_ADDRESSEE
   beq @display
@@ -1008,96 +1003,6 @@ int_process_message:
   jsr int_finalize_disp
 @done:
   rts
-
-;int_process_status:
-;  lda #<g_disp_buf
-;  sta g_temp_data_ptr_lo
-;  lda #>g_disp_buf
-;  sta g_temp_data_ptr_hi
-;
-;  ldy #0
-;  lda #'['
-;  sta g_disp_buf,y
-;
-;  iny
-;  ldx #KissFrameHeader::source
-;  stx x_index_var
-;  jsr int_addr_to_buf
-;
-;  lda #']'
-;  sta g_disp_buf,y
-;
-;  iny
-;
-;  ; empty statuses are allowed, but we don't
-;  ; want to try parsing the string
-;  lda g_rx_buf_num_chars
-;  cmp #2 ; first char is '>' no matter what
-;  bcs @not_empty
-;  jmp @finalize
-;@not_empty:
-;  lda #' '
-;  sta g_disp_buf,y
-;
-;  lda g_rx_buf_num_chars
-;  cmp #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
-;  bcc @nozulu
-;  ldx #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
-;  lda g_rx_buf,x
-;  cmp #'z'
-;  beq @zulu
-;  cmp #'Z'
-;  beq @zulu
-;  ldx #1
-;  bne @nozulu
-;@zulu:
-;  ; might be a timestamp, confirm
-;  ldx #1
-;  stx x_index_var
-;  ldx #KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX
-;  stx x_index_var_end
-;  jsr int_all_digits
-;  bcc @nozulu
-;
-;  lda #' '
-;  sta g_disp_buf,y
-;
-;  ; it's a timestamp. Convert from DDHHmm to HH:mm
-;  ldx #3
-;  iny
-;  lda g_rx_buf,x
-;  sta g_disp_buf,y
-;  iny
-;  inx
-;  lda g_rx_buf,x
-;  sta g_disp_buf,y
-;  iny
-;  lda #':'
-;  sta g_disp_buf,y
-;  iny
-;  inx
-;  lda g_rx_buf,x
-;  sta g_disp_buf,y
-;  iny
-;  inx
-;  lda g_rx_buf,x
-;  sta g_disp_buf,y
-;  iny
-;  lda #' '
-;  sta g_disp_buf,y
-;  inx
-;  inx
-;@nozulu:
-;  iny
-;  stx x_index_var
-;  lda g_rx_buf_num_chars
-;  sta x_index_var_end
-;  jsr int_read_until_end
-;@finalize:
-;  sty y_index_var
-;  jsr int_finalize_disp
-;@done:
-;  rts
 
 ; finalizes the output once all the real data
 ; has been added to the display buffer.
@@ -1145,9 +1050,8 @@ int_finalize_disp:
   rts
 
 ; reads the info field from x_index_var to x_index_var_end
-; until the given terminator char appears, updating the crc
-; with each char written. the terminator itself is not
-; written or added to the crc.
+; until the given terminator char appears. the terminator itself
+; is not written.
 ;
 ; assumes x_index_var_end - x_index_var > 1
 ;
@@ -1162,17 +1066,14 @@ int_finalize_disp:
 ;   y - index of the terminator, or x_index_var_end
 ;   x - index of last written char + 1
 ; modifies:
-;   a, ZPB0
-int_read_until_terminator_with_crc:
+;   a
+int_read_until_terminator:
   ldy x_index_var
 @loop:
   lda (fmt_data_lo),y
   cmp terminator
   beq @found
   sta g_disp_buf,x
-  stx ZPB0
-  jsr crc_upd
-  ldx ZPB0
   inx
   iny
   cpy x_index_var_end
@@ -1183,8 +1084,7 @@ int_read_until_terminator_with_crc:
   sec
   rts
 
-; reads the info field from x_index_var to x_index_var_end,
-; updating the crc with each char written.
+; reads the info field from x_index_var to x_index_var_end.
 ;
 ; assumes x_index_var_end - x_index_var > 1
 ;
@@ -1197,15 +1097,12 @@ int_read_until_terminator_with_crc:
 ;   y - index of last read char + 1
 ;   x - index of last written char + 1
 ; modifies:
-;   a, ZPB0
-int_read_until_end_with_crc:
+;   a
+int_read_until_end:
   ldy x_index_var
 @loop:
   lda (fmt_data_lo),y
   sta g_disp_buf,x
-  stx ZPB0
-  jsr crc_upd
-  ldx ZPB0
   inx
   iny
   cpy x_index_var_end
@@ -1213,15 +1110,30 @@ int_read_until_end_with_crc:
 @done:
   rts
 
-; adds the dest and source addresses from the frame header
-; to the crc. digipeaters are not included because we use the
-; crc to detect duplicates, and we might have the same message
-; received from multiple digipeaters. control and pid never change
-; so aren't included, either.
+; computes the crc that identifies a frame.
+; includes dest&source&info.
+; does not include digipeaters because it's a repeat when we hear from digis.
+; does not include control&pid because they never change.
 ;
+; inputs:
+;   fmt_hdr_lo/hi  - ptr to the frame header
+;   fmt_data_lo/hi - ptr to the info field
+;   fmt_len        - number of chars in the info field
+; outputs:
+;   crc_lo/crc_hi  - crc of the frame
 ; modifies:
 ;   a,x,y
-int_add_header_bytes_to_crc:
+int_compute_frame_crc:
+  jsr crc_reset
+
+  ldy #0
+@data_loop:
+  lda (fmt_data_lo),y
+  jsr crc_upd
+  iny
+  cpy fmt_len
+  bne @data_loop
+
   ldy #KissFrameHeader::dest
 @dest_loop:
   lda (fmt_hdr_lo),y
@@ -1329,45 +1241,6 @@ int_send_ack:
 @done:
   rts
 
-; builds a display line for a ":msg #xxxx acked message"
-;
-; inputs:
-;   fmt_data_lo/hi - ptr to the info field
-;   fmt_len        - number of chars in the info field
-; outputs:
-;   y_index_var    - one past the last char written
-; modifies:
-;   a,x,y
-int_build_ack_line:
-  ldx #0
-@prefix_loop:
-  lda str_msg_num,x
-  beq @id_loop
-  sta g_disp_buf,x
-  inx
-  bne @prefix_loop
-@id_loop:
-  ldy #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN)
-@id_copy_loop:
-  lda (fmt_data_lo),y
-  sta g_disp_buf,x
-  inx
-  iny
-  cpy fmt_len
-  bne @id_copy_loop
-
-  ldy #0
-@suffix_loop:
-  lda str_acked,y
-  beq @done
-  sta g_disp_buf,x
-  inx
-  iny
-  bne @suffix_loop
-@done:
-  stx y_index_var
-  rts
-
 ; checks whether the received message is an ack
 ;
 ; inputs:
@@ -1400,6 +1273,112 @@ int_is_ack:
   rts
 @not_ack:
   clc
+  rts
+
+; tracks the message we just sent so we can recognize it coming back
+; from a digipeater. every new send restarts the repeat count.
+;
+; inputs:
+;   crc_lo/crc_hi - crc of the message we sent
+; modifies:
+;   a
+int_track_sent_msg:
+  lda #1
+  sta pk_have_sent
+  lda #0
+  sta pk_repeats
+  lda #KISS_ACK_STATE_NONE
+  sta pk_ack_state
+  lda crc_lo
+  sta pk_sent_crc_lo
+  lda crc_hi
+  sta pk_sent_crc_hi
+  rts
+
+; records the id of the message we just sent as text so we can
+; easily match its ack
+;
+; inputs:
+;   msg_id_lo/hi - the id we sent
+; modifies:
+;   a,y
+;   CMDDATA0/1
+int_track_sent_msg_id:
+  lda #<pk_sent_msg_id
+  sta CMDDATA0
+  lda #>pk_sent_msg_id
+  sta CMDDATA1
+  ldy #0
+  lda msg_id_hi
+  jsr ut_hex_to_atascii
+  ldy #2
+  lda msg_id_lo
+  jsr ut_hex_to_atascii
+
+  lda #KISS_ACK_STATE_PENDING
+  sta pk_ack_state
+  rts
+
+; counts a digipeated copy of the message we last sent.
+;
+; inputs:
+;   fmt_hdr_lo/hi  - ptr to the frame header
+;   fmt_data_lo/hi - ptr to the info field
+;   fmt_len        - number of chars in the info field
+; modifies:
+;   a,x,y
+int_count_repeat:
+  lda pk_have_sent
+  beq @done
+
+  jsr int_compute_frame_crc
+
+  lda crc_lo
+  cmp pk_sent_crc_lo
+  bne @done
+  lda crc_hi
+  cmp pk_sent_crc_hi
+  bne @done
+
+  lda pk_repeats
+  cmp #KISS_REPEATS_MAX
+  beq @done
+  inc pk_repeats
+@done:
+  rts
+
+; marks the message we last sent as acked if this ack matches the id.
+;
+; inputs:
+;   fmt_data_lo/hi - ptr to the info field
+;   fmt_len        - number of chars in the info field
+; modifies:
+;   a,x,y
+int_match_sent_ack:
+  lda pk_ack_state
+  cmp #KISS_ACK_STATE_PENDING
+  bne @done
+
+  lda fmt_len
+  sec
+  sbc #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN)
+  cmp #KISS_MSG_ID_LEN
+  bne @done
+
+  ldx #0
+  ldy #(KISS_TYPE_MSG_TEXT_IDX+KISS_ACK_PREFIX_LEN)
+@id_loop:
+  lda (fmt_data_lo),y
+  cmp pk_sent_msg_id,x
+  bne @done
+  iny
+  inx
+  cpx #KISS_MSG_ID_LEN
+  bne @id_loop
+
+  lda #KISS_ACK_STATE_ACKED
+  sta pk_ack_state
+@done:
   rts
 
 ; checks the crc of the frame we just read against the ones
@@ -1512,7 +1491,6 @@ x_index_var:            .res 1
 x_index_var_end:        .res 1
 y_index_var:            .res 1
 btwn_counter:           .res 1
-tempx:                  .res 1
 tempy:                  .res 1
 tempchr:                .res 1
 ssid_tmp:               .res 1
@@ -1530,8 +1508,6 @@ highlight_addr_end:     .res 1
 highlight_span_start:   .res 1
 highlight_span_end:     .res 1
 
-str_msg_num:            .byte ":msg #",$00
-str_acked:              .byte " acked",$00
 pk_callsign:            .res APRS_CALLSIGN_LEN
 pk_ssid:                .res 1
 
@@ -1549,6 +1525,12 @@ pk_broadcast_addressee: .byte "CQ",$00
 fmt_len:                .res 1
 msg_id_lo:              .res 1
 msg_id_hi:              .res 1
+pk_sent_msg_id:         .res KISS_MSG_ID_LEN
+pk_sent_crc_lo:         .res 1
+pk_sent_crc_hi:         .res 1
+pk_ack_state:           .byte KISS_ACK_STATE_NONE
+pk_repeats:             .byte 0
+pk_have_sent:           .byte 0
 pk_tx_header:           .tag KissFrameHeader
 pk_tx_buf:              .res PK_TX_BUF_LEN
 pk_tx_buf_num_chars:    .res 1

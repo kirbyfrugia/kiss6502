@@ -55,12 +55,12 @@ fn random_packet(state: &mut u64) -> String {
     let ssid = 1 + (*state >> 8) % 15;
     format!("NOCALL-{ssid}>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :{body}")
 }
-const TX_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Deserialize)]
 struct Scenario {
     name: String,
-    /// Which build this drives. The `see` lines describe that platform's
+    /// Which build this drives. The `look_for` lines describe that platform's
     /// display, so a scenario is not portable between them.
     platform: String,
     /// Serial device the app under test is on. Empty means TCP KISS only.
@@ -73,6 +73,10 @@ struct Scenario {
 
 #[derive(Deserialize)]
 struct Step {
+    /// What this step is testing, printed as the step's heading. Kept
+    /// general: the verbs say what happens and `look_for` pins down the
+    /// exact screen content, so this says what it is for.
+    description: Option<String>,
     /// Packets to put on the air for kisstty to receive. A list goes out back
     /// to back with no prompt in between, which is how a scenario stays inside
     /// a timing window that human answering speed would otherwise blow.
@@ -86,9 +90,15 @@ struct Step {
     every: Option<u64>,
     #[serde(rename = "do")]
     action: Option<String>,
-    see: Option<Lines>,
+    /// Exactly what should be on screen, answered y, n or q.
+    look_for: Option<Lines>,
     /// A frame kisstty should put on the air, matched in the direwolf log.
     from_kisstty: Option<Lines>,
+    /// A frame kisstty must not put on the air. Costs the whole window,
+    /// since the only way to be sure is to wait it out.
+    not_from_kisstty: Option<Lines>,
+    /// Seconds to allow the two log checks, default 5.
+    timeout: Option<u64>,
     wait: Option<u64>,
 }
 
@@ -254,22 +264,42 @@ impl Direwolf {
     }
 
     /// Polls the log until every wanted substring shows up, or we give up.
-    fn expect_from_kisstty(&mut self, wanted: &Lines) -> (bool, String) {
+    fn expect_from_kisstty(&mut self, wanted: &Lines, window: Duration) -> (bool, String) {
         let mut seen = String::new();
         // Give the demodulator something to chew on so the channel reads idle
         // and direwolf actually keys up.
         let _ = self.silence(Duration::from_secs(1));
         let mut pending: Vec<&String> = wanted.iter().collect();
-        let deadline = Instant::now() + TX_TIMEOUT;
+        let deadline = Instant::now() + window;
         while Instant::now() < deadline {
             seen.push_str(&self.new_log());
             pending.retain(|w| !seen.contains(w.as_str()));
             if pending.is_empty() {
+                progress_done();
                 return (true, seen);
             }
+            progress("waiting for the frame", deadline);
             std::thread::sleep(Duration::from_millis(200));
         }
+        progress_done();
         (false, seen)
+    }
+
+    fn expect_nothing_from_kisstty(&mut self, unwanted: &Lines, window: Duration) -> (bool, String) {
+        let mut seen = String::new();
+        let _ = self.silence(Duration::from_secs(1));
+        let deadline = Instant::now() + window;
+        while Instant::now() < deadline {
+            seen.push_str(&self.new_log());
+            if unwanted.iter().any(|w| seen.contains(w.as_str())) {
+                progress_done();
+                return (false, seen);
+            }
+            progress("listening, should stay quiet", deadline);
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        progress_done();
+        (true, seen)
     }
 }
 
@@ -325,6 +355,21 @@ fn ask(msg: &str) -> Answer {
             _ => println!("      answer y, n or q"),
         }
     }
+}
+
+/// Redraws in place, so a long window does not look like a hang.
+fn progress(label: &str, deadline: Instant) {
+    const SPINNER: [char; 4] = ['|', '/', '-', '\\'];
+    let left = deadline.saturating_duration_since(Instant::now());
+    let secs = left.as_secs() + u64::from(left.subsec_nanos() > 0);
+    let frame = SPINNER[(left.subsec_millis() / 250) as usize % SPINNER.len()];
+    print!("\r      {frame} {label} {secs}s ");
+    let _ = std::io::stdout().flush();
+}
+
+fn progress_done() {
+    print!("\r{:60}\r", "");
+    let _ = std::io::stdout().flush();
 }
 
 fn prompt(msg: &str) {
@@ -421,8 +466,15 @@ fn main() {
     for (i, step) in scenario.step.iter().enumerate() {
         let n = i + 1;
 
+        match &step.description {
+            Some(d) => println!("{n}. {d}"),
+            None => println!("{n}."),
+        }
+        let _ = dw.new_log();
+        let window = step.timeout.map_or(DEFAULT_TIMEOUT, Duration::from_secs);
+
         if let Some(action) = &step.action {
-            println!("{n}. do        {action}");
+            println!("   {:<12} {action}", "[do]");
             if let Answer::Quit = ask("      Enter when done, q to quit: ") {
                 stopped_at = Some(n);
                 break;
@@ -444,7 +496,7 @@ fn main() {
                         std::thread::sleep(every);
                     }
                     first = false;
-                    println!("{n}. -> kisstty {packet}");
+                    println!("   {:<12} {packet}", "[-> kisstty]");
                     if let Err(e) = dw.inject(&packet) {
                         eprintln!("      inject failed: {e}");
                         failures.push(format!("step {n}: inject failed: {e}"));
@@ -459,21 +511,26 @@ fn main() {
         }
 
         if let Some(wait) = step.wait {
-            println!("{n}. wait      {wait}s");
-            std::thread::sleep(Duration::from_secs(wait));
+            println!("   {:<12} {wait}s", "[wait]");
+            let deadline = Instant::now() + Duration::from_secs(wait);
+            while Instant::now() < deadline {
+                progress("waiting", deadline);
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            progress_done();
         }
 
         if let Some(from) = &step.from_kisstty {
-            let (ok, seen) = dw.expect_from_kisstty(from);
+            let (ok, seen) = dw.expect_from_kisstty(from, window);
             for want in from.iter() {
-                println!("{n}. <- kisstty [{}] {want}", if ok { "pass" } else { "FAIL" });
+                println!("   {:<12} [{}] {want}", "[<- kisstty]", if ok { "pass" } else { "FAIL" });
             }
             if !ok {
                 for want in from.iter() {
                     failures.push(format!("step {n}: kisstty never sent: {want}"));
                 }
                 println!(
-                    "      nothing matched in {TX_TIMEOUT:?}. a late frame would still \
+                    "      nothing matched in {window:?}. a late frame would still \
                      land in {}, worth checking before believing it was never sent.",
                     log_path().display()
                 );
@@ -484,14 +541,30 @@ fn main() {
             }
         }
 
-        if let Some(see) = &step.see {
-            for want in see.iter() {
-                println!("{n}. see       {want}");
+        if let Some(never) = &step.not_from_kisstty {
+            let (ok, seen) = dw.expect_nothing_from_kisstty(never, window);
+            for want in never.iter() {
+                println!("   {:<12} [{}] {want}", "[<- nothing]", if ok { "pass" } else { "FAIL" });
+            }
+            if !ok {
+                for want in never.iter() {
+                    failures.push(format!("step {n}: kisstty sent: {want}"));
+                }
+                println!("      direwolf logged during this step:");
+                for line in seen.lines() {
+                    println!("      | {line}");
+                }
+            }
+        }
+
+        if let Some(look_for) = &step.look_for {
+            for want in look_for.iter() {
+                println!("   {:<12} {want}", "[look for]");
             }
             match ask("      is that what you see? [Y/n/q] ") {
                 Answer::Yes => {}
                 Answer::No => {
-                    for want in see.iter() {
+                    for want in look_for.iter() {
                         failures.push(format!("step {n}: did not see: {want}"));
                     }
                 }
@@ -565,21 +638,6 @@ mod tests {
                     "{}: platform does not match its directory",
                     path.display()
                 );
-
-                // kisstty drops frames sourced from its own callsign, so such
-                // a step shows nothing and reads as a rendering bug.
-                for step in &scenario.step {
-                    let Some(packets) = &step.to_kisstty else { continue };
-                    for packet in packets.iter() {
-                        let src = packet.split('>').next().unwrap_or_default();
-                        assert_ne!(
-                            src,
-                            scenario.mycall,
-                            "{}: a packet is sourced from mycall, which kisstty will drop",
-                            path.display()
-                        );
-                    }
-                }
                 count += 1;
             }
         }

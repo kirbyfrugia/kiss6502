@@ -24,7 +24,7 @@ KISS only.
 `tests/scenarios/<platform>/` and the `platform` field inside each file have to agree,
 and `cargo test -p scenario-runner` enforces it.
 
-This matters because the `see` lines describe one platform's screen. The atari scenarios
+This matters because the `look_for` lines describe one platform's screen. The atari scenarios
 assume the 40 column display, its `SOURCE>ADDRESSEE:text#id` line format, and its `/tx`
 command, so they mean nothing against the rust build. The runner itself is platform
 neutral: it only knows about direwolf, packets, and prompting you.
@@ -38,25 +38,33 @@ serial = "/tmp/altirra-tty"   # omit for tcp kiss only
 mycall = "NOCALL"
 
 [[step]]
+description  = "a message addressed to us is acked automatically"
 to_kisstty   = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Test message{0001"
-see          = "NOCALL-7>NOCALL:Test message#0001"
 from_kisstty = "::NOCALL-7 :ack0001"
+look_for     = "NOCALL-7>NOCALL:Test message#0001"
 ```
 
 Direction is always named from both ends, so there is no perspective to guess at.
 
 | verb | what it does |
 |---|---|
+| `description` | what the step is testing, printed as its heading. keep it general: the verbs say what happens and `look_for` pins down the screen, so this says what it is for |
 | `to_kisstty` | a TNC2 packet, or a list of them, to put on the air for kisstty to receive |
-| `from_kisstty` | substring the direwolf log must contain, polled for 5s. **checked automatically** |
-| `see` | what should be on screen. answer `y`, `n` or `q` |
+| `from_kisstty` | substring the direwolf log must contain. **checked automatically** |
+| `not_from_kisstty` | substring the direwolf log must **not** contain. **checked automatically**, and costs the whole window since the only way to be sure is to wait it out |
+| `timeout` | seconds to allow the two log checks, default 5 |
+| `look_for` | what should be on screen. answer `y`, `n` or `q` |
 | `do` | something for you to do, like sending a message. Enter when done, `q` to quit |
 | `wait` | seconds to sleep, for crossing the 30s dedup window |
 | `random` | send a message from the built in corpus instead of a literal `to_kisstty` |
 | `repeat` | how many times to inject. `0` runs until you interrupt it, so put nothing after it |
 | `every` | seconds between repeats, default 1 |
 
-`see`, `from_kisstty` and `to_kisstty` all take a string or a list of strings.
+`look_for`, `from_kisstty`, `not_from_kisstty` and `to_kisstty` all take a string or a
+list of strings.
+
+Keys within a step read in the order the runner runs them: `description`, `do`,
+`to_kisstty`, `wait`, `timeout`, `from_kisstty`, `not_from_kisstty`, `look_for`.
 
 Word a `do` step for the moment it is read, not for what happens next. The runner is
 blocked waiting for you, so "watch for X" before the traffic starts leaves you waiting
@@ -70,13 +78,18 @@ the whole group in one `to_kisstty` list and check the result once at the end.
 `repeat` and `every` apply to `to_kisstty` and `random` alike, which is how `soak.toml` runs
 indefinitely until you ctrl-c out of it.
 
-Only `from_kisstty` can fail on its own, because the runner cannot see the atari screen.
-For `see`
-you are the check: `y` passes, `n` records a failure and carries on, `q` stops the run.
+Only `from_kisstty` and `not_from_kisstty` can fail on their own, because the runner
+cannot see the atari screen. For `look_for` you are the check: `y` passes, `n` records a failure and carries on, `q` stops the run.
 Enter is the same as `y`.
 
 A scenario exits non-zero if anything failed or if you quit early, and prints what went
 wrong at the end. Quitting counts as not passing, since the remaining steps never ran.
+
+Each step reads only what direwolf logged during that step, so a frame from an earlier
+step can neither satisfy a `from_kisstty` nor trip a `not_from_kisstty`.
+
+Anything the app must *not* put on the air belongs in `not_from_kisstty`, not in a
+`look_for`. There is nothing on the atari screen that shows a frame was never sent.
 
 Write `from_kisstty` as the shortest substring that pins the frame down. Matching on the whole
 TNC2 line means reproducing direwolf's monitor prefix and whatever digipeater path is in
@@ -88,9 +101,11 @@ Everything uses `NOCALL` and its SSID variants so no real callsign ends up in th
 By convention bare `NOCALL` is the station under test and `NOCALL-n` is whoever is on
 the other end. Where a scenario needs a peer with no SSID, use `NOCAL2`.
 
-**Never source a `to_kisstty` packet from the scenario's own `mycall`.** kisstty drops frames
-whose source is its own callsign, because it already showed them when it sent them, so
-such a step silently displays nothing and looks like a rendering bug.
+A `to_kisstty` packet sourced from the scenario's own `mycall` is a digipeated copy of our
+own traffic. kisstty already showed the message when it sent it, so the frame never reaches
+the screen: it counts against the last message sent, shows up in the status bar `rpt:` field,
+and is dropped. `repeats.toml` is built on that. Anywhere else, a step that sources from
+`mycall` and then waits for a line to appear will wait forever.
 
 Watch the addressee field. APRS pads it to nine characters, so `NOCALL   :` has three
 significant trailing spaces and `NOCALL-15:` has none. Getting that wrong means the

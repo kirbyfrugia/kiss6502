@@ -22,10 +22,17 @@ PORT_STATUS_OPENING    = 1
 PORT_STATUS_NO_HANDLER = 2
 
 BAR_TX_LABEL_COL       = 1
-BAR_TX_COL             = 5
-BAR_STATUS_LABEL_COL   = 24
-BAR_STATUS_COL         = 32
+BAR_TX_COL             = 4
+BAR_RPT_LABEL_COL      = 13
+BAR_RPT_COL            = 17
+BAR_ACK_LABEL_COL      = 20
+BAR_ACK_COL            = 24
+BAR_STATUS_LABEL_COL   = 32
+BAR_STATUS_COL         = 35
 BAR_ROW_OFFSET         = SCREEN_WIDTH*22
+
+ACK_ICON_PENDING       = '_'
+ACK_ICON_ACKED         = '+'
 
 PROMPT_OFFSET          = SCREEN_WIDTH*23
 INPUT_OFFSET           = PROMPT_OFFSET+1
@@ -187,6 +194,46 @@ int_draw_status_bar:
   lda #BAR_TX_COL
   sta CMDDATA2
   jsr int_bar_draw_str
+
+  lda pk_have_sent
+  beq @ack
+
+  lda #<str_rpt_label
+  sta CMDDATA0
+  lda #>str_rpt_label
+  sta CMDDATA1
+  lda #BAR_RPT_LABEL_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
+
+  jsr int_repeats_to_text
+  lda #<repeats_text
+  sta CMDDATA0
+  lda #>repeats_text
+  sta CMDDATA1
+  lda #BAR_RPT_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
+@ack:
+  lda pk_ack_state
+  beq @status_label
+
+  lda #<str_ack_label
+  sta CMDDATA0
+  lda #>str_ack_label
+  sta CMDDATA1
+  lda #BAR_ACK_LABEL_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
+
+  jsr int_ack_state_to_text
+  lda #<ack_state_text
+  sta CMDDATA0
+  lda #>ack_state_text
+  sta CMDDATA1
+  lda #BAR_ACK_COL
+  sta CMDDATA2
+  jsr int_bar_draw_str
 @status_label:
   lda #<str_status_label
   sta CMDDATA0
@@ -198,11 +245,17 @@ int_draw_status_bar:
   jsr int_draw_status
   rts
 
-; draws the port status into the status bar
+; draws the port status into the status bar.
 ;
 ; modifies:
 ;   a,x,y
 int_draw_status:
+  lda pk_ack_state
+  sta last_ack_state
+  lda pk_repeats
+  sta last_repeats
+  lda pk_have_sent
+  sta last_have_sent
   lda port_status
   sta last_status
   cmp #PORT_STATUS_OK
@@ -275,14 +328,92 @@ int_status_code_to_text:
   sta status_code_text+2
   rts
 
-; redraws the status bar if the status has changed.
+; renders the ack state into ack_state_text
+;
+; modifies:
+;   a
+int_ack_state_to_text:
+  lda pk_ack_state
+  cmp #KISS_ACK_STATE_ACKED
+  beq @acked
+  lda #ACK_ICON_PENDING
+  jmp @store
+@acked:
+  lda #ACK_ICON_ACKED
+@store:
+  sta ack_state_text
+  rts
+
+; renders pk_repeats into repeats_text
+;
+; modifies:
+;   a,x,y
+int_repeats_to_text:
+  lda pk_repeats
+  jsr ut_bin_to_bcd
+
+  lda ut_result
+  lsr
+  lsr
+  lsr
+  lsr
+  tay
+  lda ut_hex_table_atascii,y
+  sta repeats_text+0
+
+  lda ut_result
+  and #%00001111
+  tay
+  lda ut_hex_table_atascii,y
+  sta repeats_text+1
+  rts
+
+; prints the port error to the terminal. called when the status
+; changes, so the user only sees it once per failure.
+;
+; modifies:
+;   a,x,y
+int_report_status:
+  lda port_status
+  cmp #PORT_STATUS_NO_HANDLER
+  beq @no_handler
+  cmp #NONDEV
+  beq @no_850
+  cmp #TIMOUT
+  beq @timeout
+  jmp @done
+@no_handler:
+  print_str str_no_r
+  jmp @done
+@no_850:
+  print_str str_no_850
+  jmp @done
+@timeout:
+  print_str str_timeout
+@done:
+  rts
+
+; redraws the status bar if anything it shows has changed.
 ;
 ; modifies:
 ;   a,x,y
 int_update_status:
   lda port_status
   cmp last_status
+  beq @check_ack
+  jsr int_report_status
+  jmp @redraw
+@check_ack:
+  lda pk_ack_state
+  cmp last_ack_state
+  bne @redraw
+  lda pk_repeats
+  cmp last_repeats
+  bne @redraw
+  lda pk_have_sent
+  cmp last_have_sent
   beq @done
+@redraw:
   jsr int_draw_status_bar
 @done:
   rts
@@ -866,21 +997,33 @@ str_error_rs232_getchr: .byte "Error on RS232 getchr",$00
 str_error_rs232_putchr: .byte "Error on RS232 putchr",$00
 
 str_cmd_tx:             .byte "/TX",$00
-str_tx_label:           .byte "tx: ",$00
+str_tx_label:           .byte "tx:",$00
+str_ack_label:          .byte "ack:",$00
+str_rpt_label:          .byte "rpt:",$00
 str_invalid_callsign:   .byte "invalid callsign",$00
 str_unknown_command:    .byte "unknown command",$00
 str_port_not_open:      .byte "port not open",$00
+str_no_850:             .byte "850 not found",$00
+str_no_r:               .byte "R: handler not found",$00
+str_timeout:            .byte "Timeout",$00
 
-str_status_label:       .byte "status: ",$00
-str_status_ok:          .byte "ok",$00
-str_status_opening:     .byte "opening",$00
-str_status_no_850:      .byte "no 850",$00
-str_status_no_handler:  .byte "no r:",$00
-str_status_timeout:     .byte "timeout",$00
+str_status_label:       .byte "st:",$00
+str_status_ok:          .byte "OK",$00
+str_status_opening:     .byte "...",$00
+str_status_no_850:      .byte "!850",$00
+str_status_no_handler:  .byte "!-R:",$00
+str_status_timeout:     .byte "! TO",$00
 
 status_code_text:       .res 3
                         .byte $00
+ack_state_text:         .res 1
+                        .byte $00
+repeats_text:           .res 2
+                        .byte $00
 last_status:            .res 1
+last_ack_state:         .res 1
+last_repeats:           .res 1
+last_have_sent:         .res 1
 
 tx_addressee:           .res KISS_ADDRESSEE_LEN+1
 tx_send_flags:          .res 1
