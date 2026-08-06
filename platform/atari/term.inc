@@ -3,19 +3,24 @@ TERM_INC = 1
 
 .global trm_init
 .global trm_activate
+.global trm_deactivate
 .global trm_tick
 
-.enum TERM_MODE
+TERM_EOL_CR      = $0d
+TERM_EOL_LF      = $0a
+TERM_EOL_ATASCII = $9b
+
+.enum TERMINAL_MODE
   NONE  = %00000000
   CHAR  = %10000000
   LINE  = %01000000
 .endenum
 
 .enum TERM_LINE_ENDING
-  CR      = 1
-  LF      = 2
-  CRLF    = 3
-  ATASCII = 4
+  CR      = 0
+  LF      = 1
+  CRLF    = 2
+  ATASCII = 3
 .endenum
 
 .enum TERM_PROTOCOL

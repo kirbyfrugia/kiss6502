@@ -45,6 +45,8 @@ ATARI_SRCS      = main.s \
 		  utils.s \
 		  wozmon.s
 
+ATARI_INCS     = $(wildcard $(ATARI_DIR)/*.inc)
+
 ATARI_BLDDIR   = $(BLDDIR)/atari/release
 ATARI_ATR_DIR  = $(ATARI_BLDDIR)/atr
 ATARI_XEX      = $(ATARI_BLDDIR)/kisstty.xex
@@ -69,11 +71,11 @@ atari-debug: $(ATARI_ATR_DBG)
 $(ATARI_BLDDIR) $(ATARI_ATR_DIR) $(ATARI_BLDDIR_DBG) $(ATARI_ATR_DIR_DBG):
 	mkdir -p $@
 
-$(ATARI_BLDDIR)/%.o: $(ATARI_DIR)/%.s | $(ATARI_BLDDIR)
+$(ATARI_BLDDIR)/%.o: $(ATARI_DIR)/%.s $(ATARI_INCS) | $(ATARI_BLDDIR)
 	$(CA65) --target atari -I $(CA65INC) $(CA65FLAGS) \
 	    --listing $(ATARI_BLDDIR)/$*.lst -o $@ $<
 
-$(ATARI_BLDDIR_DBG)/%.o: $(ATARI_DIR)/%.s | $(ATARI_BLDDIR_DBG)
+$(ATARI_BLDDIR_DBG)/%.o: $(ATARI_DIR)/%.s $(ATARI_INCS) | $(ATARI_BLDDIR_DBG)
 	$(CA65) --target atari -I $(CA65INC) $(CA65FLAGS_DBG) \
 	    --listing $(ATARI_BLDDIR_DBG)/$*.lst -o $@ $<
 

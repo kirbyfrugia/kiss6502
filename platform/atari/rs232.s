@@ -6,12 +6,15 @@
 .include "utils.inc"
 
 .segment "CODE"
-WRITE_BUF_LEN             = 512
+RX_BUF_LEN                = 512
 CMD_CONFIGURE_TRANSLATION = $26
 CMD_CONTROL               = $22
 CMD_CONCURRENCY_MODE      = $28
 CMD_CONFIGURE_BAUD        = $24
 
+; opens the port.
+; caller is expected to all close here first if needed.
+;
 ; inputs:
 ;   x - channel
 rs232_open:
@@ -22,13 +25,10 @@ rs232_open:
   sta ICBAL,x
   lda #>dev_name ; R1
   sta ICBAH,x
- 
-  lda #CLOSE
-  sta ICCOM,x
-  jsr CIOV
 
   ; set control lines
-  ldx iocb
+  lda #RS232_STAGE::CONTROL
+  sta rs232_open_stage
   lda #CMD_CONTROL
   sta ICCOM,x
   lda cfg_saved_config+Cfg::serial+CfgSerial::dtr
@@ -43,6 +43,8 @@ rs232_open:
 @open_port:
   ; open port
   ldx iocb
+  lda #RS232_STAGE::OPEN
+  sta rs232_open_stage
   lda #OPEN
   sta ICCOM,x
   lda #$0d ; input, output, concurrent
@@ -54,6 +56,8 @@ rs232_open:
   jmp @error
 @configure_baud:
   ldx iocb
+  lda #RS232_STAGE::BAUD
+  sta rs232_open_stage
   lda #CMD_CONFIGURE_BAUD
   sta ICCOM,x
   lda #0
@@ -69,6 +73,8 @@ rs232_open:
   jmp @error
 @configure_translation:
   ldx iocb
+  lda #RS232_STAGE::TRANSLATION
+  sta rs232_open_stage
   lda #CMD_CONFIGURE_TRANSLATION
   sta ICCOM,x
   lda cfg_saved_config+Cfg::serial+CfgSerial::translation
@@ -81,17 +87,19 @@ rs232_open:
   bpl @start_concurrent
   jmp @error
 @start_concurrent:
-  ; start concurrent mode
+  ; start concurrent mode.
   ldx iocb
+  lda #RS232_STAGE::CONCURRENT
+  sta rs232_open_stage
   lda #CMD_CONCURRENCY_MODE 
   sta ICCOM,x
-  lda #<write_buf
+  lda #<rx_buf
   sta ICBAL,x
-  lda #>write_buf
+  lda #>rx_buf
   sta ICBAH,x
-  lda #<WRITE_BUF_LEN
+  lda #<RX_BUF_LEN
   sta ICBLL,x
-  lda #>WRITE_BUF_LEN
+  lda #>RX_BUF_LEN
   sta ICBLH,x
   lda #$0c ; concurrent mode
   sta ICAX1,x
@@ -203,12 +211,15 @@ rs232_close:
   sec
   rts
 
-write_buf:                .res WRITE_BUF_LEN
+; the handler stores one byte past the length it is given, so reserving
+; one extra byte.
+rx_buf:                   .res RX_BUF_LEN+1
 dev_name:                 .byte "R1",$9b
 iocb:                     .byte 48
 output_char:              .byte 0,$9b
 tempy:                    .res 1
 
 rs232_last_status:        .byte 0
+rs232_open_stage:         .byte 0
 rs232_input_buffer_size:  .byte 0, 0
 rs232_output_buffer_size: .byte 0

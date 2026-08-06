@@ -8,8 +8,19 @@ RS232_INC = 1
 .global rs232_putchr
 .global rs232_putchrs
 .global rs232_last_status
+.global rs232_open_stage
 .global rs232_input_buffer_size
 .global rs232_output_buffer_size
+
+; which CIOV call in rs232_open was last attempted, so a failure is easier
+; to diagnose
+.enum RS232_STAGE
+  CONTROL     = 2
+  OPEN        = 3
+  BAUD        = 4
+  TRANSLATION = 5
+  CONCURRENT  = 6
+.endenum
 
 ; enums for configuring rs232
 

@@ -2,6 +2,9 @@
 
 > [!NOTE]
 > Unlike the main app, this test program was vibe-coded by claude, guided by me.
+> I haven't even looked at this code. It's likely horrible based on my experiences
+> with it. But it's working for what I needed.
+> Don't judge me.
 
 Manual-with-assist tests. A scenario drives a live direwolf, injects real 1200 baud
 packets, and walks you through checking what the app under test does with them.
@@ -15,6 +18,14 @@ cargo run -p scenario-runner -- tests/scenarios/atari/acks.toml
 Start Altirra, kisstty, and socat first, and let the scenario's opening prompt tell
 you which callsign to configure. The runner starts direwolf itself and stops it on the
 way out, so do not have one already running. It refuses to start if port 8001 is taken.
+
+Direwolf only starts if the scenario actually needs it, meaning some step uses
+`to_kisstty`, `random`, `from_kisstty` or `not_from_kisstty`. A scenario built only from
+`do` and `look_for` steps drives the app some other way, so the runner leaves direwolf and
+the serial device alone and skips the callsign prompt. `line-endings.toml` is one of those:
+it runs kisstty in terminal mode and writes raw bytes to the atari's serial device itself.
+`mycall` is therefore only required when a scenario uses direwolf, and `cargo test` enforces
+that.
 
 An optional second argument overrides the scenario's serial device. Pass `''` for TCP
 KISS only.
@@ -56,6 +67,8 @@ Direction is always named from both ends, so there is no perspective to guess at
 | `look_for` | what should be on screen. answer `y`, `n` or `q` |
 | `do` | something for you to do, like sending a message. Enter when done, `q` to quit |
 | `wait` | seconds to sleep, for crossing the 30s dedup window |
+| `to_serial` | raw bytes to write straight to the serial device, backslash escaped |
+| `from_serial` | bytes the app should put on the serial device. **checked automatically**, with the same `timeout` |
 | `random` | send a message from the built in corpus instead of a literal `to_kisstty` |
 | `repeat` | how many times to inject. `0` runs until you interrupt it, so put nothing after it |
 | `every` | seconds between repeats, default 1 |
@@ -64,7 +77,32 @@ Direction is always named from both ends, so there is no perspective to guess at
 list of strings.
 
 Keys within a step read in the order the runner runs them: `description`, `do`,
-`to_kisstty`, `wait`, `timeout`, `from_kisstty`, `not_from_kisstty`, `look_for`.
+`to_kisstty`, `to_serial`, `wait`, `timeout`, `from_kisstty`, `not_from_kisstty`,
+`from_serial`, `look_for`.
+
+## Driving the serial device directly
+
+`to_serial` and `from_serial` skip direwolf and the radio entirely and talk to the app over
+its serial device, which is what a terminal mode scenario needs. A scenario cannot use these
+and direwolf at the same time, because direwolf would already have the device open, and
+`cargo test` rejects one that tries.
+
+Both take backslash escapes: `\r`, `\n`, `\t`, `\0`, `\\` and `\xNN` for any byte.
+
+> [!IMPORTANT]
+> Write these values in **TOML literal strings**, with single quotes. In a double quoted
+> string TOML expands the escape first, so `"\x9b"` reaches the runner as the character
+> U+009B and goes out as the two UTF-8 bytes `c2 9b` rather than the one byte you wrote.
+> `\r` and `\n` happen to survive that, which is what makes the bug easy to miss. The
+> runner refuses any non-ASCII character rather than sending it, so this fails loudly.
+
+```toml
+to_serial   = 'ATASCII ONE\x9bATASCII TWO\x9b'
+from_serial = 'AB\r\n'
+```
+
+The device comes from the scenario's `serial` field, overridden by the runner's second
+argument, so a real atari on a real port is a command line change and not an edit.
 
 Word a `do` step for the moment it is read, not for what happens next. The runner is
 blocked waiting for you, so "watch for X" before the traffic starts leaves you waiting

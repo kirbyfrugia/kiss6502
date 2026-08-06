@@ -81,6 +81,7 @@ main_loop:
   sta current_state
   cmp #STATE_RUNNING
   beq @switch_to_running
+  jsr trm_deactivate
   jsr scr_cls
   jsr cfg_activate
   lda #0

@@ -48,8 +48,8 @@ CONFIG_FLAG_START    = %11000000
 .endstruct
 
 .struct CfgTerm
-  mode        .byte
-  line_ending .byte
+  terminal_mode .byte
+  line_ending   .byte
 .endstruct
 
 .struct CfgAprsAddr
@@ -79,12 +79,12 @@ CONFIG_FLAG_START    = %11000000
 
 
 
-.macro make_config  config, _protocol, _mode, _line_ending, _baud, _data_bits, \
+.macro make_config  config, _protocol, _terminal_mode, _line_ending, _baud, _data_bits, \
                    _stop_bits, _parity, _cts, _dsr, _dtr, _rets
   lda #_protocol
   sta config+Cfg::session+CfgSession::protocol
-  lda #_mode
-  sta config+Cfg::term+CfgTerm::mode
+  lda #_terminal_mode
+  sta config+Cfg::term+CfgTerm::terminal_mode
   lda #_line_ending
   sta config+Cfg::term+CfgTerm::line_ending
   lda #_baud

@@ -19,7 +19,8 @@ BOOTSTRAP      = $0506     ; loader entry ($0500 load address plus a 6-byte boot
 INSTALL_OFFSET = $03b3     ; offset from MEMLO to the handler's "add R: to HATABS" routine
 BOOT_HANDOFF   = $03e9     ; the loader jumps here once it's done relocating the handler
 
-HATABS_ENTRIES = 8
+; 38 bytes at $031a: 12 three byte entries then a two byte terminator.
+HATABS_ENTRIES = 12
 HATABS_SIZE    = HATABS_ENTRIES * 3
 
 ; Boot the 850. Bootstraps and loads the 850's R: handler

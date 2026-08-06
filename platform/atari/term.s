@@ -21,6 +21,12 @@ PORT_STATUS_OK         = 0
 PORT_STATUS_OPENING    = 1
 PORT_STATUS_NO_HANDLER = 2
 
+RX_BATCH_MAX           = 32
+
+TERM_CHAR_PRINT        = 0
+TERM_CHAR_EOL          = 1
+TERM_CHAR_DROP         = 2
+
 BAR_TX_LABEL_COL       = 1
 BAR_TX_COL             = 4
 BAR_RPT_LABEL_COL      = 13
@@ -41,8 +47,10 @@ INPUT_MAX_LEN          = 67
 trm_init:
   lda #PORT_STATUS_OK
   sta port_status
-  lda #TERM_MODE::NONE
-  sta current_mode
+  lda #0
+  sta last_eol
+  jsr int_update_terminal_mode
+  jsr int_update_terminal_eol
 
   jsr to_init
   jsr int_init_cmd_line
@@ -375,21 +383,28 @@ int_repeats_to_text:
 ;   a,x,y
 int_report_status:
   lda port_status
+  cmp #PORT_STATUS_OK
+  beq @no_error
+  cmp #PORT_STATUS_OPENING
+  beq @no_error
   cmp #PORT_STATUS_NO_HANDLER
   beq @no_handler
   cmp #NONDEV
   beq @no_850
   cmp #TIMOUT
   beq @timeout
+  print_str_with_code str_port_error, g_copy_buffer40, port_status
+  jmp @done
+@no_error:
   jmp @done
 @no_handler:
-  print_str str_no_r
+  print_str_with_code str_no_r, g_copy_buffer40, port_status
   jmp @done
 @no_850:
-  print_str str_no_850
+  print_str_with_code str_no_850, g_copy_buffer40, port_status
   jmp @done
 @timeout:
-  print_str str_timeout
+  print_str_with_code str_timeout, g_copy_buffer40, port_status
 @done:
   rts
 
@@ -548,9 +563,74 @@ int_set_digi_addrs:
 @done:
   rts
 
+; outputs:
+;   terminal_mode - a TERMINAL_MODE value
+; modifies:
+;   a
+int_update_terminal_mode:
+  lda cfg_saved_config+Cfg::session+CfgSession::protocol
+  cmp #TERM_PROTOCOL::TERM
+  beq @configured
+  lda #TERMINAL_MODE::LINE
+  jmp @done
+@configured:
+  lda cfg_saved_config+Cfg::term+CfgTerm::terminal_mode
+@done:
+  sta terminal_mode
+  rts
+
+; outputs:
+;   eol_first  - the byte that ends a line
+;   eol_second - the second byte, zero when the ending is one byte
+; modifies:
+;   a,x
+int_update_terminal_eol:
+  ldx cfg_saved_config+Cfg::term+CfgTerm::line_ending
+  lda eol_table_first,x
+  sta eol_first
+  lda eol_table_second,x
+  sta eol_second
+  rts
+
+; every terminator ends a line, no matter what the configured ending is.
+; last_eol drops the tail of a two byte pair without also swallowing a
+; deliberate blank line.
+;
+; inputs:
+;   a - the received char
+; outputs:
+;   a - TERM_CHAR_PRINT, TERM_CHAR_EOL or TERM_CHAR_DROP
+; modifies:
+;   a,x
+int_classify_char:
+  cmp #TERM_EOL_CR
+  beq @terminator
+  cmp #TERM_EOL_LF
+  beq @terminator
+  cmp #TERM_EOL_ATASCII
+  beq @terminator
+  ldx #0
+  stx last_eol
+  lda #TERM_CHAR_PRINT
+  jmp @done
+@terminator:
+  ldx last_eol
+  beq @ends_line
+  cmp last_eol
+  beq @ends_line
+  ldx #0
+  stx last_eol
+  lda #TERM_CHAR_DROP
+  jmp @done
+@ends_line:
+  sta last_eol
+  lda #TERM_CHAR_EOL
+@done:
+  rts
+
 int_repaint:
-  lda cfg_saved_config+Cfg::term+CfgTerm::mode
-  cmp #TERM_MODE::CHAR
+  lda terminal_mode
+  cmp #TERMINAL_MODE::CHAR
   beq @char_mode
   jsr int_repaint_line_mode
   jmp @done
@@ -561,8 +641,8 @@ int_repaint:
 
 int_reset:
   jsr int_reset_protocol
-  lda cfg_saved_config+Cfg::term+CfgTerm::mode
-  cmp #TERM_MODE::CHAR
+  lda terminal_mode
+  cmp #TERMINAL_MODE::CHAR
   beq @char_mode
   jsr int_reset_line_mode
   jmp @done
@@ -571,15 +651,30 @@ int_reset:
 @done:
   rts
 
+; closes the port on the way out to config. in concurrent mode the 850
+; owns the sio bus until the close, and the file tab does disk i/o.
+;
+; modifies:
+;   a,x,y
+trm_deactivate:
+  jsr rs232_close
+  rts
+
 trm_activate:
   jsr int_set_cmd_line_context
+  jsr int_update_terminal_mode
+  jsr int_update_terminal_eol
+  lda #PORT_STATUS_OPENING
+  sta port_status
   lda #CONFIG_FLAG_CANCELED
   bit cfg_config_flag
   bvc @just_repaint
-  lda #PORT_STATUS_OPENING
-  sta port_status
   jsr int_reset
   jsr int_repaint
+  jmp @open_port
+@just_repaint:
+  jsr int_repaint
+@open_port:
   jsr int_cmd_boot850
   lda port_status
   cmp #PORT_STATUS_OPENING
@@ -594,15 +689,12 @@ trm_activate:
   jmp @done
 @port_error:
   jsr int_update_status
-  jmp @done
-@just_repaint:
-  jsr int_repaint
 @done:
   rts
 
 trm_tick:
-  lda cfg_saved_config+Cfg::term+CfgTerm::mode
-  cmp #TERM_MODE::CHAR
+  lda terminal_mode
+  cmp #TERMINAL_MODE::CHAR
   beq @char_mode
   jsr int_handle_kbd_line_mode
   jmp @rs232
@@ -665,14 +757,55 @@ ism_success:
 ism_done:
   rts
 
+; sends a raw line vs trying to parse slash commands or process the line
+;
+; modifies:
+;   a,x,y,ZPB0-5,CMDDATA0-5
+int_send_raw_line:
+  lda port_status
+  cmp #PORT_STATUS_OK
+  bne @port_closed
+
+  lda #<cmd_line_data
+  sta CMDDATA0
+  lda #>cmd_line_data
+  sta CMDDATA1
+  lda cmd_line+LineInput::data_size
+  sta CMDDATA2
+  jsr ut_str_trim_end_find
+
+  lda ut_result
+  sta CMDDATA2
+  beq @line_ending
+  jsr rs232_putchrs
+  bcs @error_putchr
+@line_ending:
+  jsr int_cmd_put_line_ending
+  jmp @done
+@error_putchr:
+  sty command_error
+  sty port_status
+  print_str_with_code str_error_rs232_putchr, g_copy_buffer40, command_error
+  jmp @done
+@port_closed:
+  print_str str_port_not_open
+@done:
+  rts
+
 int_cmd_line_mode_return:
+  lda cfg_saved_config+Cfg::session+CfgSession::protocol
+  cmp #TERM_PROTOCOL::TERM
+  beq @term
   lda cmd_line_data
   cmp #'/'
-  bne @not_slash
+  bne @message
   jsr int_run_command
   jmp @done
-@not_slash:
+@message:
   jsr int_send_message
+  jmp @done
+@term:
+  jsr int_send_raw_line
 @done:
   jsr li_shift_clear
   rts
@@ -819,13 +952,27 @@ int_build_tx_addressee:
 int_handle_kbd_char_mode:
   lda g_kbd_key_pressed
   beq @done
+  lda g_kbdcode_raw
+  cmp #$0c
+  beq @return
+  cmp #$76 ; shift+clear ($b4 on atari 800 emulator)
+  beq @clear
+  cmp #$b6 ; ctrl+clear
+  beq @clear
   lda g_kbdcode_atascii
   beq @done
+  sta put_char
   jsr int_cmd_put_rs232
+  jmp @done
+@return:
+  jsr int_cmd_put_line_ending
+  jmp @done
 ;  todo: implement echo
 ;  lda g_kbdcode_atascii
 ;  sta CMDDATA0
 ;  jsr to_append_char
+@clear:
+  jsr to_clear_and_home
 @done:
   rts
 
@@ -842,9 +989,9 @@ int_handle_kbd_line_mode:
   cmp #$34
   beq @backspace
   cmp #$76 ; shift+clear ($b4 on atari 800 emulator)
-  beq @shift_clear
+  beq @clear
   cmp #$b6 ; ctrl+clear
-  beq @shift_clear
+  beq @clear
   cmp #$74 ; shift+delete bs
   beq @shift_clear
   cmp #$b7 ; ctrl+insert
@@ -865,6 +1012,9 @@ int_handle_kbd_line_mode:
   jmp @done
 @shift_clear:
   jsr li_shift_clear
+  jmp @done
+@clear:
+  jsr to_clear_and_home
   jmp @done
 @char_insert:
   jsr li_char_insert
@@ -898,6 +1048,7 @@ int_cmd_open_rs232:
 @error:
   sty command_error
   sty port_status
+  print_str_with_code str_open_stage, g_copy_buffer40, rs232_open_stage
 @done:
   rts
 
@@ -910,8 +1061,17 @@ int_handle_byte_read:
   bne @done
 @term:
   lda rs232_byte_read
+  jsr int_classify_char
+  cmp #TERM_CHAR_DROP
+  beq @done
+  cmp #TERM_CHAR_EOL
+  beq @term_eol
+  lda rs232_byte_read
   sta CMDDATA0
   jsr to_append_char
+  jmp @done
+@term_eol:
+  jsr to_end_line
   jmp @done
 @aprs:
   lda rs232_byte_read
@@ -943,21 +1103,33 @@ int_handle_kiss_frame:
 @done:
   rts
 
+; drains what the status call says is waiting, capped at RX_BATCH_MAX
 int_cmd_get_rs232:
   jsr rs232_status
-  bcs @error_status
+  bcc @have_status
+  jmp @error_status
+@have_status:
   lda rs232_input_buffer_size+1
-  bne @read
+  bne @full_batch
   lda rs232_input_buffer_size
-  bne @read
+  bne @partial_batch
   jmp @done
-@read:
+@partial_batch:
+  cmp #RX_BATCH_MAX
+  bcc @batch_ready
+@full_batch:
+  lda #RX_BATCH_MAX
+@batch_ready:
+  sta rx_remaining
+@read_loop:
   jsr rs232_getchr
-  bcc @read_success
+  bcc @read_ok
   jmp @error_getchr
-@read_success:
+@read_ok:
   sta rs232_byte_read
   jsr int_handle_byte_read
+  dec rx_remaining
+  bne @read_loop
   jmp @done
 @error_status:
   sty command_error
@@ -971,13 +1143,15 @@ int_cmd_get_rs232:
 @done:
   rts
 
-; writes a single char from kbd to rs232
+; inputs:
+;   put_char - the char to write
+; modifies:
+;   a,x,y
 int_cmd_put_rs232:
   lda port_status
   cmp #PORT_STATUS_OK
   bne @done
-  lda g_kbdcode_atascii
-  beq @done
+  lda put_char
   jsr rs232_putchr
   bcs @error_putchr
   jmp @done
@@ -988,9 +1162,23 @@ int_cmd_put_rs232:
 @done:
   rts
 
+; modifies:
+;   a,x,y
+int_cmd_put_line_ending:
+  lda eol_first
+  sta put_char
+  jsr int_cmd_put_rs232
+
+  lda eol_second
+  beq @done
+  sta put_char
+  jsr int_cmd_put_rs232
+@done:
+  rts
+
 top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"config "
                         .byte $00
-current_mode:           .res 1
+terminal_mode:          .res 1
 
 str_error_rs232_status: .byte "Error on RS232 status",$00
 str_error_rs232_getchr: .byte "Error on RS232 getchr",$00
@@ -1006,6 +1194,8 @@ str_port_not_open:      .byte "port not open",$00
 str_no_850:             .byte "850 not found",$00
 str_no_r:               .byte "R: handler not found",$00
 str_timeout:            .byte "Timeout",$00
+str_port_error:         .byte "Port error",$00
+str_open_stage:         .byte "Open failed at stage",$00
 
 str_status_label:       .byte "st:",$00
 str_status_ok:          .byte "OK",$00
@@ -1025,8 +1215,16 @@ last_ack_state:         .res 1
 last_repeats:           .res 1
 last_have_sent:         .res 1
 
+eol_table_first:        .byte TERM_EOL_CR, TERM_EOL_LF, TERM_EOL_CR, TERM_EOL_ATASCII
+eol_table_second:       .byte 0,           0,           TERM_EOL_LF, 0
+
+eol_first:              .res 1
+eol_second:             .res 1
+last_eol:               .res 1
+
 tx_addressee:           .res KISS_ADDRESSEE_LEN+1
 tx_send_flags:          .res 1
+put_char:               .res 1
 cmd_char:               .res 1
 cmd_arg_idx:            .res 1
 cmd_ssid:               .res 1
@@ -1037,6 +1235,7 @@ cmd_line:               .tag LineInput
 cmd_line_data:          .res INPUT_MAX_LEN
 
 command_error:          .byte 0
+rx_remaining:           .byte 0
 
 rs232_byte_read:        .byte 0
 port_status:            .byte 0

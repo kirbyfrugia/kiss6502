@@ -4,6 +4,7 @@ use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const KISS_PORT: u16 = 8001;
@@ -66,6 +67,8 @@ struct Scenario {
     /// Serial device the app under test is on. Empty means TCP KISS only.
     #[serde(default)]
     serial: String,
+    /// Only needed by a scenario that uses direwolf.
+    #[serde(default)]
     mycall: String,
     #[serde(default)]
     step: Vec<Step>,
@@ -81,6 +84,11 @@ struct Step {
     /// to back with no prompt in between, which is how a scenario stays inside
     /// a timing window that human answering speed would otherwise blow.
     to_kisstty: Option<Lines>,
+    /// Raw bytes to write straight to the serial device, backslash escaped.
+    /// For scenarios driving the app directly rather than over the air.
+    to_serial: Option<Lines>,
+    /// Bytes the app should put on the serial device. **Checked automatically**.
+    from_serial: Option<Lines>,
     /// Send a message picked from LOREM instead of a literal `to_kisstty`.
     #[serde(default)]
     random: bool,
@@ -383,6 +391,148 @@ fn log_path() -> PathBuf {
     std::env::temp_dir().join("kisstty-scenario.log")
 }
 
+/// Turns the backslash escapes a scenario writes into the bytes to put on the
+/// wire. Line endings are the whole point of these steps, so they have to be
+/// writable exactly and visibly.
+fn unescape(text: &str) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            if !c.is_ascii() {
+                return Err(format!(
+                    "non-ascii {c:?}. write the byte as \\xNN, and use a TOML literal \
+                     string (single quotes) so TOML does not eat the escape first"
+                ));
+            }
+            out.push(c as u8);
+            continue;
+        }
+        match chars.next() {
+            Some('r') => out.push(b'\r'),
+            Some('n') => out.push(b'\n'),
+            Some('t') => out.push(b'\t'),
+            Some('0') => out.push(0),
+            Some('\\') => out.push(b'\\'),
+            Some('x') => {
+                let hi = chars.next().ok_or("\\x needs two hex digits")?;
+                let lo = chars.next().ok_or("\\x needs two hex digits")?;
+                let byte = u8::from_str_radix(&format!("{hi}{lo}"), 16)
+                    .map_err(|_| format!("bad hex escape \\x{hi}{lo}"))?;
+                out.push(byte);
+            }
+            Some(other) => return Err(format!("unknown escape \\{other}")),
+            None => return Err("trailing backslash".into()),
+        }
+    }
+    Ok(out)
+}
+
+/// Renders bytes back the way a scenario would write them, so a failure is
+/// readable when the difference is a line ending.
+fn escape(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    for &b in bytes {
+        match b {
+            b'\r' => out.push_str("\\r"),
+            b'\n' => out.push_str("\\n"),
+            b'\t' => out.push_str("\\t"),
+            0x20..=0x7e => out.push(b as char),
+            _ => out.push_str(&format!("\\x{b:02x}")),
+        }
+    }
+    out
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty() && haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// The app's serial device, for scenarios that drive it directly instead of
+/// going through direwolf. A thread drains it continuously so bytes the app
+/// sends while you are typing are still there when the step checks for them.
+struct Serial {
+    dev: File,
+    rx: Arc<Mutex<Vec<u8>>>,
+}
+
+impl Serial {
+    fn open(path: &str) -> Result<Self, String> {
+        let dev = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| format!("opening {path}: {e}. is socat running?"))?;
+        let reader = dev.try_clone().map_err(|e| format!("cloning {path}: {e}"))?;
+        let rx = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&rx);
+        std::thread::spawn(move || {
+            let mut reader = reader;
+            let mut buf = [0u8; 256];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                if let Ok(mut sink) = sink.lock() {
+                    sink.extend_from_slice(&buf[..n]);
+                }
+            }
+        });
+        Ok(Self { dev, rx })
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
+        self.dev.write_all(bytes).map_err(|e| format!("writing to serial: {e}"))?;
+        self.dev.flush().map_err(|e| format!("flushing serial: {e}"))
+    }
+
+    fn new_window(&self) {
+        if let Ok(mut rx) = self.rx.lock() {
+            rx.clear();
+        }
+    }
+
+    fn seen(&self) -> Vec<u8> {
+        self.rx.lock().map(|rx| rx.clone()).unwrap_or_default()
+    }
+
+    /// Waits for every wanted byte string to show up, or for the window to run
+    /// out. Returns what was seen either way.
+    fn expect(&self, wants: &[Vec<u8>], window: Duration) -> (bool, Vec<u8>) {
+        let deadline = Instant::now() + window;
+        loop {
+            let seen = self.seen();
+            if wants.iter().all(|w| contains(&seen, w)) {
+                return (true, seen);
+            }
+            if Instant::now() >= deadline {
+                return (false, seen);
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
+
+/// Whether the scenario drives the serial device itself.
+fn uses_serial(scenario: &Scenario) -> bool {
+    scenario
+        .step
+        .iter()
+        .any(|s| s.to_serial.is_some() || s.from_serial.is_some())
+}
+
+/// Whether anything in the scenario actually needs direwolf. A scenario made
+/// only of `do` and `look_for` steps drives the app some other way, so starting
+/// direwolf would take the serial device for nothing.
+fn uses_direwolf(scenario: &Scenario) -> bool {
+    scenario.step.iter().any(|s| {
+        s.to_kisstty.is_some()
+            || s.random
+            || s.from_kisstty.is_some()
+            || s.not_from_kisstty.is_some()
+    })
+}
+
 fn stop_stray_direwolf() {
     let pid = DIREWOLF_PID.swap(0, Ordering::SeqCst);
     if pid != 0 {
@@ -436,24 +586,59 @@ fn main() {
     let serial = serial_override.unwrap_or_else(|| scenario.serial.clone());
 
     println!("== {} ({}) ==", scenario.name, scenario.platform);
-    if serial.is_empty() {
-        println!("kiss over tcp on port {KISS_PORT}");
-    } else {
-        println!("kiss over serial on {serial}");
-    }
-    prompt(&format!(
-        "Set your kisstty callsign to {} (no SSID unless shown), then press Enter: ",
-        scenario.mycall
-    ));
 
-    let mut dw = match Direwolf::start(&template, &serial, &scenario.mycall) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(1);
+    let mut dw = if uses_direwolf(&scenario) {
+        if scenario.mycall.is_empty() {
+            eprintln!("{path}: this scenario sends or checks packets, so it needs a mycall");
+            std::process::exit(2);
         }
+        if serial.is_empty() {
+            println!("kiss over tcp on port {KISS_PORT}");
+        } else {
+            println!("kiss over serial on {serial}");
+        }
+        prompt(&format!(
+            "Set your kisstty callsign to {} (no SSID unless shown), then press Enter: ",
+            scenario.mycall
+        ));
+        match Direwolf::start(&template, &serial, &scenario.mycall) {
+            Ok(d) => {
+                println!("direwolf up, log at /tmp/kisstty-scenario.log\n");
+                Some(d)
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        println!("no step sends or checks a packet, so direwolf is not started");
+        None
     };
-    println!("direwolf up, log at /tmp/kisstty-scenario.log\n");
+
+    let mut ser = if uses_serial(&scenario) {
+        if dw.is_some() {
+            eprintln!(
+                "{path}: this scenario drives the serial device itself and also uses \
+                 direwolf, which has the same device open. split it in two."
+            );
+            std::process::exit(2);
+        }
+        if serial.is_empty() {
+            eprintln!("{path}: to_serial and from_serial need a serial device");
+            std::process::exit(2);
+        }
+        println!("driving the serial device on {serial} directly\n");
+        match Serial::open(&serial) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
 
     let mut rng = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -470,7 +655,12 @@ fn main() {
             Some(d) => println!("{n}. {d}"),
             None => println!("{n}."),
         }
-        let _ = dw.new_log();
+        if let Some(dw) = dw.as_mut() {
+            let _ = dw.new_log();
+        }
+        if let Some(ser) = ser.as_ref() {
+            ser.new_window();
+        }
         let window = step.timeout.map_or(DEFAULT_TIMEOUT, Duration::from_secs);
 
         if let Some(action) = &step.action {
@@ -497,6 +687,7 @@ fn main() {
                     }
                     first = false;
                     println!("   {:<12} {packet}", "[-> kisstty]");
+                    let dw = dw.as_mut().expect("direwolf runs whenever a step injects");
                     if let Err(e) = dw.inject(&packet) {
                         eprintln!("      inject failed: {e}");
                         failures.push(format!("step {n}: inject failed: {e}"));
@@ -506,6 +697,25 @@ fn main() {
                 done += 1;
                 if repeat != 0 && done >= repeat {
                     break;
+                }
+            }
+        }
+
+        if let Some(to_serial) = &step.to_serial {
+            let ser = ser.as_mut().expect("serial is open whenever a step writes to it");
+            for chunk in to_serial.iter() {
+                match unescape(chunk) {
+                    Ok(bytes) => {
+                        println!("   {:<12} {}", "[-> serial]", escape(&bytes));
+                        if let Err(e) = ser.write(&bytes) {
+                            eprintln!("      {e}");
+                            failures.push(format!("step {n}: {e}"));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("      bad escape in to_serial: {e}");
+                        failures.push(format!("step {n}: bad escape in to_serial: {e}"));
+                    }
                 }
             }
         }
@@ -521,6 +731,7 @@ fn main() {
         }
 
         if let Some(from) = &step.from_kisstty {
+            let dw = dw.as_mut().expect("direwolf runs whenever a step checks a frame");
             let (ok, seen) = dw.expect_from_kisstty(from, window);
             for want in from.iter() {
                 println!("   {:<12} [{}] {want}", "[<- kisstty]", if ok { "pass" } else { "FAIL" });
@@ -542,6 +753,7 @@ fn main() {
         }
 
         if let Some(never) = &step.not_from_kisstty {
+            let dw = dw.as_mut().expect("direwolf runs whenever a step checks a frame");
             let (ok, seen) = dw.expect_nothing_from_kisstty(never, window);
             for want in never.iter() {
                 println!("   {:<12} [{}] {want}", "[<- nothing]", if ok { "pass" } else { "FAIL" });
@@ -553,6 +765,34 @@ fn main() {
                 println!("      direwolf logged during this step:");
                 for line in seen.lines() {
                     println!("      | {line}");
+                }
+            }
+        }
+
+        if let Some(from_serial) = &step.from_serial {
+            let ser = ser.as_ref().expect("serial is open whenever a step checks it");
+            let wants: Result<Vec<Vec<u8>>, String> =
+                from_serial.iter().map(|w| unescape(w)).collect();
+            match wants {
+                Ok(wants) => {
+                    let (ok, seen) = ser.expect(&wants, window);
+                    for want in from_serial.iter() {
+                        println!(
+                            "   {:<12} [{}] {want}",
+                            "[<- serial]",
+                            if ok { "pass" } else { "FAIL" }
+                        );
+                    }
+                    if !ok {
+                        for want in from_serial.iter() {
+                            failures.push(format!("step {n}: never arrived on serial: {want}"));
+                        }
+                        println!("      serial carried during this step: {}", escape(&seen));
+                    }
+                }
+                Err(e) => {
+                    eprintln!("      bad escape in from_serial: {e}");
+                    failures.push(format!("step {n}: bad escape in from_serial: {e}"));
                 }
             }
         }
@@ -614,6 +854,60 @@ mod tests {
     }
 
     #[test]
+    fn escapes_round_trip() {
+        assert_eq!(unescape(r"AB\r\n").unwrap(), b"AB\r\n");
+        assert_eq!(unescape(r"\x9b").unwrap(), vec![0x9b]);
+        assert_eq!(unescape(r"a\\b").unwrap(), b"a\\b");
+        assert_eq!(escape(b"AB\r\n"), r"AB\r\n");
+        assert_eq!(escape(&[0x9b]), r"\x9b");
+        assert!(unescape(r"\q").is_err());
+        assert!(unescape("\u{9b}").is_err(), "a toml-eaten \\x9b must not pass silently");
+        assert!(unescape(r"\x").is_err());
+    }
+
+    #[test]
+    fn a_scenario_never_needs_direwolf_and_the_serial_device_at_once() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("scenarios");
+        for platform_dir in fs::read_dir(&root).expect("scenarios dir") {
+            let platform_dir = platform_dir.expect("dir entry").path();
+            if !platform_dir.is_dir() {
+                continue;
+            }
+            for entry in fs::read_dir(&platform_dir).expect("platform dir") {
+                let path = entry.expect("dir entry").path();
+                if path.extension().is_none_or(|e| e != "toml") {
+                    continue;
+                }
+                let text = fs::read_to_string(&path).expect("read scenario");
+                let scenario: Scenario = toml::from_str(&text).expect("parse");
+                assert!(
+                    !(uses_direwolf(&scenario) && uses_serial(&scenario)),
+                    "{}: uses direwolf and the serial device at the same time",
+                    path.display()
+                );
+                for step in &scenario.step {
+                    for line in step.to_serial.iter().chain(step.from_serial.iter()) {
+                        for chunk in line.iter() {
+                            let bytes = unescape(chunk).unwrap_or_else(|e| {
+                                panic!("{}: {chunk}: {e}", path.display())
+                            });
+                            // A backslash reaching the wire means the scenario was
+                            // written with \\r where it meant \r, which sends the
+                            // escape as text and silently tests nothing.
+                            assert!(
+                                !bytes.contains(&b'\\'),
+                                "{}: {chunk} sends a literal backslash, so it is \
+                                 double escaped",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn every_scenario_parses() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("scenarios");
         let mut count = 0;
@@ -636,6 +930,11 @@ mod tests {
                     scenario.platform,
                     expected,
                     "{}: platform does not match its directory",
+                    path.display()
+                );
+                assert!(
+                    !uses_direwolf(&scenario) || !scenario.mycall.is_empty(),
+                    "{}: sends or checks packets but has no mycall",
                     path.display()
                 );
                 count += 1;

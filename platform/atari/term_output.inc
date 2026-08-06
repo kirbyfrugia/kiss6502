@@ -10,6 +10,7 @@ TO_HEIGHT = 21
 .global to_init
 .global to_append_char
 .global to_append_lines
+.global to_end_line
 .global to_println
 .global to_repaint
 .global to_clear_and_home

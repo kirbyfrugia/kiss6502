@@ -1,10 +1,8 @@
 .setcpu "6502"
-.include "config.inc"
+.include "term_output.inc"
 .include "globals.inc"
 .include "memmove.inc"
 .include "screen.inc"
-.include "term_output.inc"
-.include "term.inc"
 .include "utils.inc"
 
 .segment "ZEROPAGE"
@@ -17,7 +15,6 @@ cursor_line_data_ptr_hi: .res 1
 TO_MARGIN_LEFT = 1
 TO_MARGIN_TOP  = 1
 TO_SIZE        = TERMINAL_WIDTH*TO_HEIGHT
-TO_EOL         = $0d
 
 to_init:
   lda #0
@@ -282,20 +279,12 @@ int_scroll_up_lines:
   jsr MM_MOVEDOWN
   rts
 
-; if pending_newline is set, advance to the start of the next line,
-; scrolling the output up if we're already on the last line,
-; and clear the flag.
-;
-; purpose is to not scroll until we actually need the space.
+; advances to the start of the next line, scrolling the output if
+; we're already on the last line.
 ;
 ; modifies:
 ;   a,x,y,ZPB0-5
-int_flush_pending_newline:
-  lda pending_newline
-  beq @done
-  lda #0
-  sta pending_newline
-
+int_advance_line:
   ldx cursory
   cpx #(TO_HEIGHT-1)
   beq @scroll
@@ -312,29 +301,39 @@ int_flush_pending_newline:
   jsr to_repaint
   lda #0
   sta cursorx
-@done:
   rts
 
-; ends the current line and flags that there is now a new
-; line pending.
-;
-; if a new line was previously pending, flush that first.
+; advances if a newline is pending, so the next char lands on a fresh
+; line.
 ;
 ; modifies:
 ;   a,x,y,ZPB0-5
-int_next_line:
-  jsr int_flush_pending_newline
-  lda #1
+int_flush_pending_newline:
+  lda pending_newline
+  beq @done
+  lda #0
   sta pending_newline
+  jsr int_advance_line
+@done:
   rts
 
-; appends the char. If it's an eol or we reach the end of the line,
-; it moves to the next line, scrolling the viewport up if needed.
+; ends the current line and moves to the next one now.
+;
+; modifies:
+;   a,x,y,ZPB0-5
+to_end_line:
+  lda #0
+  sta pending_newline
+  jsr int_advance_line
+  rts
+
+; appends the char. If we reach the end of the line, it moves to the
+; next line, scrolling the viewport up if needed.
 ;
 ; inputs:
 ;   CMDDATA0 - the char
 ; outputs:
-;   c        - set if it was an eol character
+;   c        - set if we filled the last column
 ; modifies:
 ;   a,x,y,ZPB0-5
 to_append_char:
@@ -343,26 +342,23 @@ to_append_char:
   jsr int_flush_pending_newline
 
   lda CMDDATA0
-  cmp #TO_EOL
-  beq @eol
   jsr int_update_char
 
   ldx cursorx
   cpx #(TERMINAL_WIDTH-1)
-  beq @eol
+  beq @wrap
   inx
   stx cursorx
   clc
   rts
-@eol:
-  ; eol char, or we filled the last column. owe a newline
-  ; instead of advancing now.
+@wrap:
+  ; filled the last column. owe a newline instead of advancing now.
   lda #1
   sta pending_newline
   sec
   rts
 
-; prints a null terminated string. Handles eol appropriately.
+; prints a null terminated string, ending the line after it.
 ; Not terribly efficient since it adds chars one by one amongst
 ; other issues. If you know you have full lines, use other
 ; routines as well.
@@ -395,7 +391,7 @@ to_println:
   iny
   bne @str_loop
 @done:
-  jsr int_next_line
+  jsr to_end_line
   jsr int_update_cursor_line
   rts
 

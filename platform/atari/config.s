@@ -26,7 +26,7 @@ CFG_LASTFILE_LEN  = 1 + CFG_NAME_LEN
 int_load_default_config:
   make_config cfg_draft_config, \
                   TERM_PROTOCOL::APRS, \
-                  TERM_MODE::LINE, \
+                  TERMINAL_MODE::LINE, \
                   TERM_LINE_ENDING::CR, \
                   RS232_BAUD::B9600, \
                   RS232_WORDSIZE::N8, \
@@ -288,7 +288,7 @@ APRS_DIGI_FIELD_OFFSET = 7*SCREEN_WIDTH+16
 APRS_DIGI_VISIBLE      = 22
 APRS_HINT_OFFSET       = 19*SCREEN_WIDTH+2
 
-APRS_FIELD_FIRST       = 16
+APRS_FIELD_FIRST       = 15
 APRS_FIELD_COUNT       = 3
 
 SERIAL_BAUD_LABEL_OFFSET   = 5*SCREEN_WIDTH+2
@@ -309,26 +309,24 @@ SERIAL_RTS_LABEL_OFFSET    = 12*SCREEN_WIDTH+2
 SERIAL_RTS_FIELD_OFFSET    = 12*SCREEN_WIDTH+13
 SERIAL_HINT_OFFSET         = 19*SCREEN_WIDTH+2
 
-SERIAL_FIELD_FIRST     = 8
+SERIAL_FIELD_FIRST     = 7
 SERIAL_FIELD_COUNT     = 8
 
 SESSION_LABEL_OFFSET   = 5*SCREEN_WIDTH+2
 SESSION_FIELD_OFFSET   = 5*SCREEN_WIDTH+12
 SESSION_HINT_OFFSET    = 19*SCREEN_WIDTH+2
 
-SESSION_FIELD_FIRST    = 7
+SESSION_FIELD_FIRST    = 6
 SESSION_FIELD_COUNT    = 1
 
 TERM_MODE_LABEL_OFFSET = 5*SCREEN_WIDTH+2
 TERM_MODE_FIELD_OFFSET = 5*SCREEN_WIDTH+15
 TERM_EOL_LABEL_OFFSET  = 6*SCREEN_WIDTH+2
 TERM_EOL_FIELD_OFFSET  = 6*SCREEN_WIDTH+15
-TERM_LF_LABEL_OFFSET   = 7*SCREEN_WIDTH+2
-TERM_LF_FIELD_OFFSET   = 7*SCREEN_WIDTH+15
 TERM_HINT_OFFSET       = 19*SCREEN_WIDTH+2
 
 TERM_FIELD_FIRST       = 4
-TERM_FIELD_COUNT       = 3
+TERM_FIELD_COUNT       = 2
 
 int_filetab_init:
   jsr int_load_lastfile
@@ -961,10 +959,6 @@ int_cmd_start:
   cmp #TERM_PROTOCOL::APRS
   bne @start
 
-  ; only allow line mode in aprs
-  lda #TERM_MODE::LINE
-  sta cfg_draft_config+Cfg::term+CfgTerm::mode
-
   lda cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::callsign
   cmp #' '
   bne @start
@@ -1262,73 +1256,73 @@ int_load_lastfile:
 
 cfg_field_kind:
   .byte FIELD_TEXT, FIELD_BUTTON, FIELD_BUTTON, FIELD_BUTTON
-  .byte FIELD_SELECT, FIELD_SELECT, FIELD_SELECT
+  .byte FIELD_SELECT, FIELD_SELECT
   .byte FIELD_SELECT
   .byte FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT
   .byte FIELD_TEXT, FIELD_TEXT, FIELD_TEXT
 cfg_field_scr_lo:
   .byte <FILE_FIELD_OFFSET, <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
-  .byte <TERM_MODE_FIELD_OFFSET, <TERM_EOL_FIELD_OFFSET, <TERM_LF_FIELD_OFFSET
+  .byte <TERM_MODE_FIELD_OFFSET, <TERM_EOL_FIELD_OFFSET
   .byte <SESSION_FIELD_OFFSET
   .byte <SERIAL_BAUD_FIELD_OFFSET, <SERIAL_DATA_FIELD_OFFSET, <SERIAL_STOP_FIELD_OFFSET, <SERIAL_PARITY_FIELD_OFFSET, <SERIAL_CTS_FIELD_OFFSET, <SERIAL_DSR_FIELD_OFFSET, <SERIAL_DTR_FIELD_OFFSET, <SERIAL_RTS_FIELD_OFFSET
   .byte <APRS_CALL_FIELD_OFFSET, <APRS_SSID_FIELD_OFFSET, <APRS_DIGI_FIELD_OFFSET
 cfg_field_scr_hi:
   .byte >FILE_FIELD_OFFSET, >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
-  .byte >TERM_MODE_FIELD_OFFSET, >TERM_EOL_FIELD_OFFSET, >TERM_LF_FIELD_OFFSET
+  .byte >TERM_MODE_FIELD_OFFSET, >TERM_EOL_FIELD_OFFSET
   .byte >SESSION_FIELD_OFFSET
   .byte >SERIAL_BAUD_FIELD_OFFSET, >SERIAL_DATA_FIELD_OFFSET, >SERIAL_STOP_FIELD_OFFSET, >SERIAL_PARITY_FIELD_OFFSET, >SERIAL_CTS_FIELD_OFFSET, >SERIAL_DSR_FIELD_OFFSET, >SERIAL_DTR_FIELD_OFFSET, >SERIAL_RTS_FIELD_OFFSET
   .byte >APRS_CALL_FIELD_OFFSET, >APRS_SSID_FIELD_OFFSET, >APRS_DIGI_FIELD_OFFSET
 cfg_field_width:
   .byte CFG_NAME_LEN, 6, 6, 15
-  .byte 7, 7, 7
+  .byte 7, 7
   .byte 8
   .byte 6, 6, 6, 6, 6, 6, 6, 6
   .byte APRS_CALLSIGN_LEN, APRS_SSID_LEN, APRS_DIGI_VISIBLE
 cfg_field_data_lo:
   .byte <cfg_filename_li, <btn_load, <btn_save, <btn_default
-  .byte <(cfg_draft_config+Cfg::term+CfgTerm::mode),<(cfg_draft_config+Cfg::term+CfgTerm::line_ending),<(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
+  .byte <(cfg_draft_config+Cfg::term+CfgTerm::terminal_mode),<(cfg_draft_config+Cfg::term+CfgTerm::line_ending)
   .byte <(cfg_draft_config+Cfg::session+CfgSession::protocol)
   .byte <(cfg_draft_config+Cfg::serial+CfgSerial::baud), <(cfg_draft_config+Cfg::serial+CfgSerial::data_bits), <(cfg_draft_config+Cfg::serial+CfgSerial::stop_bits), <(cfg_draft_config+Cfg::serial+CfgSerial::parity), <(cfg_draft_config+Cfg::serial+CfgSerial::cts), <(cfg_draft_config+Cfg::serial+CfgSerial::dsr), <(cfg_draft_config+Cfg::serial+CfgSerial::dtr), <(cfg_draft_config+Cfg::serial+CfgSerial::rets)
   .byte <cfg_callsign_li, <cfg_ssid_li, <cfg_digi_li
 cfg_field_data_hi:
   .byte >cfg_filename_li, >btn_load, >btn_save, >btn_default
-  .byte >(cfg_draft_config+Cfg::term+CfgTerm::mode),>(cfg_draft_config+Cfg::term+CfgTerm::line_ending),>(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
+  .byte >(cfg_draft_config+Cfg::term+CfgTerm::terminal_mode),>(cfg_draft_config+Cfg::term+CfgTerm::line_ending)
   .byte >(cfg_draft_config+Cfg::session+CfgSession::protocol)
   .byte >(cfg_draft_config+Cfg::serial+CfgSerial::baud), >(cfg_draft_config+Cfg::serial+CfgSerial::data_bits), >(cfg_draft_config+Cfg::serial+CfgSerial::stop_bits), >(cfg_draft_config+Cfg::serial+CfgSerial::parity), >(cfg_draft_config+Cfg::serial+CfgSerial::cts), >(cfg_draft_config+Cfg::serial+CfgSerial::dsr), >(cfg_draft_config+Cfg::serial+CfgSerial::dtr), >(cfg_draft_config+Cfg::serial+CfgSerial::rets)
   .byte >cfg_callsign_li, >cfg_ssid_li, >cfg_digi_li
 cfg_field_values_lo:
   .byte 0, 0, 0, 0
-  .byte <term_mode_field_values, <term_eol_field_values, <term_lf_field_values
+  .byte <term_mode_field_values, <term_eol_field_values
   .byte <session_protocol_field_values
   .byte <serial_baud_field_values, <serial_data_field_values, <serial_stop_field_values, <serial_parity_field_values, <serial_cts_field_values, <serial_dsr_field_values, <serial_dtr_field_values, <serial_rts_field_values
   .byte 0, 0, 0
 cfg_field_values_hi:
   .byte 0, 0, 0, 0
-  .byte >term_mode_field_values, >term_eol_field_values, >term_lf_field_values
+  .byte >term_mode_field_values, >term_eol_field_values
   .byte >session_protocol_field_values
   .byte >serial_baud_field_values, >serial_data_field_values, >serial_stop_field_values, >serial_parity_field_values, >serial_cts_field_values, >serial_dsr_field_values, >serial_dtr_field_values, >serial_rts_field_values
   .byte 0, 0, 0
 cfg_field_labels_lo:
   .byte 0, 0, 0, 0
-  .byte <term_mode_field_labels_lo, <term_eol_field_labels_lo, <term_lf_field_labels_lo
+  .byte <term_mode_field_labels_lo, <term_eol_field_labels_lo
   .byte <session_protocol_field_labels_lo
   .byte <serial_baud_field_labels_lo, <serial_data_field_labels_lo, <serial_stop_field_labels_lo, <serial_parity_field_labels_lo, <serial_cts_field_labels_lo, <serial_dsr_field_labels_lo, <serial_dtr_field_labels_lo, <serial_rts_field_labels_lo
   .byte 0, 0, 0
 cfg_field_labels_hi:
   .byte 0, 0, 0, 0
-  .byte >term_mode_field_labels_lo, >term_eol_field_labels_lo, >term_lf_field_labels_lo
+  .byte >term_mode_field_labels_lo, >term_eol_field_labels_lo
   .byte >session_protocol_field_labels_lo
   .byte >serial_baud_field_labels_lo, >serial_data_field_labels_lo, >serial_stop_field_labels_lo, >serial_parity_field_labels_lo, >serial_cts_field_labels_lo, >serial_dsr_field_labels_lo, >serial_dtr_field_labels_lo, >serial_rts_field_labels_lo
   .byte 0, 0, 0
 cfg_field_arg0:
   .byte CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE, FILE_ACTION_LOAD, FILE_ACTION_SAVE, FILE_ACTION_DEFAULT
-  .byte 2, 4, 2
+  .byte 2, 4
   .byte 2
   .byte 15, 4, 2, 3, 2, 2, 3, 3
   .byte CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE, CHAR_DIGIT|CHAR_SPACE, CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE|CHAR_DASH|CHAR_COMMA
 cfg_field_arg1:
   .byte INPUT_UPPER, 0, 0, 0
-  .byte 0, 0, 0
+  .byte 0, 0
   .byte 0
   .byte 0, 0, 0, 0, 0, 0, 0, 0
   .byte INPUT_UPPER, 0, INPUT_UPPER
@@ -1397,7 +1391,7 @@ session_protocol_field_labels_hi:
   .byte >item_aprs, >item_terminal
 
 term_mode_field_values:
-  .byte TERM_MODE::LINE, TERM_MODE::CHAR
+  .byte TERMINAL_MODE::LINE, TERMINAL_MODE::CHAR
 term_mode_field_labels_lo:
   .byte <item_line, <item_char
 term_mode_field_labels_hi:
@@ -1409,13 +1403,6 @@ term_eol_field_labels_lo:
   .byte <item_cr, <item_lf, <item_crlf, <item_atascii
 term_eol_field_labels_hi:
   .byte >item_cr, >item_lf, >item_crlf, >item_atascii
-
-term_lf_field_values:
-  .byte RS232_LINE_FEED::NO_APPEND_LF, RS232_LINE_FEED::APPEND_LF
-term_lf_field_labels_lo:
-  .byte <item_no, <item_yes
-term_lf_field_labels_hi:
-  .byte >item_no, >item_yes
 
 item_45_5:              .byte "45.5",$00
 item_50:                .byte "50",$00
@@ -1452,8 +1439,6 @@ item_cr:                .byte "CR",$00
 item_lf:                .byte "LF",$00
 item_crlf:              .byte "CR+LF",$00
 item_atascii:           .byte "ATASCII",$00
-item_no:                .byte "No",$00
-item_yes:               .byte "Yes",$00
 
 
 serial_baud_label:      .byte "Baud:",$00
@@ -1469,7 +1454,6 @@ session_protocol_label: .byte "Protocol:",$00
 
 term_mode_label:        .byte "Mode:",$00
 term_eol_label:         .byte "Line ending:",$00
-term_lf_label:          .byte "Append LF:",$00
 
 form_hint:              .byte 'T'|$80,'A'|$80,'B'|$80," next field",$00
 
@@ -1477,29 +1461,29 @@ cfg_static_ptrs_lo:
   .byte <filename_label, <file_cfg_suffix, <form_hint
   .byte <session_protocol_label, <form_hint
   .byte <serial_baud_label, <serial_data_label, <serial_stop_label, <serial_parity_label, <serial_cts_label, <serial_dsr_label, <serial_dtr_label, <serial_rts_label, <form_hint
-  .byte <term_mode_label, <term_eol_label, <term_lf_label, <form_hint
+  .byte <term_mode_label, <term_eol_label, <form_hint
   .byte <aprs_callsign_label, <aprs_ssid_label, <aprs_digi_label, <form_hint
 cfg_static_ptrs_hi:
   .byte >filename_label, >file_cfg_suffix, >form_hint
   .byte >session_protocol_label, >form_hint
   .byte >serial_baud_label, >serial_data_label, >serial_stop_label, >serial_parity_label, >serial_cts_label, >serial_dsr_label, >serial_dtr_label, >serial_rts_label, >form_hint
-  .byte >term_mode_label, >term_eol_label, >term_lf_label, >form_hint
+  .byte >term_mode_label, >term_eol_label, >form_hint
   .byte >aprs_callsign_label, >aprs_ssid_label, >aprs_digi_label, >form_hint
 cfg_static_offs_lo:
   .byte <FILE_LABEL_OFFSET, <FILE_SUFFIX_OFFSET, <FILE_HINT_OFFSET
   .byte <SESSION_LABEL_OFFSET, <SESSION_HINT_OFFSET
   .byte <SERIAL_BAUD_LABEL_OFFSET, <SERIAL_DATA_LABEL_OFFSET, <SERIAL_STOP_LABEL_OFFSET, <SERIAL_PARITY_LABEL_OFFSET, <SERIAL_CTS_LABEL_OFFSET, <SERIAL_DSR_LABEL_OFFSET, <SERIAL_DTR_LABEL_OFFSET, <SERIAL_RTS_LABEL_OFFSET, <SERIAL_HINT_OFFSET
-  .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_LF_LABEL_OFFSET, <TERM_HINT_OFFSET
+  .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_HINT_OFFSET
   .byte <APRS_CALL_LABEL_OFFSET, <APRS_SSID_LABEL_OFFSET, <APRS_DIGI_LABEL_OFFSET, <APRS_HINT_OFFSET
 cfg_static_offs_hi:
   .byte >FILE_LABEL_OFFSET, >FILE_SUFFIX_OFFSET, >FILE_HINT_OFFSET
   .byte >SESSION_LABEL_OFFSET, >SESSION_HINT_OFFSET
   .byte >SERIAL_BAUD_LABEL_OFFSET, >SERIAL_DATA_LABEL_OFFSET, >SERIAL_STOP_LABEL_OFFSET, >SERIAL_PARITY_LABEL_OFFSET, >SERIAL_CTS_LABEL_OFFSET, >SERIAL_DSR_LABEL_OFFSET, >SERIAL_DTR_LABEL_OFFSET, >SERIAL_RTS_LABEL_OFFSET, >SERIAL_HINT_OFFSET
-  .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_LF_LABEL_OFFSET, >TERM_HINT_OFFSET
+  .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_HINT_OFFSET
   .byte >APRS_CALL_LABEL_OFFSET, >APRS_SSID_LABEL_OFFSET, >APRS_DIGI_LABEL_OFFSET, >APRS_HINT_OFFSET
 
-tab_static_first:       .byte 0, 3, 5, 14, 18
-tab_static_count:       .byte 3, 2, 9, 4, 4
+tab_static_first:       .byte 0, 3, 5, 14, 17
+tab_static_count:       .byte 3, 2, 9, 3, 4
 tab_form_ptrs_lo:       .byte <file_form, <session_form, <serial_form, <term_form, <aprs_form
 tab_form_ptrs_hi:       .byte >file_form, >session_form, >serial_form, >term_form, >aprs_form
 static_idx:             .byte 0
