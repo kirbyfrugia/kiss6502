@@ -1,4 +1,4 @@
 #!/bin/bash
 
-socat PTY,link=/tmp/atari-r1,rawer TCP:localhost:9000
+socat -v -d -d PTY,link=/tmp/altirra-tty,raw,echo=0 TCP:127.0.0.1:9000
 
