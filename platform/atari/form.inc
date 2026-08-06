@@ -20,10 +20,11 @@ FIELD_FOCUSED = %10000000
 
 ; allowed chars for a text field
 CHAR_ALL   = %10000000
-CHAR_ALNUM = %01000000
+CHAR_ALPHA = %01000000
 CHAR_DASH  = %00100000
 CHAR_SPACE = %00010000
 CHAR_COMMA = %00001000
+CHAR_DIGIT = %00000100
 
 ; modifications that can be automatically made to user input
 INPUT_UPPER = %10000000

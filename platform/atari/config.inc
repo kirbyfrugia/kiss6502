@@ -28,16 +28,6 @@ CONFIG_FLAG_START    = %11000000
 
 .linecont +
 
-.struct Menu
-  scr_pos_ptr          .word
-  header_ptr           .word
-  items_values_ptr     .word
-  items_labels_ptr     .word
-  num_items            .byte
-  border_width         .byte
-  selected_index       .byte
-.endstruct
-
 .struct CfgSerial
   baud        .byte
   data_bits   .byte
@@ -87,57 +77,7 @@ CONFIG_FLAG_START    = %11000000
   config_ptr  .word
 .endstruct
 
-.macro make_menu menu, header, _items_values, _items_labels, n_items, b_width, scr_pos_offset
-  lda #<scr_pos_offset
-  clc
-  adc SCR_PTR_LO
-  sta menu+Menu::scr_pos_ptr
-  lda #>scr_pos_offset
-  adc SCR_PTR_HI
-  sta menu+Menu::scr_pos_ptr+1
 
-  lda #<header
-  sta menu+Menu::header_ptr
-  lda #>header
-  sta menu+Menu::header_ptr+1
-
-  lda #n_items
-  sta menu+Menu::num_items
-  lda #b_width
-  sta menu+Menu::border_width
-
-  lda #<_items_values
-  sta menu+Menu::items_values_ptr
-  lda #>_items_values
-  sta menu+Menu::items_values_ptr+1
-
-  lda #<_items_labels
-  sta menu+Menu::items_labels_ptr
-  lda #>_items_labels
-  sta menu+Menu::items_labels_ptr+1
-
-.endmacro
-
-.macro draw_menu_border menu
-  lda #<menu
-  sta cfg_ptr_lo
-  lda #>menu
-  sta cfg_ptr_hi
-  jsr int_draw_menu_border
-.endmacro
-
-.macro refresh_menu menu, _init_value
-  lda #<menu
-  sta cfg_ptr_lo
-  lda #>menu
-  sta cfg_ptr_hi
-  lda _init_value
-  sta menu_item_value
-
-  jsr int_select_menu_item_by_value
-  jsr int_draw_menu_items
-  jsr int_highlight_selected_menu_item
-.endmacro
 
 .macro make_config  config, _protocol, _mode, _line_ending, _baud, _data_bits, \
                    _stop_bits, _parity, _cts, _dsr, _dtr, _rets
@@ -172,14 +112,6 @@ CONFIG_FLAG_START    = %11000000
   sta config+Cfg::serial+CfgSerial::crx
   lda #RS232_XMT::NO_CHANGE
   sta config+Cfg::serial+CfgSerial::xmt
-.endmacro
-
-.macro handle_menu_next _menu
-  lda #<_menu
-  sta cfg_ptr_lo
-  lda #>_menu
-  sta cfg_ptr_hi
-  jsr int_select_next_menu_item
 .endmacro
 
 .endif

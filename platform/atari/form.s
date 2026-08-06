@@ -472,11 +472,19 @@ int_filter_char:
   beq @dash
   cmp #','
   beq @comma
+  cmp #'0'
+  bcc @not_digit
+  cmp #'9'+1
+  bcc @digit
+@not_digit:
   jsr ut_is_alphanumeric
-  bcc @alnum
+  bcc @alpha
   jmp @reject
-@alnum:
-  lda #CHAR_ALNUM
+@alpha:
+  lda #CHAR_ALPHA
+  jmp @test
+@digit:
+  lda #CHAR_DIGIT
   jmp @test
 @space:
   lda #CHAR_SPACE

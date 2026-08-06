@@ -13,13 +13,10 @@
 .include "utils.inc"
 
 .segment "ZEROPAGE"
-cfg_ptr_lo:                  .res 1
-cfg_ptr_hi:                  .res 1
 
 .segment "CODE"
 .linecont +
 
-.define MENU_MARGIN_TOP 1
 
 CONFIG_VERSION    = 1
 CFG_NAME_LEN      = 8
@@ -64,73 +61,30 @@ cfg_init:
   jsr int_load_default_config
   ut_copy_struct_abs_to_abs cfg_draft_config, cfg_saved_config, Cfg
 
-  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+2
-  NUM_ITEMS     .set 8
-  BORDER_WIDTH  .set 8
-  make_menu baud_menu, baud_menu_header, \
-            baud_menu_item_values, baud_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+22
-  NUM_ITEMS     .set 3
-  BORDER_WIDTH  .set 10
-  make_menu parity_menu, parity_menu_header, \
-            parity_menu_item_values, parity_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+12
-  NUM_ITEMS     .set 4
-  BORDER_WIDTH  .set 8
-  make_menu data_menu, data_menu_header, \
-            data_menu_item_values, data_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+9)*SCREEN_WIDTH+12
-  NUM_ITEMS     .set 2
-  BORDER_WIDTH  .set 8
-  make_menu stop_menu, stop_menu_header, \
-            stop_menu_item_values, stop_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+2
-  NUM_ITEMS     .set 2
-  BORDER_WIDTH  .set 6
-  make_menu cts_menu, cts_menu_header, \
-            cts_menu_item_values, cts_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+10
-  NUM_ITEMS     .set 2
-  BORDER_WIDTH  .set 6
-  make_menu dsr_menu, dsr_menu_header, \
-            dsr_menu_item_values, dsr_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+18
-  NUM_ITEMS     .set 3
-  BORDER_WIDTH  .set 6
-  make_menu dtr_menu, dtr_menu_header, \
-            dtr_menu_item_values, dtr_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+13)*SCREEN_WIDTH+26
-  NUM_ITEMS     .set 3
-  BORDER_WIDTH  .set 6
-  make_menu rts_menu, rts_menu_header, \
-            rts_menu_item_values, rts_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
-  OFFSET        .set (MENU_MARGIN_TOP+3)*SCREEN_WIDTH+1
-  NUM_ITEMS     .set 2
-  BORDER_WIDTH  .set 11
-  make_menu protocol_menu, protocol_menu_header, \
-            protocol_menu_item_values, protocol_menu_item_labels, \
-            NUM_ITEMS, BORDER_WIDTH, OFFSET
-
   jsr int_filetab_init
+  jsr int_sessiontab_init
+  jsr int_serialtab_init
   jsr int_termtab_init
   jsr int_aprstab_init
 
+  rts
+
+int_sessiontab_init:
+  lda #SESSION_FIELD_FIRST
+  sta session_form+Form::first
+  lda #SESSION_FIELD_COUNT
+  sta session_form+Form::count
+  lda #0
+  sta session_form+Form::focus
+  rts
+
+int_serialtab_init:
+  lda #SERIAL_FIELD_FIRST
+  sta serial_form+Form::first
+  lda #SERIAL_FIELD_COUNT
+  sta serial_form+Form::count
+  lda #0
+  sta serial_form+Form::focus
   rts
 
 int_termtab_init:
@@ -140,164 +94,6 @@ int_termtab_init:
   sta term_form+Form::count
   lda #0
   sta term_form+Form::focus
-  rts
-
-int_draw_menu_items:
-  ldy #Menu::scr_pos_ptr
-  lda (cfg_ptr_lo),y
-  clc
-  adc #(SCREEN_WIDTH+2)
-  sta g_temp_scr_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  adc #0
-  sta g_temp_scr_ptr_hi
-
-  ldy #Menu::border_width
-  lda (cfg_ptr_lo),y
-  sta draw_menu_border_width
-
-  ldy #Menu::num_items
-  lda (cfg_ptr_lo),y
-  sta menu_item_num_items
-
-  ldy #Menu::items_labels_ptr
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_hi
-
-  ; menu labels are null terminated strings
-  ; stored in a contiguous chunk of memory.
-  ; each menu label can vary in length.
-  ; we want to loop N rows, but the length
-  ; of each label is unknown ahead of time.
-  ; so we track what row we're on, but also
-  ; where in the menu data we're at (menu_data_offset)
-  ldx #0
-  stx menu_data_offset
-@menu_item_rows_loop:
-  ldy #0
-@menu_item_loop:
-  sty draw_menu_tempy ; offset on current line
-  ldy menu_data_offset 
-  lda (g_temp_data_ptr_lo),y
-  beq @menu_item_done ; null terminator
-  jsr ut_atascii_to_icode
-  ldy draw_menu_tempy
-  sta (g_temp_scr_ptr_lo),y
-  iny
-  inc menu_data_offset 
-  jmp @menu_item_loop
-@menu_item_done:
-  inc menu_data_offset 
-  lda g_temp_scr_ptr_lo
-  clc
-  adc #SCREEN_WIDTH
-  sta g_temp_scr_ptr_lo
-  lda g_temp_scr_ptr_hi
-  adc #0
-  sta g_temp_scr_ptr_hi
-
-  inx
-  cpx menu_item_num_items
-  beq @menu_item_rows_loop_done
-  bne @menu_item_rows_loop
-@menu_item_rows_loop_done:
-  rts
-
-; draws the menu border and header
-; note: assumes <256 chars worth of menu item data
-;
-; inputs:
-;   cfg_ptr_lo/HI   - pointer to menu struct
-;   menu_item_value - initial value
-int_draw_menu_border:
-  ldy #Menu::scr_pos_ptr
-  lda (cfg_ptr_lo),y
-  sta g_temp_scr_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  sta g_temp_scr_ptr_hi
-
-  ldy #Menu::border_width
-  lda (cfg_ptr_lo),y
-  sta draw_menu_border_width
-
-  ldy #Menu::num_items
-  lda (cfg_ptr_lo),y
-  sta menu_item_num_items
-@top_border:
-  ldy draw_menu_border_width
-  lda #ICODE_UPPER_RIGHT_CORNER
-  sta (g_temp_scr_ptr_lo),y
-  lda #ICODE_HORIZONTAL_BAR
-@top_loop:
-  dey
-  sta (g_temp_scr_ptr_lo),y
-  bne @top_loop
-  lda #ICODE_UPPER_LEFT_CORNER
-  sta (g_temp_scr_ptr_lo),y
-@header:
-  ldy #Menu::header_ptr
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_hi
-
-  ldy #0
-@header_loop:
-  lda (g_temp_data_ptr_lo),y
-  beq @header_loop_done
-  jsr ut_atascii_to_icode
-  iny
-  sta (g_temp_scr_ptr_lo),y
-  jmp @header_loop
-@header_loop_done:
-  ; move to next row for vertical borders
-  lda g_temp_scr_ptr_lo
-  clc
-  adc #SCREEN_WIDTH
-  sta g_temp_scr_ptr_lo
-  lda g_temp_scr_ptr_hi
-  adc #0
-  sta g_temp_scr_ptr_hi
-  
-  ldx menu_item_num_items
-@menu_item_rows_loop:
-  lda #ICODE_VERTICAL_BAR
-  ldy #0
-  sta (g_temp_scr_ptr_lo),y
-  ldy draw_menu_border_width 
-  sta (g_temp_scr_ptr_lo),y
-
-  dex
-
-  lda g_temp_scr_ptr_lo
-  clc
-  adc #SCREEN_WIDTH
-  sta g_temp_scr_ptr_lo
-  lda g_temp_scr_ptr_hi
-  adc #0
-  sta g_temp_scr_ptr_hi
-
-  cpx #0
-  bne @menu_item_rows_loop
-
-@btm_border:
-  ldy draw_menu_border_width
-  lda #ICODE_LOWER_RIGHT_CORNER
-  sta (g_temp_scr_ptr_lo),y
-  lda #ICODE_HORIZONTAL_BAR
-@btm_loop:
-  dey
-  sta (g_temp_scr_ptr_lo),y
-  bne @btm_loop
-  lda #ICODE_LOWER_LEFT_CORNER
-  sta (g_temp_scr_ptr_lo),y
-
   rts
 
 int_draw_tabs:
@@ -425,103 +221,19 @@ int_draw_main:
   jsr int_draw_tabs
   rts
 
-int_refresh_file_tab:
-  jsr int_filetab_clear_status
-  lda #<file_form
-  sta CMDDATA0
-  lda #>file_form
-  sta CMDDATA1
-  jsr fm_set_context
-  jsr fm_draw_all
-  rts
-
-int_refresh_session_tab:
-  refresh_menu protocol_menu, cfg_draft_config+Cfg::session+CfgSession::protocol
-  rts
-
-int_refresh_serial_tab:
-  refresh_menu baud_menu,     cfg_draft_config+Cfg::serial+CfgSerial::baud
-  refresh_menu parity_menu,   cfg_draft_config+Cfg::serial+CfgSerial::parity
-  refresh_menu data_menu,     cfg_draft_config+Cfg::serial+CfgSerial::data_bits
-  refresh_menu stop_menu,     cfg_draft_config+Cfg::serial+CfgSerial::stop_bits
-  refresh_menu cts_menu,      cfg_draft_config+Cfg::serial+CfgSerial::cts
-  refresh_menu dsr_menu,      cfg_draft_config+Cfg::serial+CfgSerial::dsr
-  refresh_menu dtr_menu,      cfg_draft_config+Cfg::serial+CfgSerial::dtr
-  refresh_menu rts_menu,      cfg_draft_config+Cfg::serial+CfgSerial::rets
-  rts
-
-int_refresh_term_tab:
-  lda #<term_form
-  sta CMDDATA0
-  lda #>term_form
-  sta CMDDATA1
-  jsr fm_set_context
-  jsr fm_draw_all
-  rts
-
-int_refresh_aprs_tab:
-  lda #APRS_FOCUS_CALLSIGN
-  sta aprstab_focus
-
-  lda #<cfg_callsign_li
-  sta CMDDATA0
-  lda #>cfg_callsign_li
-  sta CMDDATA1
-  jsr li_set_context
-  jsr li_repaint
-
-  lda #<cfg_ssid_li
-  sta CMDDATA0
-  lda #>cfg_ssid_li
-  sta CMDDATA1
-  jsr li_set_context
-  jsr li_repaint
-
-  lda #<cfg_digi_li
-  sta CMDDATA0
-  lda #>cfg_digi_li
-  sta CMDDATA1
-  jsr li_set_context
-  jsr li_repaint
-
-  jsr int_aprstab_draw_focus
-  rts
-
-; redraws the menu items, sets the selected by value,
-; and highlights the selected menu item.
 int_refresh_menus:
-  lda selected_tab
-  cmp #1
-  beq @session
-  cmp #2
-  beq @serial
-  cmp #3
-  beq @term
-  cmp #4
-  beq @aprs
-  ; file menu
-  jsr int_refresh_file_tab
-  jmp @done
-@session:
-  jsr int_refresh_session_tab
-  jmp @done
-@serial:
-  jsr int_refresh_serial_tab
-  jmp @done
-@term:
-  jsr int_refresh_term_tab
-  jmp @done
-@aprs:
-  jsr int_refresh_aprs_tab
-@done:
+  ldx selected_tab
+  lda tab_form_ptrs_lo,x
+  sta CMDDATA0
+  lda tab_form_ptrs_hi,x
+  sta CMDDATA1
+  jsr fm_set_context
+  jsr fm_draw_all
   rts
 
 START_STATUS_OFFSET   = 22*SCREEN_WIDTH+1
 START_STATUS_WIDTH    = 36
 
-; shows the message in CMDDATA0/1 on the start status line, clearing first
-; inputs:
-;   CMDDATA0/1 - ptr to the message
 int_start_show_status:
   jsr int_start_clear_status
   lda #<START_STATUS_OFFSET
@@ -553,11 +265,11 @@ int_start_clear_status:
 FILE_LABEL_OFFSET      = 5*SCREEN_WIDTH+2
 FILE_FIELD_OFFSET      = 5*SCREEN_WIDTH+14
 FILE_SUFFIX_OFFSET     = FILE_FIELD_OFFSET+CFG_NAME_LEN+1
-FILE_BTN_LOAD_OFFSET   = 8*SCREEN_WIDTH+31
-FILE_BTN_SAVE_OFFSET   = 9*SCREEN_WIDTH+31
-FILE_BTN_DEF_OFFSET    = 11*SCREEN_WIDTH+22
+FILE_BTN_LOAD_OFFSET   = 7*SCREEN_WIDTH+2
+FILE_BTN_SAVE_OFFSET   = 8*SCREEN_WIDTH+2
+FILE_BTN_DEF_OFFSET    = 9*SCREEN_WIDTH+2
 FILE_HINT_OFFSET       = 19*SCREEN_WIDTH+2
-FILE_STATUS_OFFSET     = 13*SCREEN_WIDTH+2
+FILE_STATUS_OFFSET     = 11*SCREEN_WIDTH+2
 FILE_STATUS_WIDTH      = 36
 
 FILE_FIELD_FIRST       = 0
@@ -568,68 +280,55 @@ FILE_ACTION_SAVE       = 2
 FILE_ACTION_DEFAULT    = 3
 
 APRS_CALL_LABEL_OFFSET = 5*SCREEN_WIDTH+2
-APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+15
-APRS_SSID_LABEL_OFFSET = 7*SCREEN_WIDTH+2
-APRS_SSID_FIELD_OFFSET = 7*SCREEN_WIDTH+15
-APRS_DIGI_LABEL_OFFSET = 9*SCREEN_WIDTH+2
-APRS_DIGI_FIELD_OFFSET = 9*SCREEN_WIDTH+15
+APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+16
+APRS_SSID_LABEL_OFFSET = 6*SCREEN_WIDTH+2
+APRS_SSID_FIELD_OFFSET = 6*SCREEN_WIDTH+16
+APRS_DIGI_LABEL_OFFSET = 7*SCREEN_WIDTH+2
+APRS_DIGI_FIELD_OFFSET = 7*SCREEN_WIDTH+16
+APRS_DIGI_VISIBLE      = 22
+APRS_HINT_OFFSET       = 19*SCREEN_WIDTH+2
 
-APRS_FOCUS_CALLSIGN    = 0
-APRS_FOCUS_FIRST       = 0
-APRS_FOCUS_SSID        = 1
-APRS_FOCUS_DIGI        = 2
-APRS_FOCUS_LAST        = 2
-APRS_FOCUS_COUNT       = 3
+APRS_FIELD_FIRST       = 16
+APRS_FIELD_COUNT       = 3
+
+SERIAL_BAUD_LABEL_OFFSET   = 5*SCREEN_WIDTH+2
+SERIAL_BAUD_FIELD_OFFSET   = 5*SCREEN_WIDTH+13
+SERIAL_DATA_LABEL_OFFSET   = 6*SCREEN_WIDTH+2
+SERIAL_DATA_FIELD_OFFSET   = 6*SCREEN_WIDTH+13
+SERIAL_STOP_LABEL_OFFSET   = 7*SCREEN_WIDTH+2
+SERIAL_STOP_FIELD_OFFSET   = 7*SCREEN_WIDTH+13
+SERIAL_PARITY_LABEL_OFFSET = 8*SCREEN_WIDTH+2
+SERIAL_PARITY_FIELD_OFFSET = 8*SCREEN_WIDTH+13
+SERIAL_CTS_LABEL_OFFSET    = 9*SCREEN_WIDTH+2
+SERIAL_CTS_FIELD_OFFSET    = 9*SCREEN_WIDTH+13
+SERIAL_DSR_LABEL_OFFSET    = 10*SCREEN_WIDTH+2
+SERIAL_DSR_FIELD_OFFSET    = 10*SCREEN_WIDTH+13
+SERIAL_DTR_LABEL_OFFSET    = 11*SCREEN_WIDTH+2
+SERIAL_DTR_FIELD_OFFSET    = 11*SCREEN_WIDTH+13
+SERIAL_RTS_LABEL_OFFSET    = 12*SCREEN_WIDTH+2
+SERIAL_RTS_FIELD_OFFSET    = 12*SCREEN_WIDTH+13
+SERIAL_HINT_OFFSET         = 19*SCREEN_WIDTH+2
+
+SERIAL_FIELD_FIRST     = 8
+SERIAL_FIELD_COUNT     = 8
+
+SESSION_LABEL_OFFSET   = 5*SCREEN_WIDTH+2
+SESSION_FIELD_OFFSET   = 5*SCREEN_WIDTH+12
+SESSION_HINT_OFFSET    = 19*SCREEN_WIDTH+2
+
+SESSION_FIELD_FIRST    = 7
+SESSION_FIELD_COUNT    = 1
 
 TERM_MODE_LABEL_OFFSET = 5*SCREEN_WIDTH+2
 TERM_MODE_FIELD_OFFSET = 5*SCREEN_WIDTH+15
-TERM_EOL_LABEL_OFFSET  = 7*SCREEN_WIDTH+2
-TERM_EOL_FIELD_OFFSET  = 7*SCREEN_WIDTH+15
-TERM_LF_LABEL_OFFSET   = 9*SCREEN_WIDTH+2
-TERM_LF_FIELD_OFFSET   = 9*SCREEN_WIDTH+15
+TERM_EOL_LABEL_OFFSET  = 6*SCREEN_WIDTH+2
+TERM_EOL_FIELD_OFFSET  = 6*SCREEN_WIDTH+15
+TERM_LF_LABEL_OFFSET   = 7*SCREEN_WIDTH+2
+TERM_LF_FIELD_OFFSET   = 7*SCREEN_WIDTH+15
 TERM_HINT_OFFSET       = 19*SCREEN_WIDTH+2
 
 TERM_FIELD_FIRST       = 4
 TERM_FIELD_COUNT       = 3
-TERM_STATIC_COUNT      = 4
-
-int_draw_menu_borders_file_tab:
-  lda #<filename_label
-  sta CMDDATA0
-  lda #>filename_label
-  sta CMDDATA1
-  lda #<FILE_LABEL_OFFSET
-  sta CMDDATA2
-  lda #>FILE_LABEL_OFFSET
-  sta CMDDATA3
-  lda #0
-  sta CMDDATA4
-  jsr scr_draw_str
-
-  lda #<file_cfg_suffix
-  sta CMDDATA0
-  lda #>file_cfg_suffix
-  sta CMDDATA1
-  lda #<FILE_SUFFIX_OFFSET
-  sta CMDDATA2
-  lda #>FILE_SUFFIX_OFFSET
-  sta CMDDATA3
-  lda #0
-  sta CMDDATA4
-  jsr scr_draw_str
-
-  lda #<form_hint
-  sta CMDDATA0
-  lda #>form_hint
-  sta CMDDATA1
-  lda #<FILE_HINT_OFFSET
-  sta CMDDATA2
-  lda #>FILE_HINT_OFFSET
-  sta CMDDATA3
-  lda #0
-  sta CMDDATA4
-  jsr scr_draw_str
-  rts
 
 int_filetab_init:
   jsr int_load_lastfile
@@ -775,8 +474,12 @@ int_filetab_clear_status:
 ;   a,x,y
 ;   CMDDATA0-4
 int_aprstab_init:
-  lda #APRS_FOCUS_CALLSIGN
-  sta aprstab_focus
+  lda #APRS_FIELD_FIRST
+  sta aprs_form+Form::first
+  lda #APRS_FIELD_COUNT
+  sta aprs_form+Form::count
+  lda #0
+  sta aprs_form+Form::focus
 
   lda #0
   sta cfg_callsign_li+LineInput::scr_cursor
@@ -831,39 +534,11 @@ int_aprstab_init:
   sta cfg_digi_li+LineInput::data_ptr
   lda #>cfg_digi_text
   sta cfg_digi_li+LineInput::data_ptr+1
-  lda #24 ; fill to right of screen
+  lda #APRS_DIGI_VISIBLE
   sta cfg_digi_li+LineInput::num_visible
   lda #APRS_DIGI_LEN
   sta cfg_digi_li+LineInput::data_size
 
-  rts
-
-; points the line input at the currently focused field
-int_aprstab_input_set_context:
-  ldx aprstab_focus
-  lda cfg_aprs_li_ptrs_lo,x
-  sta CMDDATA0
-  lda cfg_aprs_li_ptrs_hi,x
-  sta CMDDATA1
-  jsr li_set_context
-  rts
-
-int_aprstab_draw_focus:
-  ldx #APRS_FOCUS_FIRST
-@hide_loop:
-  lda cfg_aprs_li_ptrs_lo,x
-  sta CMDDATA0
-  lda cfg_aprs_li_ptrs_hi,x
-  sta CMDDATA1
-  jsr li_set_context
-  jsr li_hide_cursor
-  cpx #APRS_FOCUS_LAST
-  beq @show
-  inx
-  bne @hide_loop
-@show:
-  jsr int_aprstab_input_set_context
-  jsr li_show_cursor
   rts
 
 int_aprstab_config_to_text:
@@ -1215,107 +890,30 @@ int_aprstab_digi_to_text:
 @done:
   rts
 
-int_draw_menu_borders_session_tab:
-  draw_menu_border protocol_menu
-  rts
-
-int_draw_menu_borders_serial_tab:
-  draw_menu_border baud_menu
-  draw_menu_border parity_menu
-  draw_menu_border data_menu
-  draw_menu_border stop_menu
-  draw_menu_border cts_menu
-  draw_menu_border dsr_menu
-  draw_menu_border dtr_menu
-  draw_menu_border rts_menu
-  rts
-
-int_draw_menu_borders_term_tab:
-  ldx #0
+int_draw_tab_static:
+  ldx selected_tab
+  lda tab_static_first,x
+  sta static_idx
+  clc
+  adc tab_static_count,x
+  sta static_end
 @static_loop:
-  stx term_static_idx
-  lda term_static_ptrs_lo,x
+  ldx static_idx
+  lda cfg_static_ptrs_lo,x
   sta CMDDATA0
-  lda term_static_ptrs_hi,x
+  lda cfg_static_ptrs_hi,x
   sta CMDDATA1
-  lda term_static_offs_lo,x
+  lda cfg_static_offs_lo,x
   sta CMDDATA2
-  lda term_static_offs_hi,x
+  lda cfg_static_offs_hi,x
   sta CMDDATA3
   lda #0
   sta CMDDATA4
   jsr scr_draw_str
-  ldx term_static_idx
-  inx
-  cpx #TERM_STATIC_COUNT
+  inc static_idx
+  lda static_idx
+  cmp static_end
   bne @static_loop
-  rts
-
-int_draw_menu_borders_aprs_tab:
-  lda #<aprs_callsign_label
-  sta CMDDATA0
-  lda #>aprs_callsign_label
-  sta CMDDATA1
-  lda #<APRS_CALL_LABEL_OFFSET
-  sta CMDDATA2
-  lda #>APRS_CALL_LABEL_OFFSET
-  sta CMDDATA3
-  lda #0
-  sta CMDDATA4
-  jsr scr_draw_str
-
-  lda #<aprs_ssid_label
-  sta CMDDATA0
-  lda #>aprs_ssid_label
-  sta CMDDATA1
-  lda #<APRS_SSID_LABEL_OFFSET
-  sta CMDDATA2
-  lda #>APRS_SSID_LABEL_OFFSET
-  sta CMDDATA3
-  lda #0
-  sta CMDDATA4
-  jsr scr_draw_str
-
-  lda #<aprs_digi_label
-  sta CMDDATA0
-  lda #>aprs_digi_label
-  sta CMDDATA1
-  lda #<APRS_DIGI_LABEL_OFFSET
-  sta CMDDATA2
-  lda #>APRS_DIGI_LABEL_OFFSET
-  sta CMDDATA3
-  lda #0
-  sta CMDDATA4
-  jsr scr_draw_str
-
-  rts
-
-; draws the chroma around the borders and the header
-int_draw_menu_borders:
-  lda selected_tab
-  cmp #1
-  beq @session
-  cmp #2
-  beq @serial
-  cmp #3
-  beq @term
-  cmp #4
-  beq @aprs
-  ; file menu
-  jsr int_draw_menu_borders_file_tab
-  jmp @done
-@session:
-  jsr int_draw_menu_borders_session_tab
-  jmp @done
-@serial:
-  jsr int_draw_menu_borders_serial_tab
-  jmp @done
-@term:
-  jsr int_draw_menu_borders_term_tab
-  jmp @done
-@aprs:
-  jsr int_draw_menu_borders_aprs_tab
-@done:
   rts
 
 cfg_activate:
@@ -1330,7 +928,7 @@ cfg_activate:
   ut_copy_struct_abs_to_abs cfg_saved_config, cfg_draft_config, Cfg
   jsr int_aprstab_config_to_text
 
-  jsr int_draw_menu_borders
+  jsr int_draw_tab_static
   jsr int_refresh_menus
   jsr int_draw_main
 
@@ -1338,131 +936,6 @@ cfg_activate:
 
 ; inputs:
 ;   cfg_ptr_lo/HI   - pointer to menu struct
-int_highlight_selected_menu_item:
-  ldy #Menu::scr_pos_ptr
-  lda (cfg_ptr_lo),y
-  clc
-  adc #SCREEN_WIDTH
-  sta g_temp_scr_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  adc #0
-  sta g_temp_scr_ptr_hi
-
-  ldy #Menu::border_width
-  lda (cfg_ptr_lo),y
-  sta menu_item_border_width
-
-  ldy #Menu::num_items
-  lda (cfg_ptr_lo),y
-  sta menu_item_num_items
-
-  ldy #Menu::selected_index
-  lda (cfg_ptr_lo),y
-  sta menu_item_index
-
-  ldx #0
-@menu_item_rows_loop:
-  cpx menu_item_index
-  beq @menu_item_match
-
-  ; if here, this is not the row, but let's
-  ; make sure we de-highlight it if needed
-  ldy #1
-  lda (g_temp_scr_ptr_lo),y
-  and #%10000000 ; check if msb set on first char
-  beq @menu_item_row_done ; was not highlighted
-@dehighlight_loop:
-  lda (g_temp_scr_ptr_lo),y
-  and #%01111111
-  sta (g_temp_scr_ptr_lo),y
-  iny
-  cpy menu_item_border_width
-  bne @dehighlight_loop
-  beq @menu_item_row_done
-@menu_item_match:
-  ldy #1
-@highlight_loop:
-  lda (g_temp_scr_ptr_lo),y
-  ora #%10000000
-  sta (g_temp_scr_ptr_lo),y
-  iny
-  cpy menu_item_border_width
-  bne @highlight_loop
-@menu_item_row_done:
-  inx
-  cpx menu_item_num_items
-  beq @done
-  lda g_temp_scr_ptr_lo
-  clc
-  adc #SCREEN_WIDTH
-  sta g_temp_scr_ptr_lo
-  lda g_temp_scr_ptr_hi
-  adc #0
-  sta g_temp_scr_ptr_hi
-  jmp @menu_item_rows_loop
-@done:
-  rts
-
-; Finds menu item with the provided value and
-; sets the selected index.
-;
-; inputs:
-;   cfg_ptr_lo/hi       - pointer to the menu
-;   menu_item_value     - value to search for
-int_select_menu_item_by_value:
-  ldy #Menu::num_items
-  lda (cfg_ptr_lo),y
-  sta menu_item_num_items
-
-  ldy #Menu::items_values_ptr
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_lo
-  iny
-  lda (cfg_ptr_lo),y
-  sta g_temp_data_ptr_hi
-  
-  ldy #0
-@loop:
-  lda (g_temp_data_ptr_lo),y
-  cmp menu_item_value
-  beq @found
-  iny
-  cpy menu_item_num_items
-  bne @loop
-  ldy #0
-@found:
-  tya
-  ldy #Menu::selected_index
-  sta (cfg_ptr_lo),y
-@done:
-  rts
-
-; Selects the index after the current index (with wrapping)
-; for this menu. And highlights the new item.
-;
-; inputs:
-;   cfg_ptr_lo/HI - pointer to menu
-int_select_next_menu_item:
-  ldy #Menu::num_items
-  lda (cfg_ptr_lo),y
-  sta menu_item_num_items
-
-  ldy #Menu::selected_index
-  lda (cfg_ptr_lo),y
-  clc
-  adc #1
-  cmp menu_item_num_items
-  bcc @nowrap
-  lda #0
-@nowrap:
-  sta menu_item_index
-  ldy #Menu::selected_index
-  sta (cfg_ptr_lo),y
-  jsr int_highlight_selected_menu_item
-
-  rts
-
 int_cmd_cancel:
   ; make sure they've started at least once
   ; or config will be invalid
@@ -1478,69 +951,6 @@ int_cmd_cancel:
   sta CMDDATA1
   jsr int_start_show_status
 @done:
-  rts
-
-int_cmd_baud:
-  handle_menu_next baud_menu
-  ldy baud_menu+Menu::selected_index
-  lda baud_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::baud
-  rts
-
-int_cmd_parity:
-  handle_menu_next parity_menu
-  ldy parity_menu+Menu::selected_index
-  lda parity_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::parity
-  rts
-
-int_cmd_data:
-  handle_menu_next data_menu
-  ldy data_menu+Menu::selected_index
-  lda data_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::data_bits
-  rts
-
-int_cmd_stop:
-  handle_menu_next stop_menu
-  ldy stop_menu+Menu::selected_index
-  lda stop_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::stop_bits
-  rts
-
-int_cmd_cts:
-  handle_menu_next cts_menu
-  ldy cts_menu+Menu::selected_index
-  lda cts_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::cts
-  rts
-
-int_cmd_dsr:
-  handle_menu_next dsr_menu
-  ldy dsr_menu+Menu::selected_index
-  lda dsr_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::dsr
-  rts
-
-int_cmd_dtr:
-  handle_menu_next dtr_menu
-  ldy dtr_menu+Menu::selected_index
-  lda dtr_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::dtr
-  rts
-
-int_cmd_rets:
-  handle_menu_next rts_menu
-  ldy rts_menu+Menu::selected_index
-  lda rts_menu_item_values,y
-  sta cfg_draft_config+Cfg::serial+CfgSerial::rets
-  rts
-
-int_cmd_protocol:
-  handle_menu_next protocol_menu
-  ldy protocol_menu+Menu::selected_index
-  lda protocol_menu_item_values,y
-  sta cfg_draft_config+Cfg::session+CfgSession::protocol
   rts
 
 int_cmd_start:
@@ -1589,7 +999,7 @@ int_next_tab:
   jsr scr_cls
   jsr int_draw_main
   jsr int_draw_tabs
-  jsr int_draw_menu_borders
+  jsr int_draw_tab_static
   jsr int_refresh_menus
   rts
 
@@ -1610,7 +1020,22 @@ int_handle_console_keys:
 @done:
   rts
 
-int_filetab_handle_kbd:
+int_form_handle_kbd:
+  lda #FM_ACTION_NONE
+  sta fm_action
+  lda g_kbdcode_raw
+  cmp #KEY_ESC
+  beq @escape
+  jsr fm_handle_key
+  jmp @done
+@escape:
+  jsr int_cmd_cancel
+@done:
+  rts
+
+int_handle_kbd:
+  lda g_kbd_key_pressed
+  beq @done
   jsr int_form_handle_kbd
   lda fm_action
   cmp #FILE_ACTION_LOAD
@@ -1631,182 +1056,6 @@ int_filetab_handle_kbd:
 @do_default:
   jsr int_filetab_clear_status
   jsr int_load_default_config
-@done:
-  rts
-
-int_session_handle_kbd:
-  lda g_kbdcode_raw
-  cmp #$32
-  beq @protocol
-  cmp #$1c
-  beq @escape
-  bne @done
-@protocol:
-  jsr int_cmd_protocol
-  jmp @done
-@escape:
-  jsr int_cmd_cancel
-@done:
-  rts
-
-int_serial_handle_kbd:
-  lda g_kbdcode_raw
-  cmp #$15
-  beq @baud
-  cmp #$0a
-  beq @parity
-  cmp #$3a
-  beq @data
-  cmp #$08
-  beq @stop
-  cmp #$12
-  beq @cts
-  cmp #$3e
-  beq @dsr
-  cmp #$2d
-  beq @dtr
-  cmp #$28
-  beq @rets
-  cmp #$1c
-  beq @escape
-  bne @done
-@baud:
-  jsr int_cmd_baud
-  jmp @done
-@parity:
-  jsr int_cmd_parity
-  jmp @done
-@data:
-  jsr int_cmd_data
-  jmp @done
-@stop:
-  jsr int_cmd_stop
-  jmp @done
-@cts:
-  jsr int_cmd_cts
-  jmp @done
-@dsr:
-  jsr int_cmd_dsr
-  jmp @done
-@dtr:
-  jsr int_cmd_dtr
-  jmp @done
-@rets:
-  jsr int_cmd_rets
-  jmp @done
-@escape:
-  jsr int_cmd_cancel
-@done:
-  rts
-
-int_form_handle_kbd:
-  lda #FM_ACTION_NONE
-  sta fm_action
-  lda g_kbdcode_raw
-  cmp #KEY_ESC
-  beq @escape
-  jsr fm_handle_key
-  jmp @done
-@escape:
-  jsr int_cmd_cancel
-@done:
-  rts
-
-int_aprstab_handle_kbd:
-  lda g_kbdcode_raw
-  cmp #KEY_ESC
-  beq @escape
-  cmp #KEY_TAB
-  beq @focus_next
-  cmp #$86 ; ctrl+left arrow
-  beq @cursor_left
-  cmp #$87 ; ctrl+right arrow
-  beq @cursor_right
-  cmp #KEY_DELETE ; backspace
-  beq @backspace
-  cmp #$b4 ; ctrl+delete
-  beq @char_delete
-  cmp #$b7 ; ctrl+insert
-  beq @char_insert
-  jmp @typechar
-@escape:
-  jsr int_cmd_cancel
-  jmp @done
-@focus_next:
-  ldx aprstab_focus
-  inx
-  cpx #APRS_FOCUS_COUNT
-  bne @focus_store
-  ldx #APRS_FOCUS_CALLSIGN
-@focus_store:
-  stx aprstab_focus
-  jsr int_aprstab_draw_focus
-  jmp @done
-@cursor_left:
-  jsr int_aprstab_input_set_context
-  jsr li_move_cursor_left
-  jmp @done
-@cursor_right:
-  jsr int_aprstab_input_set_context
-  jsr li_move_cursor_right
-  jmp @done
-@backspace:
-  jsr int_aprstab_input_set_context
-  jsr li_backspace
-  jmp @done
-@char_delete:
-  jsr int_aprstab_input_set_context
-  jsr li_char_delete
-  jmp @done
-@char_insert:
-  jsr int_aprstab_input_set_context
-  jsr li_char_insert
-  jmp @done
-@typechar:
-  lda g_kbdcode_atascii
-  cmp #' '
-  beq @type
-  cmp #'-'
-  beq @type
-  cmp #','
-  beq @type
-  jsr ut_is_alphanumeric
-  bcs @done
-@type:
-  jsr int_aprstab_input_set_context
-  lda g_kbdcode_atascii
-  sta CMDDATA0
-  jsr li_type_char
-@done:
-  rts
-
-int_handle_kbd:
-  lda g_kbd_key_pressed
-  bne @valid_key
-  jmp @done
-@valid_key:
-  lda selected_tab
-  cmp #1
-  beq @session
-  cmp #2
-  beq @serial
-  cmp #3
-  beq @term
-  cmp #4
-  beq @aprs
-  jsr int_filetab_handle_kbd
-  jmp @done
-@session:
-  jsr int_session_handle_kbd
-  jmp @done
-@serial:
-  jsr int_serial_handle_kbd
-  jmp @done
-@term:
-  jsr int_form_handle_kbd
-  jmp @done
-@aprs:
-  jsr int_aprstab_handle_kbd
 @done:
   rts
 
@@ -2011,158 +1260,141 @@ int_load_lastfile:
   sec
   rts
 
-baud_menu:                     .tag Menu
-baud_menu_header:              .byte 'B'|$80,"aud",$00
-baud_menu_item_values:
-  .byte RS232_BAUD::B50
-  .byte RS232_BAUD::B300
-  .byte RS232_BAUD::B600
-  .byte RS232_BAUD::B1200
-  .byte RS232_BAUD::B2400
-  .byte RS232_BAUD::B4800
-  .byte RS232_BAUD::B9600
-  .byte RS232_BAUD::B19200
-baud_menu_item_values_end:
-baud_menu_item_labels:
-baud_menu_item_label_50:       .byte "50",$00
-baud_menu_item_label_300:      .byte "300",$00
-baud_menu_item_label_600:      .byte "600",$00
-baud_menu_item_label_1200:     .byte "1200",$00
-baud_menu_item_label_2400:     .byte "2400",$00
-baud_menu_item_label_4800:     .byte "4800",$00
-baud_menu_item_label_9600:     .byte "9600",$00
-baud_menu_item_label_19200:    .byte "19200",$00
-
-data_menu:                     .tag Menu
-data_menu_header:              .byte 'D'|$80,"ata",$00
-data_menu_item_values:
-  .byte RS232_WORDSIZE::N5
-  .byte RS232_WORDSIZE::N6
-  .byte RS232_WORDSIZE::N7
-  .byte RS232_WORDSIZE::N8
-data_menu_item_values_end:
-data_menu_item_labels:
-data_menu_item_label_word5:    .byte "5 bit",$00
-data_menu_item_label_word6:    .byte "6 bit",$00
-data_menu_item_label_word7:    .byte "7 bit",$00
-data_menu_item_label_word8:    .byte "8 bit",$00
-
-stop_menu:                     .tag Menu
-stop_menu_header:              .byte "St",'O'|$80,"p",$00
-stop_menu_item_values:
-  .byte RS232_STOPBITS::N1
-  .byte RS232_STOPBITS::N2
-stop_menu_item_values_end:
-stop_menu_item_labels:
-stop_menu_item_label_word1:    .byte "1 bit",$00
-stop_menu_item_label_word2:    .byte "2 bit",$00
-
-cts_menu:                      .tag Menu
-cts_menu_header:               .byte 'C'|$80,"TS",$00
-cts_menu_item_values:
-  .byte RS232_CTS::OFF
-  .byte RS232_CTS::ON
-cts_menu_item_values_end:
-cts_menu_item_labels:
-cts_menu_item_label_off:       .byte "OFF",$00
-cts_menu_item_label_on:        .byte "ON",$00
-
-dsr_menu:                      .tag Menu
-dsr_menu_header:               .byte "D",'S'|$80,"R",$00
-dsr_menu_item_values:
-  .byte RS232_DSR::OFF
-  .byte RS232_DSR::ON
-dsr_menu_item_values_end:
-dsr_menu_item_labels:
-dsr_menu_item_label_off:       .byte "OFF",$00
-dsr_menu_item_label_on:        .byte "ON",$00
-
-dtr_menu:                      .tag Menu
-dtr_menu_header:               .byte "D",'T'|$80,"R",$00
-dtr_menu_item_values:
-  .byte RS232_DTR::NO_CHANGE
-  .byte RS232_DTR::OFF
-  .byte RS232_DTR::ON
-dtr_menu_item_values_end:
-dtr_menu_item_labels:
-dtr_menu_item_label_no_chage:  .byte "N/C",$00
-dtr_menu_item_label_off:       .byte "OFF",$00
-dtr_menu_item_label_on:        .byte "ON",$00
-
-rts_menu:                      .tag Menu
-rts_menu_header:               .byte 'R'|$80,"TS",$00
-rts_menu_item_values:
-  .byte RS232_RTS::NO_CHANGE
-  .byte RS232_RTS::OFF
-  .byte RS232_RTS::ON
-rts_menu_item_values_end:
-rts_menu_item_labels:
-rts_menu_item_label_no_change: .byte "N/C",$00
-rts_menu_item_label_off:       .byte "OFF",$00
-rts_menu_item_label_on:        .byte "ON",$00
-
-parity_menu:                   .tag Menu
-parity_menu_header:            .byte 'P'|$80,"arity",$00
-parity_menu_item_values:
-  .byte RS232_PARITY::NONE
-  .byte RS232_PARITY::EVEN
-  .byte RS232_PARITY::ODD
-parity_menu_item_values_end:
-parity_menu_item_labels:
-parity_menu_item_label0:       .byte "None",$00
-parity_menu_item_label1:       .byte "Even",$00
-parity_menu_item_label2:       .byte "Odd",$00
-
-protocol_menu:                 .tag Menu
-protocol_menu_header:          .byte '0'|$80,"Protocol",$00
-protocol_menu_item_values:
-  .byte TERM_PROTOCOL::APRS
-  .byte TERM_PROTOCOL::TERM
-protocol_menu_item_values_end:
-protocol_menu_item_labels:
-protocol_menu_item_label_aprs: .byte "APRS",$00
-protocol_menu_item_label_term: .byte "Terminal",$00
-
-file_form:              .tag Form
-term_form:              .tag Form
-
-; the form field table for all tabs
 cfg_field_kind:
   .byte FIELD_TEXT, FIELD_BUTTON, FIELD_BUTTON, FIELD_BUTTON
   .byte FIELD_SELECT, FIELD_SELECT, FIELD_SELECT
+  .byte FIELD_SELECT
+  .byte FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT
+  .byte FIELD_TEXT, FIELD_TEXT, FIELD_TEXT
 cfg_field_scr_lo:
   .byte <FILE_FIELD_OFFSET, <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
   .byte <TERM_MODE_FIELD_OFFSET, <TERM_EOL_FIELD_OFFSET, <TERM_LF_FIELD_OFFSET
+  .byte <SESSION_FIELD_OFFSET
+  .byte <SERIAL_BAUD_FIELD_OFFSET, <SERIAL_DATA_FIELD_OFFSET, <SERIAL_STOP_FIELD_OFFSET, <SERIAL_PARITY_FIELD_OFFSET, <SERIAL_CTS_FIELD_OFFSET, <SERIAL_DSR_FIELD_OFFSET, <SERIAL_DTR_FIELD_OFFSET, <SERIAL_RTS_FIELD_OFFSET
+  .byte <APRS_CALL_FIELD_OFFSET, <APRS_SSID_FIELD_OFFSET, <APRS_DIGI_FIELD_OFFSET
 cfg_field_scr_hi:
   .byte >FILE_FIELD_OFFSET, >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
   .byte >TERM_MODE_FIELD_OFFSET, >TERM_EOL_FIELD_OFFSET, >TERM_LF_FIELD_OFFSET
+  .byte >SESSION_FIELD_OFFSET
+  .byte >SERIAL_BAUD_FIELD_OFFSET, >SERIAL_DATA_FIELD_OFFSET, >SERIAL_STOP_FIELD_OFFSET, >SERIAL_PARITY_FIELD_OFFSET, >SERIAL_CTS_FIELD_OFFSET, >SERIAL_DSR_FIELD_OFFSET, >SERIAL_DTR_FIELD_OFFSET, >SERIAL_RTS_FIELD_OFFSET
+  .byte >APRS_CALL_FIELD_OFFSET, >APRS_SSID_FIELD_OFFSET, >APRS_DIGI_FIELD_OFFSET
 cfg_field_width:
   .byte CFG_NAME_LEN, 6, 6, 15
   .byte 7, 7, 7
+  .byte 8
+  .byte 6, 6, 6, 6, 6, 6, 6, 6
+  .byte APRS_CALLSIGN_LEN, APRS_SSID_LEN, APRS_DIGI_VISIBLE
 cfg_field_data_lo:
   .byte <cfg_filename_li, <btn_load, <btn_save, <btn_default
   .byte <(cfg_draft_config+Cfg::term+CfgTerm::mode),<(cfg_draft_config+Cfg::term+CfgTerm::line_ending),<(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
+  .byte <(cfg_draft_config+Cfg::session+CfgSession::protocol)
+  .byte <(cfg_draft_config+Cfg::serial+CfgSerial::baud), <(cfg_draft_config+Cfg::serial+CfgSerial::data_bits), <(cfg_draft_config+Cfg::serial+CfgSerial::stop_bits), <(cfg_draft_config+Cfg::serial+CfgSerial::parity), <(cfg_draft_config+Cfg::serial+CfgSerial::cts), <(cfg_draft_config+Cfg::serial+CfgSerial::dsr), <(cfg_draft_config+Cfg::serial+CfgSerial::dtr), <(cfg_draft_config+Cfg::serial+CfgSerial::rets)
+  .byte <cfg_callsign_li, <cfg_ssid_li, <cfg_digi_li
 cfg_field_data_hi:
   .byte >cfg_filename_li, >btn_load, >btn_save, >btn_default
   .byte >(cfg_draft_config+Cfg::term+CfgTerm::mode),>(cfg_draft_config+Cfg::term+CfgTerm::line_ending),>(cfg_draft_config+Cfg::serial+CfgSerial::line_feed)
+  .byte >(cfg_draft_config+Cfg::session+CfgSession::protocol)
+  .byte >(cfg_draft_config+Cfg::serial+CfgSerial::baud), >(cfg_draft_config+Cfg::serial+CfgSerial::data_bits), >(cfg_draft_config+Cfg::serial+CfgSerial::stop_bits), >(cfg_draft_config+Cfg::serial+CfgSerial::parity), >(cfg_draft_config+Cfg::serial+CfgSerial::cts), >(cfg_draft_config+Cfg::serial+CfgSerial::dsr), >(cfg_draft_config+Cfg::serial+CfgSerial::dtr), >(cfg_draft_config+Cfg::serial+CfgSerial::rets)
+  .byte >cfg_callsign_li, >cfg_ssid_li, >cfg_digi_li
 cfg_field_values_lo:
   .byte 0, 0, 0, 0
   .byte <term_mode_field_values, <term_eol_field_values, <term_lf_field_values
+  .byte <session_protocol_field_values
+  .byte <serial_baud_field_values, <serial_data_field_values, <serial_stop_field_values, <serial_parity_field_values, <serial_cts_field_values, <serial_dsr_field_values, <serial_dtr_field_values, <serial_rts_field_values
+  .byte 0, 0, 0
 cfg_field_values_hi:
   .byte 0, 0, 0, 0
   .byte >term_mode_field_values, >term_eol_field_values, >term_lf_field_values
+  .byte >session_protocol_field_values
+  .byte >serial_baud_field_values, >serial_data_field_values, >serial_stop_field_values, >serial_parity_field_values, >serial_cts_field_values, >serial_dsr_field_values, >serial_dtr_field_values, >serial_rts_field_values
+  .byte 0, 0, 0
 cfg_field_labels_lo:
   .byte 0, 0, 0, 0
   .byte <term_mode_field_labels_lo, <term_eol_field_labels_lo, <term_lf_field_labels_lo
+  .byte <session_protocol_field_labels_lo
+  .byte <serial_baud_field_labels_lo, <serial_data_field_labels_lo, <serial_stop_field_labels_lo, <serial_parity_field_labels_lo, <serial_cts_field_labels_lo, <serial_dsr_field_labels_lo, <serial_dtr_field_labels_lo, <serial_rts_field_labels_lo
+  .byte 0, 0, 0
 cfg_field_labels_hi:
   .byte 0, 0, 0, 0
   .byte >term_mode_field_labels_lo, >term_eol_field_labels_lo, >term_lf_field_labels_lo
+  .byte >session_protocol_field_labels_lo
+  .byte >serial_baud_field_labels_lo, >serial_data_field_labels_lo, >serial_stop_field_labels_lo, >serial_parity_field_labels_lo, >serial_cts_field_labels_lo, >serial_dsr_field_labels_lo, >serial_dtr_field_labels_lo, >serial_rts_field_labels_lo
+  .byte 0, 0, 0
 cfg_field_arg0:
-  .byte CHAR_ALNUM|CHAR_SPACE, FILE_ACTION_LOAD, FILE_ACTION_SAVE, FILE_ACTION_DEFAULT
+  .byte CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE, FILE_ACTION_LOAD, FILE_ACTION_SAVE, FILE_ACTION_DEFAULT
   .byte 2, 4, 2
+  .byte 2
+  .byte 15, 4, 2, 3, 2, 2, 3, 3
+  .byte CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE, CHAR_DIGIT|CHAR_SPACE, CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE|CHAR_DASH|CHAR_COMMA
 cfg_field_arg1:
   .byte INPUT_UPPER, 0, 0, 0
   .byte 0, 0, 0
+  .byte 0
+  .byte 0, 0, 0, 0, 0, 0, 0, 0
+  .byte INPUT_UPPER, 0, INPUT_UPPER
+
+serial_baud_field_values:
+  .byte RS232_BAUD::B45_5, RS232_BAUD::B50, RS232_BAUD::B56_875, RS232_BAUD::B75, RS232_BAUD::B110, RS232_BAUD::B134_5, RS232_BAUD::B150, RS232_BAUD::B300, RS232_BAUD::B600, RS232_BAUD::B1200, RS232_BAUD::B1800, RS232_BAUD::B2400, RS232_BAUD::B4800, RS232_BAUD::B9600, RS232_BAUD::B19200
+serial_baud_field_labels_lo:
+  .byte <item_45_5, <item_50, <item_56_875, <item_75, <item_110, <item_134_5, <item_150, <item_300, <item_600, <item_1200, <item_1800, <item_2400, <item_4800, <item_9600, <item_19200
+serial_baud_field_labels_hi:
+  .byte >item_45_5, >item_50, >item_56_875, >item_75, >item_110, >item_134_5, >item_150, >item_300, >item_600, >item_1200, >item_1800, >item_2400, >item_4800, >item_9600, >item_19200
+
+serial_data_field_values:
+  .byte RS232_WORDSIZE::N5, RS232_WORDSIZE::N6, RS232_WORDSIZE::N7, RS232_WORDSIZE::N8
+serial_data_field_labels_lo:
+  .byte <item_5bit, <item_6bit, <item_7bit, <item_8bit
+serial_data_field_labels_hi:
+  .byte >item_5bit, >item_6bit, >item_7bit, >item_8bit
+
+serial_stop_field_values:
+  .byte RS232_STOPBITS::N1, RS232_STOPBITS::N2
+serial_stop_field_labels_lo:
+  .byte <item_1bit, <item_2bit
+serial_stop_field_labels_hi:
+  .byte >item_1bit, >item_2bit
+
+serial_parity_field_values:
+  .byte RS232_PARITY::NONE, RS232_PARITY::EVEN, RS232_PARITY::ODD
+serial_parity_field_labels_lo:
+  .byte <item_none, <item_even, <item_odd
+serial_parity_field_labels_hi:
+  .byte >item_none, >item_even, >item_odd
+
+serial_cts_field_values:
+  .byte RS232_CTS::OFF, RS232_CTS::ON
+serial_cts_field_labels_lo:
+  .byte <item_off, <item_on
+serial_cts_field_labels_hi:
+  .byte >item_off, >item_on
+
+serial_dsr_field_values:
+  .byte RS232_DSR::OFF, RS232_DSR::ON
+serial_dsr_field_labels_lo:
+  .byte <item_off, <item_on
+serial_dsr_field_labels_hi:
+  .byte >item_off, >item_on
+
+serial_dtr_field_values:
+  .byte RS232_DTR::NO_CHANGE, RS232_DTR::OFF, RS232_DTR::ON
+serial_dtr_field_labels_lo:
+  .byte <item_nc, <item_off, <item_on
+serial_dtr_field_labels_hi:
+  .byte >item_nc, >item_off, >item_on
+
+serial_rts_field_values:
+  .byte RS232_RTS::NO_CHANGE, RS232_RTS::OFF, RS232_RTS::ON
+serial_rts_field_labels_lo:
+  .byte <item_nc, <item_off, <item_on
+serial_rts_field_labels_hi:
+  .byte >item_nc, >item_off, >item_on
+
+session_protocol_field_values:
+  .byte TERM_PROTOCOL::APRS, TERM_PROTOCOL::TERM
+session_protocol_field_labels_lo:
+  .byte <item_aprs, <item_terminal
+session_protocol_field_labels_hi:
+  .byte >item_aprs, >item_terminal
 
 term_mode_field_values:
   .byte TERM_MODE::LINE, TERM_MODE::CHAR
@@ -2185,6 +1417,35 @@ term_lf_field_labels_lo:
 term_lf_field_labels_hi:
   .byte >item_no, >item_yes
 
+item_45_5:              .byte "45.5",$00
+item_50:                .byte "50",$00
+item_56_875:            .byte "56.875",$00
+item_75:                .byte "75",$00
+item_110:               .byte "110",$00
+item_134_5:             .byte "134.5",$00
+item_150:               .byte "150",$00
+item_300:               .byte "300",$00
+item_600:               .byte "600",$00
+item_1200:              .byte "1200",$00
+item_1800:              .byte "1800",$00
+item_2400:              .byte "2400",$00
+item_4800:              .byte "4800",$00
+item_9600:              .byte "9600",$00
+item_19200:             .byte "19200",$00
+item_5bit:              .byte "5 bit",$00
+item_6bit:              .byte "6 bit",$00
+item_7bit:              .byte "7 bit",$00
+item_8bit:              .byte "8 bit",$00
+item_1bit:              .byte "1 bit",$00
+item_2bit:              .byte "2 bit",$00
+item_none:              .byte "None",$00
+item_even:              .byte "Even",$00
+item_odd:               .byte "Odd",$00
+item_off:               .byte "OFF",$00
+item_on:                .byte "ON",$00
+item_nc:                .byte "N/C",$00
+item_aprs:              .byte "APRS",$00
+item_terminal:          .byte "Terminal",$00
 item_line:              .byte "Line",$00
 item_char:              .byte "Char",$00
 item_cr:                .byte "CR",$00
@@ -2194,15 +1455,55 @@ item_atascii:           .byte "ATASCII",$00
 item_no:                .byte "No",$00
 item_yes:               .byte "Yes",$00
 
+
+serial_baud_label:      .byte "Baud:",$00
+serial_data_label:      .byte "Data bits:",$00
+serial_stop_label:      .byte "Stop bits:",$00
+serial_parity_label:    .byte "Parity:",$00
+serial_cts_label:       .byte "CTS:",$00
+serial_dsr_label:       .byte "DSR:",$00
+serial_dtr_label:       .byte "DTR:",$00
+serial_rts_label:       .byte "RTS:",$00
+
+session_protocol_label: .byte "Protocol:",$00
+
 term_mode_label:        .byte "Mode:",$00
 term_eol_label:         .byte "Line ending:",$00
 term_lf_label:          .byte "Append LF:",$00
+
 form_hint:              .byte 'T'|$80,'A'|$80,'B'|$80," next field",$00
-term_static_idx:        .byte 0
-term_static_ptrs_lo:    .byte <term_mode_label, <term_eol_label, <term_lf_label, <form_hint
-term_static_ptrs_hi:    .byte >term_mode_label, >term_eol_label, >term_lf_label, >form_hint
-term_static_offs_lo:    .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_LF_LABEL_OFFSET, <TERM_HINT_OFFSET
-term_static_offs_hi:    .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_LF_LABEL_OFFSET, >TERM_HINT_OFFSET
+
+cfg_static_ptrs_lo:
+  .byte <filename_label, <file_cfg_suffix, <form_hint
+  .byte <session_protocol_label, <form_hint
+  .byte <serial_baud_label, <serial_data_label, <serial_stop_label, <serial_parity_label, <serial_cts_label, <serial_dsr_label, <serial_dtr_label, <serial_rts_label, <form_hint
+  .byte <term_mode_label, <term_eol_label, <term_lf_label, <form_hint
+  .byte <aprs_callsign_label, <aprs_ssid_label, <aprs_digi_label, <form_hint
+cfg_static_ptrs_hi:
+  .byte >filename_label, >file_cfg_suffix, >form_hint
+  .byte >session_protocol_label, >form_hint
+  .byte >serial_baud_label, >serial_data_label, >serial_stop_label, >serial_parity_label, >serial_cts_label, >serial_dsr_label, >serial_dtr_label, >serial_rts_label, >form_hint
+  .byte >term_mode_label, >term_eol_label, >term_lf_label, >form_hint
+  .byte >aprs_callsign_label, >aprs_ssid_label, >aprs_digi_label, >form_hint
+cfg_static_offs_lo:
+  .byte <FILE_LABEL_OFFSET, <FILE_SUFFIX_OFFSET, <FILE_HINT_OFFSET
+  .byte <SESSION_LABEL_OFFSET, <SESSION_HINT_OFFSET
+  .byte <SERIAL_BAUD_LABEL_OFFSET, <SERIAL_DATA_LABEL_OFFSET, <SERIAL_STOP_LABEL_OFFSET, <SERIAL_PARITY_LABEL_OFFSET, <SERIAL_CTS_LABEL_OFFSET, <SERIAL_DSR_LABEL_OFFSET, <SERIAL_DTR_LABEL_OFFSET, <SERIAL_RTS_LABEL_OFFSET, <SERIAL_HINT_OFFSET
+  .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_LF_LABEL_OFFSET, <TERM_HINT_OFFSET
+  .byte <APRS_CALL_LABEL_OFFSET, <APRS_SSID_LABEL_OFFSET, <APRS_DIGI_LABEL_OFFSET, <APRS_HINT_OFFSET
+cfg_static_offs_hi:
+  .byte >FILE_LABEL_OFFSET, >FILE_SUFFIX_OFFSET, >FILE_HINT_OFFSET
+  .byte >SESSION_LABEL_OFFSET, >SESSION_HINT_OFFSET
+  .byte >SERIAL_BAUD_LABEL_OFFSET, >SERIAL_DATA_LABEL_OFFSET, >SERIAL_STOP_LABEL_OFFSET, >SERIAL_PARITY_LABEL_OFFSET, >SERIAL_CTS_LABEL_OFFSET, >SERIAL_DSR_LABEL_OFFSET, >SERIAL_DTR_LABEL_OFFSET, >SERIAL_RTS_LABEL_OFFSET, >SERIAL_HINT_OFFSET
+  .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_LF_LABEL_OFFSET, >TERM_HINT_OFFSET
+  .byte >APRS_CALL_LABEL_OFFSET, >APRS_SSID_LABEL_OFFSET, >APRS_DIGI_LABEL_OFFSET, >APRS_HINT_OFFSET
+
+tab_static_first:       .byte 0, 3, 5, 14, 18
+tab_static_count:       .byte 3, 2, 9, 4, 4
+tab_form_ptrs_lo:       .byte <file_form, <session_form, <serial_form, <term_form, <aprs_form
+tab_form_ptrs_hi:       .byte >file_form, >session_form, >serial_form, >term_form, >aprs_form
+static_idx:             .byte 0
+static_end:             .byte 0
 
 top_banner:             .byte ' ','S'|$80,'E'|$80,'L'|$80,"tab-> "
                         .byte "          "
@@ -2214,18 +1515,12 @@ tabs_highlight_starts:  .byte 1,6,14,21,26
 tabs_highlight_ends:    .byte 5,13,20,25,30
 num_tabs:               .byte 5
 selected_tab:           .byte 0
-draw_menu_tempy:        .byte 0
-draw_menu_border_width: .byte 0
-draw_menu_end_column:   .byte 0
-draw_menu_data_length:  .byte 0
 
-menu_data_offset:       .byte 0
-menu_item_index:        .byte 0
-menu_item_value:        .byte 0
-menu_item_num_items:    .byte 0
-menu_item_border_width: .byte 0
-
-highlight_border_width: .byte 0
+file_form:              .tag Form
+session_form:           .tag Form
+serial_form:            .tag Form
+aprs_form:              .tag Form
+term_form:              .tag Form
 
 cfg_draft_config:       .tag Cfg
 cfg_saved_config:       .tag Cfg
@@ -2253,13 +1548,10 @@ digi_text_end:          .byte 0
 digi_entry_start:       .byte 0
 digi_entry_end:         .byte 0
 digi_entry_sep:         .byte 0
-aprstab_focus:          .byte 0
 aprs_callsign_label:    .byte "Callsign:",$00
 aprs_ssid_label:        .byte "SSID:",$00
 aprs_digi_label:        .byte "Digipeaters:",$00
 
-cfg_aprs_li_ptrs_lo:    .byte <cfg_callsign_li, <cfg_ssid_li, <cfg_digi_li
-cfg_aprs_li_ptrs_hi:    .byte >cfg_callsign_li, >cfg_ssid_li, >cfg_digi_li
 
 filename_label:         .byte "File name:",$00
 file_cfg_suffix:        .byte ".CFG",$00
