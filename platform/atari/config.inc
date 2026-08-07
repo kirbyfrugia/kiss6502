@@ -22,6 +22,7 @@ CONFIG_INC = 1
 .global cfg_field_arg0
 .global cfg_field_arg1
 
+CONFIG_VERSION       = 1
 CONFIG_FLAG_EDITING  = %00000000
 CONFIG_FLAG_CANCELED = %10000000
 CONFIG_FLAG_START    = %11000000
@@ -29,52 +30,56 @@ CONFIG_FLAG_START    = %11000000
 .linecont +
 
 .struct CfgSerial
-  baud        .byte
-  data_bits   .byte
-  stop_bits   .byte
-  parity      .byte
-  cts         .byte
-  dsr         .byte
-  crx         .byte
-  dtr         .byte
-  rets        .byte
-  xmt         .byte
-  translation .byte
-  line_feed   .byte
+  baud           .res 1
+  data_bits      .res 1
+  stop_bits      .res 1
+  parity         .res 1
+  cts            .res 1
+  dsr            .res 1
+  crx            .res 1
+  dtr            .res 1
+  rets           .res 1
+  xmt            .res 1
+  translation    .res 1
+  line_feed      .res 1
+  placeholder    .res 4
 .endstruct
 
 .struct CfgSession
-  protocol    .byte
+  protocol       .res 1
+  placeholder    .res 4
 .endstruct
 
 .struct CfgTerm
-  terminal_mode .byte
-  line_ending   .byte
+  terminal_mode  .res 1
+  line_ending    .res 1
+  placeholder    .res 8
 .endstruct
 
 .struct CfgAprsAddr
-  callsign    .res 6
-  ssid        .res 1
+  callsign       .res 6
+  ssid           .res 1
 .endstruct
 
 .struct CfgAprs
-  me          .tag CfgAprsAddr
-  num_digi    .res 1
-  digi        .res 8*.sizeof(CfgAprsAddr)
+  me             .tag CfgAprsAddr
+  num_digi       .res 1
+  digi           .res 8*.sizeof(CfgAprsAddr)
+  placeholder    .res 4
 .endstruct
 
 .struct Cfg
-  version     .res 1
-  session     .tag CfgSession
-  term        .tag CfgTerm
-  serial      .tag CfgSerial
-  aprs        .tag CfgAprs
+  config_version .res 1
+  session        .tag CfgSession
+  term           .tag CfgTerm
+  serial         .tag CfgSerial
+  aprs           .tag CfgAprs
 .endstruct
 
 .struct Preset
-  scr_pos_ptr .word
-  label_ptr   .word
-  config_ptr  .word
+  scr_pos_ptr    .word
+  label_ptr      .word
+  config_ptr     .word
 .endstruct
 
 
@@ -113,6 +118,8 @@ CONFIG_FLAG_START    = %11000000
   lda #RS232_XMT::NO_CHANGE
   sta config+Cfg::serial+CfgSerial::xmt
 .endmacro
+
+.assert .sizeof(Cfg) = 100, error, "sizeof(Cfg) changed, bump CONFIG_VERSION"
 
 .endif
 

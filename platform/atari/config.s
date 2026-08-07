@@ -18,11 +18,8 @@
 .segment "CODE"
 .linecont +
 
-
-CONFIG_VERSION    = 1
 CFG_NAME_LEN      = 8
 CFG_LASTFILE_LEN  = 1 + CFG_NAME_LEN
-
 
 int_load_default_config:
   make_config cfg_draft_config, \
@@ -39,7 +36,7 @@ int_load_default_config:
                   RS232_RTS::ON
 
   lda #CONFIG_VERSION
-  sta cfg_draft_config+Cfg::version
+  sta cfg_draft_config+Cfg::config_version
 
   ldx #APRS_CALLSIGN_LEN-1
   lda #' '
@@ -1182,7 +1179,7 @@ cfg_load_config:
   lda CMDDATA5
   cmp #>.sizeof(Cfg)
   bne @error
-  lda cfg_draft_config+Cfg::version
+  lda cfg_draft_config+Cfg::config_version
   cmp #CONFIG_VERSION
   beq @valid
 @error:
