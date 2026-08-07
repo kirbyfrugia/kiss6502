@@ -11,6 +11,7 @@
 .include "screen.inc"
 .include "term.inc"
 .include "utils.inc"
+.include "version.inc"
 
 .segment "ZEROPAGE"
 
@@ -189,6 +190,8 @@ int_draw_dialog_border:
   sta (g_temp_scr_ptr_lo),y
   rts
 
+VERSION_OFFSET   = 19*SCREEN_WIDTH+32
+
 ; draws the banners and the "Preset" label
 ; and any other ui elements
 int_draw_main:
@@ -211,13 +214,32 @@ int_draw_main:
   ldy #0
 @top_banner_loop:
   lda top_banner,y
-  beq @top_banner_done
+  beq @top_banner_loop_done
   eor #$80
   jsr ut_atascii_to_icode
   sta (g_temp_scr_ptr_lo),y
   iny
   jmp @top_banner_loop
-@top_banner_done:
+@top_banner_loop_done:
+
+  lda #<VERSION_OFFSET
+  clc
+  adc SCR_PTR_LO
+  sta g_temp_scr_ptr_lo
+  lda #>VERSION_OFFSET
+  adc SCR_PTR_HI
+  sta g_temp_scr_ptr_hi
+
+  ldy #0
+@version_loop:
+  lda v_version,y
+  beq @version_loop_done
+  eor #$80
+  jsr ut_atascii_to_icode
+  sta (g_temp_scr_ptr_lo),y
+  iny
+  jmp @version_loop
+@version_loop_done:
   jsr int_draw_tabs
   rts
 

@@ -43,6 +43,7 @@ ATARI_SRCS      = main.s \
 		  term_output.s \
 		  rs232.s \
 		  utils.s \
+		  version.s \
 		  wozmon.s
 
 ATARI_INCS     = $(wildcard $(ATARI_DIR)/*.inc)
