@@ -219,20 +219,24 @@ ut_is_alphanumeric:
   rts
 
 ; maps a lowercase ascii letter to uppercase. anything else
-; comes back unchanged.
+; comes back unchanged (but carry will be set)
 ;
 ; inputs:
 ;   a - the character
 ; outputs:
 ;   a - the uppercased character
+;   c - set if not a letter, clear otherwise
 ut_to_upper:
   cmp #'a'
-  bcc @done
+  bcc @not_letter
   cmp #'z'+1
-  bcs @done
+  bcs @not_letter
   sec
   sbc #('a'-'A')
-@done:
+  clc
+  rts
+@not_letter:
+  sec
   rts
 
 ; maps an ascii digit to its 0-9 value.

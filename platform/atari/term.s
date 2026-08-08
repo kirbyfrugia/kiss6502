@@ -429,9 +429,6 @@ int_print_str_with_code:
   lda #':'
   sta g_copy_buffer40,y
   iny
-  lda #' '
-  sta g_copy_buffer40,y
-  iny
 
   tya
   tax
@@ -751,63 +748,35 @@ int_reset:
 @done:
   rts
 
-; sends params to the TNC if desired.
+
+.macro send_tnc command, value, error_branch
+  lda #command
+  sta CMDDATA0
+  lda value
+  sta CMDDATA1
+  jsr pk_send_param
+  bcs error_branch
+.endmacro
+; sends params to the TNC
 ;
 ; outputs:
 ;   port_status - the rs232 status on a putchr error
+;   c           - set if error, clear otherwise
 ;
 ; modifies:
 ;   a,x,y,CMDDATA0/1
-int_maybe_send_tnc_params:
-  ; hasn't been tested yet since it requires a real tnc.
-  ; will try after the next commit.
-  clc
+int_send_tnc_params:
+  send_tnc KISS_CMD::TX_DELAY, cfg_saved_config+Cfg::tnc+CfgTnc::tx_delay, istp_error
+  send_tnc KISS_CMD::PERSISTENCE, cfg_saved_config+Cfg::tnc+CfgTnc::persistence, istp_error
+  send_tnc KISS_CMD::SLOT_TIME, cfg_saved_config+Cfg::tnc+CfgTnc::slot_time, istp_error
+  send_tnc KISS_CMD::TX_TAIL, cfg_saved_config+Cfg::tnc+CfgTnc::tx_tail, istp_error
+  send_tnc KISS_CMD::DUPLEX, cfg_saved_config+Cfg::tnc+CfgTnc::duplex, istp_error
   rts
-;  lda cfg_saved_config+Cfg::session+CfgSession::protocol
-;  cmp #TERM_PROTOCOL::APRS
-;  bne @done
-;
-;  lda #KISS_CMD::TX_DELAY
-;  sta CMDDATA0
-;  lda cfg_saved_config+Cfg::tnc+CfgTnc::tx_delay
-;  sta CMDDATA1
-;  jsr pk_send_param
-;  bcs @error
-;
-;  lda #KISS_CMD::PERSISTENCE
-;  sta CMDDATA0
-;  lda cfg_saved_config+Cfg::tnc+CfgTnc::persistence
-;  sta CMDDATA1
-;  jsr pk_send_param
-;  bcs @error
-;
-;  lda #KISS_CMD::SLOT_TIME
-;  sta CMDDATA0
-;  lda cfg_saved_config+Cfg::tnc+CfgTnc::slot_time
-;  sta CMDDATA1
-;  jsr pk_send_param
-;  bcs @error
-;
-;  lda #KISS_CMD::TX_TAIL
-;  sta CMDDATA0
-;  lda cfg_saved_config+Cfg::tnc+CfgTnc::tx_tail
-;  sta CMDDATA1
-;  jsr pk_send_param
-;  bcs @error
-;
-;  lda #KISS_CMD::DUPLEX
-;  sta CMDDATA0
-;  lda cfg_saved_config+Cfg::tnc+CfgTnc::duplex
-;  sta CMDDATA1
-;  jsr pk_send_param
-;  bcs @error
-;  jmp @done
-;@error:
-;  lda pk_error
-;  sta command_error
-;  sta port_status
-;@done:
-;  rts
+istp_error:
+  lda pk_error
+  sta command_error
+  sta port_status
+  rts
 
 ; closes the port on the way out to config. in concurrent mode the 850
 ; owns the sio bus until the close, and the file tab does disk i/o.
@@ -844,10 +813,6 @@ trm_activate:
   bne @port_error
   lda #PORT_STATUS_OK
   sta port_status
-  jsr int_maybe_send_tnc_params
-  lda port_status
-  cmp #PORT_STATUS_OK
-  bne @port_error
   jsr int_update_status
   jmp @done
 @port_error:
@@ -963,88 +928,87 @@ int_send_raw_line:
 
 int_cmd_line_mode_return:
   lda cfg_saved_config+Cfg::session+CfgSession::protocol
-  cmp #TERM_PROTOCOL::TERM
-  beq @term
-  lda cmd_line_data
-  cmp #'/'
-  bne @message
-  jsr int_run_command
-  jmp @done
-@message:
-  jsr int_send_message
-  jmp @done
+  cmp #TERM_PROTOCOL::APRS
+  beq @aprs
 @term:
   jsr int_send_raw_line
+  jmp @done
+@aprs:
+  lda cmd_line_data
+  cmp #'/'
+  bne @aprs_message
+  jsr int_parse_and_run_slash_command_aprs
+  jmp @done
+@aprs_message:
+  jsr int_send_message
 @done:
   jsr li_shift_clear
   rts
 
-int_run_command:
-  lda #<str_cmd_tx
-  sta CMDDATA0
-  lda #>str_cmd_tx
-  sta CMDDATA1
-  jsr int_cmd_name_matches
-  bcc @tx
+; parses the command line and runs the relevant command
+; assumes first char was a slash
+int_parse_and_run_slash_command_aprs:
+  ldx #1
+  ut_lda_x_to_upper cmd_line_data
+  cmp #'T'
+  beq ipsc_t
+  bne ipsc_unknown
+ipsc_t:
+  inx
+  ut_lda_x_to_upper cmd_line_data
+  cmp #'X'
+  beq ipsc_tx
+  cmp #'N'
+  beq ipsc_tn
+  bne ipsc_unknown
+ipsc_tx:
+  inx
+  ut_lda_x_to_upper cmd_line_data
+  cmp #' '
+  bne ipsc_unknown
+  inx
+  jsr int_cmd_tx
+  jmp ipsc_done
+ipsc_tn:
+  inx
+  ut_lda_x_to_upper cmd_line_data
+  cmp #'C'
+  beq ipsc_tnc
+  bne ipsc_unknown
+ipsc_tnc:
+  inx
+  lda cmd_line_data,x
+  cmp #' '
+  bne ipsc_unknown
+  jsr int_send_tnc_params
+  jsr int_update_status
+  jmp ipsc_done
+ipsc_unknown:
   prep_print_str str_unknown_command
   jsr int_print_str
-  jmp @done
-@tx:
-  jsr int_cmd_tx
-@done:
-  rts
-
-; matches what was typed against the given command name. the
-; typed name has to end at a space, so /txfoo is not a match
-; for /tx.
-;
-; inputs:
-;   CMDDATA0/1 - ptr to the null terminated name, in uppercase
-; outputs:
-;   carry      - clear on a match, set otherwise
-;   y          - index into cmd_line_data just past the name
-int_cmd_name_matches:
-  ldy #0
-@name_loop:
-  lda (CMDDATA0),y
-  beq @name_end
-  sta cmd_char
-  lda cmd_line_data,y
-  jsr ut_to_upper
-  cmp cmd_char
-  bne @no_match
-  iny
-  bne @name_loop
-@name_end:
-  lda cmd_line_data,y
-  cmp #' '
-  bne @no_match
-  clc
-  rts
-@no_match:
-  sec
+ipsc_done:
   rts
 
 ; points the tx addressee at the callsign given.
 ; empty argument goes back to the broadcast addressee.
 ;
 ; inputs:
-;   y - index into cmd_line_data just past the command name
+;   x - index into cmd_line_data just past the command name
 int_cmd_tx:
 @skip_loop:
-  cpy cmd_line+LineInput::data_size
+  cpx cmd_line+LineInput::data_size
   beq @no_arg
-  lda cmd_line_data,y
+  lda cmd_line_data,x
   cmp #' '
   bne @have_arg
-  iny
+  inx
   bne @skip_loop
 @no_arg:
   jsr int_set_tx_broadcast
   jmp @show
 @have_arg:
-  sty cmd_arg_idx
-  tya
+  stx cmd_arg_idx
+  txa
   clc
   adc #<cmd_line_data
   sta CMDDATA0

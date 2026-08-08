@@ -143,4 +143,11 @@ loop:
 done:
 .endmacro
 
+; lda, indexed by y, converted to uppercase. see ut_to_upper
+; for more details
+.macro ut_lda_x_to_upper buf
+  lda buf,x
+  jsr ut_to_upper
+.endmacro
+
 .endif
