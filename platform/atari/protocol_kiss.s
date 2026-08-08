@@ -146,32 +146,18 @@ int_addr_to_text:
   cpy #.sizeof(KissFrameAddr::callsign)
   bne @callsign_loop
 @callsign_done:
-
   ldy #KissFrameAddr::ssid
   lda (CMDDATA0),y
-  beq @pad_loop
+  beq iatt_pad
 
-  jsr ut_ssid_to_digits
-
+  pha
   lda #'-'
   sta addr_text,x
   inx
-
-  ldy #0
-@digits_loop:
-  lda ut_ssid_digits,y
-  sta addr_text,x
-  inx
-  iny
-  cpy ut_ssid_len
-  bne @digits_loop
-@pad_loop:
-  cpx #KISS_ADDRESSEE_LEN
-  beq @done
-  lda #' '
-  sta addr_text,x
-  inx
-  bne @pad_loop
+  pla
+  ut_byte_to_bcd_str_x addr_text
+iatt_pad:
+  ut_pad_x addr_text, KISS_ADDRESSEE_LEN
 @done:
   rts
 
@@ -215,67 +201,6 @@ pk_set_tx_header:
   sta my_addressee,x
   dex
   bpl @copy_loop
-  rts
-
-; validates and converts a two character ssid field into a value.
-; the field can be left aligned, right aligned, or all spaces
-; for a zero ssid.
-;
-; inputs:
-;   CMDDATA0/1 - ptr to the two character field
-; outputs:
-;   a     - the ssid, 0 to 15
-;   carry - set if invalid ssid, clear otherwise
-; modifies:
-;   a,y
-pk_text_to_ssid:
-  left_digit = 0
-  right_digit = 1
-
-  lda #0
-  sta ssid_tmp
-
-  ldy #right_digit
-  lda (CMDDATA0),y
-  cmp #' '
-  bne @right_digit_not_blank
-@right_digit_blank:
-  ldy #left_digit
-  lda (CMDDATA0),y
-  cmp #' '
-  bne @single_digit
-@all_blank:
-  lda ssid_tmp
-  beq @parsed
-@right_digit_not_blank:
-  ldy #left_digit
-  lda (CMDDATA0),y
-  cmp #'2'
-  bcs @error
-  cmp #' '
-  beq @right_digit_not_blank_ignore_left
-  cmp #'0'
-  beq @right_digit_not_blank_ignore_left
-  cmp #'1'
-  bne @error
-@right_digit_not_blank_left_digit_one:
-  lda #10
-  sta ssid_tmp
-@right_digit_not_blank_ignore_left:
-  ldy #right_digit
-  lda (CMDDATA0),y
-@single_digit:
-  jsr ut_ascii_char_to_digit
-  bcs @error
-  clc
-  adc ssid_tmp
-@parsed:
-  cmp #16
-  bcs @error
-  clc
-  rts
-@error:
-  sec
   rts
 
 ; parses a callsign with an optional ssid, e.g. NOCALL-1, stopping
@@ -335,8 +260,9 @@ pk_parse_callsign:
   beq @error
   iny
   lda #' '
-  sta ssid_text+0
-  sta ssid_text+1
+  sta ut_input+0
+  sta ut_input+1
+  sta ut_input+2
   ldx #0
 @ssid_loop:
   cpy text_len
@@ -346,18 +272,17 @@ pk_parse_callsign:
   beq @ssid_end
   cpx #APRS_SSID_LEN
   bcs @error
-  sta ssid_text,x
+  sta ut_input,x
   inx
   iny
   bne @ssid_loop
 @ssid_end:
   cpx #0
   beq @error
-  lda #<ssid_text
-  sta CMDDATA0
-  lda #>ssid_text
-  sta CMDDATA1
-  jsr pk_text_to_ssid
+  jsr ut_bcd_byte_str_to_bin
+  bcs @error
+  lda ut_result
+  cmp #16
   bcs @error
   sta pk_ssid
   clc
@@ -395,13 +320,13 @@ pk_send_message:
 @data_empty:
   jmp @done
 @trim:
-  lda CMDDATA2
-  pha
+  lda CMDDATA0
+  sta ut_input+0
+  lda CMDDATA1
+  sta ut_input+1
   lda buf_size
-  sta CMDDATA2 
+  sta ut_input+2
   jsr ut_str_trim_end_find
-  pla
-  sta CMDDATA2
   lda ut_result
   sta buf_size
   beq @all_spaces
@@ -526,6 +451,41 @@ pk_send_message:
   ldy rs232_last_status
   sty pk_error
   sec
+  rts
+
+; sends a single kiss parameter frame, e.g. FEND $01 $32 FEND
+;
+; inputs:
+;   CMDDATA0 - the kiss command byte
+;   CMDDATA1 - the value
+; outputs:
+;   pk_error - the rs232 status when carry is set
+;   c        - set on a putchr error, clear otherwise
+; modifies:
+;   a,x,y
+pk_send_param:
+  param_cmd = CMDDATA0
+  param_value = CMDDATA1
+
+  lda #KISS_FEND
+  jsr rs232_putchr
+  bcs @error
+  lda param_cmd
+  jsr int_putchr_escaped
+  bcs @error
+  lda param_value
+  jsr int_putchr_escaped
+  bcs @error
+  lda #KISS_FEND
+  jsr rs232_putchr
+  bcs @error
+  clc
+  jmp @done
+@error:
+  ldy rs232_last_status
+  sty pk_error
+  sec
+@done:
   rts
 
 ; writes the byte over rs232, replacing it with the two byte
@@ -1302,12 +1262,11 @@ int_track_sent_msg:
 ;   msg_id_lo/hi - the id we sent
 ; modifies:
 ;   a,y
-;   CMDDATA0/1
 int_track_sent_msg_id:
   lda #<pk_sent_msg_id
-  sta CMDDATA0
+  sta ut_input+0
   lda #>pk_sent_msg_id
-  sta CMDDATA1
+  sta ut_input+1
   ldy #0
   lda msg_id_hi
   jsr ut_hex_to_atascii
@@ -1468,7 +1427,12 @@ int_addr_to_buf:
 int_ssid_to_buf:
   cmp #0
   beq @done
-  jsr ut_ssid_to_digits
+  sta ut_input+0
+  txa
+  pha
+  jsr ut_bin_to_bcd_str
+  pla
+  tax
 
   lda #'-'
   sta g_disp_buf,x
@@ -1476,11 +1440,11 @@ int_ssid_to_buf:
 
   ldy #0
 @digits_loop:
-  lda ut_ssid_digits,y
+  lda ut_result,y
   sta g_disp_buf,x
   inx
   iny
-  cpy ut_ssid_len
+  cpy ut_result+3
   bne @digits_loop
 @done:
   rts
@@ -1493,7 +1457,6 @@ y_index_var:            .res 1
 btwn_counter:           .res 1
 tempy:                  .res 1
 tempchr:                .res 1
-ssid_tmp:               .res 1
 ssid_text:              .res APRS_SSID_LEN
 addr_text:              .res KISS_ADDRESSEE_LEN
 my_addressee:           .res KISS_ADDRESSEE_LEN

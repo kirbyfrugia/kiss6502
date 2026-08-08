@@ -29,6 +29,8 @@
 .ifndef PCTL_KISS_INC
 PCTL_KISS_INC = 1
 
+.linecont +
+
 .global pk_reset
 .global pk_set_tx_header
 .global pk_vbi_tick
@@ -38,13 +40,13 @@ PCTL_KISS_INC = 1
 .global pk_state
 .global pk_frame_header
 .global pk_send_message
+.global pk_send_param
 .global pk_error
 .global pk_broadcast_addressee
 .global pk_encode_addr
 .global pk_source_addr
 .global pk_digi_addrs
 .global pk_digi_len
-.global pk_text_to_ssid
 .global pk_parse_callsign
 .global pk_callsign
 .global pk_ssid
@@ -52,55 +54,64 @@ PCTL_KISS_INC = 1
 .global pk_repeats
 .global pk_have_sent
 
-APRS_CALLSIGN_LEN = 6
-APRS_MAX_MSG_LEN  = 67
-APRS_SSID_LEN     = 2
-APRS_MAX_DIGI     = 8
-APRS_DIGI_LEN     = (APRS_CALLSIGN_LEN+1+APRS_SSID_LEN)*APRS_MAX_DIGI + (APRS_MAX_DIGI-1)*2
+APRS_CALLSIGN_LEN             = 6
+APRS_MAX_MSG_LEN              = 67
+APRS_SSID_LEN                 = 2
+APRS_MAX_DIGI                 = 8
+APRS_DIGI_LEN                 = (APRS_CALLSIGN_LEN+1+APRS_SSID_LEN) \
+                                *APRS_MAX_DIGI + (APRS_MAX_DIGI-1)*2
 
-KISS_STATE_NEW           = %10000000 ; waiting for first FEND
-KISS_STATE_FESC          = %01000000 ; in an FESC waiting for next byte
-KISS_STATE_ADDR          = %00100000 ; the address portion of the frame
-KISS_STATE_BTWN          = %00010000 ; the bytes between addr and info
-KISS_STATE_INFO          = %00001000 ; the info portion
-KISS_FRAME_READY         = %00000100 ; frame complete and ready to be processed
+KISS_STATE_NEW                = %10000000 ; waiting for first FEND
+KISS_STATE_FESC               = %01000000 ; in an FESC waiting for next byte
+KISS_STATE_ADDR               = %00100000 ; the address portion of the frame
+KISS_STATE_BTWN               = %00010000 ; the bytes between addr and info
+KISS_STATE_INFO               = %00001000 ; the info portion
+KISS_FRAME_READY              = %00000100 ; frame complete and ready to be processed
 
-KISS_FEND                = $c0
-KISS_FESC                = $db
-KISS_TFEND               = $dc
-KISS_TFESC               = $dd
+KISS_FEND                     = $c0
+KISS_FESC                     = $db
+KISS_TFEND                    = $dc
+KISS_TFESC                    = $dd
 
-KISS_DUPLEX_HALF         = %00000000
-KISS_DUPLEX_FULL         = %11111111
+KISS_DUPLEX_HALF              = %00000000
+KISS_DUPLEX_FULL              = %11111111
+
+KISS_DEFAULT_TNC_TX_DELAY     = 50
+KISS_DEFAULT_TNC_PERSISTENCE  = 63
+KISS_DEFAULT_TNC_SLOT_TIME    = 10
+KISS_DEFAULT_TNC_TX_TAIL      = 0
 
 ; >092345zNet Control center
-KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX = 7
+;KISS_TYPE_STATUS_TIMESTAMP_ZULU_IDX = 7
 
 ; :NOCALL   :Message
-KISS_TYPE_MSG_START_COLON_IDX  = 0
-KISS_TYPE_MSG_ADDRESSEE_IDX    = 1
-KISS_TYPE_MSG_END_COLON_IDX    = 10
-KISS_TYPE_MSG_TEXT_IDX         = 11
-KISS_ADDRESSEE_LEN             = 9
+KISS_TYPE_MSG_START_COLON_IDX = 0
+KISS_TYPE_MSG_ADDRESSEE_IDX   = 1
+KISS_TYPE_MSG_END_COLON_IDX   = 10
+KISS_TYPE_MSG_TEXT_IDX        = 11
+KISS_ADDRESSEE_LEN            = 9
 
 ; an ack is the text "ack" followed by a 1 to 5 char message id
-KISS_ACK_PREFIX_LEN = 3
-KISS_MSG_ID_MIN_LEN = 1
-KISS_MSG_ID_MAX_LEN = 5
-KISS_MSG_ID_LEN     = 4
+KISS_ACK_PREFIX_LEN           = 3
+KISS_MSG_ID_MIN_LEN           = 1
+KISS_MSG_ID_MAX_LEN           = 5
+KISS_MSG_ID_LEN               = 4
 
-KISS_ACK_STATE_NONE    = 0
-KISS_ACK_STATE_PENDING = 1
-KISS_ACK_STATE_ACKED   = 2
-KISS_REPEATS_MAX       = 99
+KISS_ACK_STATE_NONE           = 0
+KISS_ACK_STATE_PENDING        = 1
+KISS_ACK_STATE_ACKED          = 2
+KISS_REPEATS_MAX              = 99
 
-KISS_SEND_FLAG_TRIM_END  = %10000000
-KISS_SEND_FLAG_NO_MSG_ID = %01000000
-KISS_SEND_FLAG_NO_ECHO   = %00100000
+KISS_SEND_FLAG_TRIM_END       = %10000000
+KISS_SEND_FLAG_NO_MSG_ID      = %01000000
+KISS_SEND_FLAG_NO_ECHO        = %00100000
 
-KISS_HIGHLIGHT_SOURCE    = %10000000
-KISS_HIGHLIGHT_ADDRESSEE = %01000000
+KISS_HIGHLIGHT_SOURCE         = %10000000
+KISS_HIGHLIGHT_ADDRESSEE      = %01000000
 
+KISS_ADDR_COMMAND             = %10000000
+KISS_ADDR_RESERVED            = %01100000
+KISS_ADDR_LAST                = %00000001
 
 ; commands 
 ; all the times/delays are in 10ms units,
@@ -114,10 +125,6 @@ KISS_HIGHLIGHT_ADDRESSEE = %01000000
   DUPLEX      = $05
   RETURN      = $ff
 .endenum
-
-KISS_ADDR_COMMAND  = %10000000
-KISS_ADDR_RESERVED = %01100000
-KISS_ADDR_LAST     = %00000001
 
 ; these are sent shifted left by one bit
 ; but they are unshifted in this struct

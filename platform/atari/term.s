@@ -315,6 +315,7 @@ int_draw_status:
 ;   a,x,y
 int_status_code_to_text:
   lda port_status
+  sta ut_input+0
   jsr ut_bin_to_bcd
 
   ldy ut_result+1
@@ -359,6 +360,7 @@ int_ack_state_to_text:
 ;   a,x,y
 int_repeats_to_text:
   lda pk_repeats
+  sta ut_input+0
   jsr ut_bin_to_bcd
 
   lda ut_result
@@ -375,6 +377,77 @@ int_repeats_to_text:
   tay
   lda ut_hex_table_atascii,y
   sta repeats_text+1
+  rts
+
+; outputs a null terminated string to the terminal output (basically a println)
+;
+; inputs:
+;   CMDDATA0/1 - ptr to the string to print
+; modifies:
+;   A,X,Y
+;   CMDDATA0-3
+;   see to_append_lines
+int_print_str:
+  ldy #0
+@loop:
+  lda (CMDDATA0),y
+  beq @loop_done
+  sta g_copy_buffer40,y
+  iny
+  bne @loop
+@loop_done:
+  tya
+  tax
+  ut_pad_x g_copy_buffer40, TERMINAL_WIDTH
+  lda #<g_copy_buffer40
+  sta CMDDATA0
+  lda #>g_copy_buffer40
+  sta CMDDATA1
+  lda #1
+  sta CMDDATA2
+  lda #0
+  sta CMDDATA3
+  jsr to_append_lines
+  rts
+
+; same as int_print_str except that it also writes ":<code>" to the end.
+;
+; inputs:
+;   same as above, but A should have the code
+; modifies:
+;   same as above, but also ZPB0
+int_print_str_with_code:
+  pha
+  ldy #0
+@str_loop:
+  lda (CMDDATA0),y
+  beq @str_loop_done
+  sta g_copy_buffer40,y
+  iny
+  bne @str_loop
+@str_loop_done:
+  lda #':'
+  sta g_copy_buffer40,y
+  iny
+  lda #' '
+  sta g_copy_buffer40,y
+  iny
+
+  tya
+  tax
+  pla
+  ut_byte_to_bcd_str_x g_copy_buffer40
+  ut_pad_x g_copy_buffer40, TERMINAL_WIDTH
+
+  lda #<g_copy_buffer40
+  sta CMDDATA0
+  lda #>g_copy_buffer40
+  sta CMDDATA1
+  lda #1
+  sta CMDDATA2
+  lda #0
+  sta CMDDATA3
+  jsr to_append_lines
   rts
 
 ; prints the port error to the terminal. called when the status
@@ -394,18 +467,26 @@ int_report_status:
   beq @no_850
   cmp #TIMOUT
   beq @timeout
-  print_str_with_code str_port_error, g_copy_buffer40, port_status
+  prep_print_str str_error_port
+  lda port_status
+  jsr int_print_str_with_code
   jmp @done
 @no_error:
   jmp @done
 @no_handler:
-  print_str_with_code str_no_r, g_copy_buffer40, port_status
+  prep_print_str str_no_r
+  lda port_status
+  jsr int_print_str_with_code
   jmp @done
 @no_850:
-  print_str_with_code str_no_850, g_copy_buffer40, port_status
+  prep_print_str str_no_850
+  lda port_status
+  jsr int_print_str_with_code
   jmp @done
 @timeout:
-  print_str_with_code str_timeout, g_copy_buffer40, port_status
+  prep_print_str str_timeout
+  lda port_status
+  jsr int_print_str_with_code
 @done:
   rts
 
@@ -670,6 +751,64 @@ int_reset:
 @done:
   rts
 
+; sends params to the TNC if desired.
+;
+; outputs:
+;   port_status - the rs232 status on a putchr error
+;
+; modifies:
+;   a,x,y,CMDDATA0/1
+int_maybe_send_tnc_params:
+  ; hasn't been tested yet since it requires a real tnc.
+  ; will try after the next commit.
+  clc
+  rts
+;  lda cfg_saved_config+Cfg::session+CfgSession::protocol
+;  cmp #TERM_PROTOCOL::APRS
+;  bne @done
+;
+;  lda #KISS_CMD::TX_DELAY
+;  sta CMDDATA0
+;  lda cfg_saved_config+Cfg::tnc+CfgTnc::tx_delay
+;  sta CMDDATA1
+;  jsr pk_send_param
+;  bcs @error
+;
+;  lda #KISS_CMD::PERSISTENCE
+;  sta CMDDATA0
+;  lda cfg_saved_config+Cfg::tnc+CfgTnc::persistence
+;  sta CMDDATA1
+;  jsr pk_send_param
+;  bcs @error
+;
+;  lda #KISS_CMD::SLOT_TIME
+;  sta CMDDATA0
+;  lda cfg_saved_config+Cfg::tnc+CfgTnc::slot_time
+;  sta CMDDATA1
+;  jsr pk_send_param
+;  bcs @error
+;
+;  lda #KISS_CMD::TX_TAIL
+;  sta CMDDATA0
+;  lda cfg_saved_config+Cfg::tnc+CfgTnc::tx_tail
+;  sta CMDDATA1
+;  jsr pk_send_param
+;  bcs @error
+;
+;  lda #KISS_CMD::DUPLEX
+;  sta CMDDATA0
+;  lda cfg_saved_config+Cfg::tnc+CfgTnc::duplex
+;  sta CMDDATA1
+;  jsr pk_send_param
+;  bcs @error
+;  jmp @done
+;@error:
+;  lda pk_error
+;  sta command_error
+;  sta port_status
+;@done:
+;  rts
+
 ; closes the port on the way out to config. in concurrent mode the 850
 ; owns the sio bus until the close, and the file tab does disk i/o.
 ;
@@ -705,6 +844,10 @@ trm_activate:
   bne @port_error
   lda #PORT_STATUS_OK
   sta port_status
+  jsr int_maybe_send_tnc_params
+  lda port_status
+  cmp #PORT_STATUS_OK
+  bne @port_error
   jsr int_update_status
   jmp @done
 @port_error:
@@ -757,10 +900,13 @@ int_send_message:
   sta CMDDATA5
   jsr pk_send_message
   bcc ism_success
-  print_str_with_code str_error_rs232_putchr, g_copy_buffer40, pk_error
+  prep_print_str str_error_rs232_putchr
+  lda pk_error
+  jsr int_print_str_with_code
   jmp ism_done
 ism_port_closed:
-  print_str str_port_not_open
+  prep_print_str str_port_not_open
+  jsr int_print_str
   jmp ism_done
 ism_success:
   lda g_disp_buf_num_lines
@@ -805,10 +951,13 @@ int_send_raw_line:
 @error_putchr:
   sty command_error
   sty port_status
-  print_str_with_code str_error_rs232_putchr, g_copy_buffer40, command_error
+  prep_print_str str_error_rs232_putchr
+  tya
+  jsr int_print_str_with_code
   jmp @done
 @port_closed:
-  print_str str_port_not_open
+  prep_print_str str_port_not_open
+  jsr int_print_str
 @done:
   rts
 
@@ -837,7 +986,8 @@ int_run_command:
   sta CMDDATA1
   jsr int_cmd_name_matches
   bcc @tx
-  print_str str_unknown_command
+  prep_print_str str_unknown_command
+  jsr int_print_str
   jmp @done
 @tx:
   jsr int_cmd_tx
@@ -912,7 +1062,8 @@ int_cmd_tx:
   jsr int_draw_status_bar
   rts
 @invalid:
-  print_str str_invalid_callsign
+  prep_print_str str_invalid_callsign
+  jsr int_print_str
   rts
 
 int_set_tx_broadcast:
@@ -1068,7 +1219,9 @@ int_cmd_open_rs232:
 @error:
   sty command_error
   sty port_status
-  print_str_with_code str_open_stage, g_copy_buffer40, rs232_open_stage
+  prep_print_str str_open_stage
+  lda rs232_open_stage
+  jsr int_print_str_with_code
 @done:
   rts
 
@@ -1153,12 +1306,16 @@ int_cmd_get_rs232:
 @error_status:
   sty command_error
   sty port_status
-  print_str_with_code str_error_rs232_status, g_copy_buffer40, command_error
+  prep_print_str str_error_rs232_status
+  tya
+  jsr int_print_str_with_code
   jmp @done
 @error_getchr:
   sty command_error
   sty port_status
-  print_str_with_code str_error_rs232_getchr, g_copy_buffer40, command_error
+  prep_print_str str_error_rs232_getchr
+  tya
+  jsr int_print_str_with_code
 @done:
   rts
 
@@ -1177,7 +1334,9 @@ int_cmd_put_rs232:
 @error_putchr:
   sty command_error
   sty port_status
-  print_str_with_code str_error_rs232_putchr, g_copy_buffer40, command_error
+  prep_print_str str_error_rs232_putchr
+  tya
+  jsr int_print_str_with_code
 @done:
   rts
 
@@ -1213,7 +1372,7 @@ str_port_not_open:      .byte "port not open",$00
 str_no_850:             .byte "850 not found",$00
 str_no_r:               .byte "R: handler not found",$00
 str_timeout:            .byte "Timeout",$00
-str_port_error:         .byte "Port error",$00
+str_error_port:         .byte "Port error",$00
 str_open_stage:         .byte "Open failed at stage",$00
 
 str_status_label:       .byte "st:",$00

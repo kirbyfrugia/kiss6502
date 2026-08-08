@@ -68,12 +68,22 @@ CONFIG_FLAG_START    = %11000000
   placeholder    .res 4
 .endstruct
 
+.struct CfgTnc
+  tx_delay       .res 1
+  persistence    .res 1
+  slot_time      .res 1
+  tx_tail        .res 1
+  duplex         .res 1
+  placeholder    .res 4
+.endstruct
+
 .struct Cfg
   config_version .res 1
   session        .tag CfgSession
-  term           .tag CfgTerm
   serial         .tag CfgSerial
+  term           .tag CfgTerm
   aprs           .tag CfgAprs
+  tnc            .tag CfgTnc
 .endstruct
 
 .struct Preset
@@ -82,44 +92,30 @@ CONFIG_FLAG_START    = %11000000
   config_ptr     .word
 .endstruct
 
+.assert .sizeof(Cfg) = 109, error, "sizeof(Cfg) changed, bump CONFIG_VERSION"
 
+.macro init_li _li, _text, _scr_offset, _num_visible, _data_size
+  lda #0
+  sta _li+LineInput::scr_cursor
+  sta _li+LineInput::data_cursor
+  sta _li+LineInput::first_visible
+  lda #<_scr_offset
+  clc
+  adc SCR_PTR_LO
+  sta _li+LineInput::scr_ptr
+  lda #>_scr_offset
+  adc SCR_PTR_HI
+  sta _li+LineInput::scr_ptr+1
+  lda #<_text
+  sta _li+LineInput::data_ptr
+  lda #>_text
+  sta _li+LineInput::data_ptr+1
+  lda #_num_visible
+  sta _li+LineInput::num_visible
+  lda #_data_size
+  sta _li+LineInput::data_size
 
-.macro make_config  config, _protocol, _terminal_mode, _line_ending, _baud, _data_bits, \
-                   _stop_bits, _parity, _cts, _dsr, _dtr, _rets
-  lda #_protocol
-  sta config+Cfg::session+CfgSession::protocol
-  lda #_terminal_mode
-  sta config+Cfg::term+CfgTerm::terminal_mode
-  lda #_line_ending
-  sta config+Cfg::term+CfgTerm::line_ending
-  lda #_baud
-  sta config+Cfg::serial+CfgSerial::baud
-  lda #_data_bits
-  sta config+Cfg::serial+CfgSerial::data_bits
-  lda #_stop_bits
-  sta config+Cfg::serial+CfgSerial::stop_bits
-  lda #_parity
-  sta config+Cfg::serial+CfgSerial::parity
-  lda #_cts
-  sta config+Cfg::serial+CfgSerial::cts
-  lda #_dsr
-  sta config+Cfg::serial+CfgSerial::dsr
-  lda #_dtr
-  sta config+Cfg::serial+CfgSerial::dtr
-  lda #_rets
-  sta config+Cfg::serial+CfgSerial::rets
-  ; TODO: maybe make the rest of these options
-  lda #RS232_TRANSLATION::NONE
-  sta config+Cfg::serial+CfgSerial::translation
-  lda #RS232_LINE_FEED::NO_APPEND_LF
-  sta config+Cfg::serial+CfgSerial::line_feed
-  lda #RS232_CRX::OFF
-  sta config+Cfg::serial+CfgSerial::crx
-  lda #RS232_XMT::NO_CHANGE
-  sta config+Cfg::serial+CfgSerial::xmt
 .endmacro
-
-.assert .sizeof(Cfg) = 100, error, "sizeof(Cfg) changed, bump CONFIG_VERSION"
 
 .endif
 

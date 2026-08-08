@@ -6,13 +6,9 @@ UTILS_INC = 1
 .global   ut_atascii_to_icode
 .global   ut_hex_table_atascii
 .global   ut_hex_to_atascii
-.global   ut_hex_to_icode
+.global   ut_bin_to_bcd_str
 .global   ut_bin_to_bcd
-.global   ut_ssid_to_digits
-.global   ut_ssid_digits
-.global   ut_ssid_len
-.global   ut_str_to_buf
-.global   ut_str_with_code_to_buf
+.global   ut_bcd_byte_str_to_bin
 .global   ut_str_trim_end_find
 .global   ut_str_validate_no_gaps
 .global   ut_is_alphanumeric
@@ -111,5 +107,40 @@ loop_done:
   .endrepeat
 .endmacro
 
+; writes out a byte in bcd to buf, indexed by x.
+; assumes x is already at start index and A holds the value.
+; increments x as it goes, leaving it one past the end of the digits
+; See ut_bin_to_bcd_str for more details
+.macro ut_byte_to_bcd_str_x buf
+  .local loop
+  sta ut_input+0
+  txa
+  pha
+  jsr ut_bin_to_bcd_str
+  pla
+  tax
+  ldy #0
+loop:
+  lda ut_result,y
+  sta buf,x
+  inx
+  iny
+  cpy ut_result+3
+  bne loop
+.endmacro
+
+; writes spaces to buf, starting at x until end (non-inclusive)
+.macro ut_pad_x buf, end
+  .local loop
+  .local done
+  lda #' '
+loop:
+  cpx #end
+  bcs done
+  sta buf,x
+  inx
+  bne loop
+done:
+.endmacro
 
 .endif

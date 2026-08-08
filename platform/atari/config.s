@@ -21,22 +21,131 @@
 CFG_NAME_LEN      = 8
 CFG_LASTFILE_LEN  = 1 + CFG_NAME_LEN
 
-int_load_default_config:
-  make_config cfg_draft_config, \
-                  TERM_PROTOCOL::APRS, \
-                  TERMINAL_MODE::LINE, \
-                  TERM_LINE_ENDING::CR, \
-                  RS232_BAUD::B9600, \
-                  RS232_WORDSIZE::N8, \
-                  RS232_STOPBITS::N1, \
-                  RS232_PARITY::NONE, \
-                  RS232_CTS::OFF, \
-                  RS232_DSR::OFF, \
-                  RS232_DTR::ON, \
-                  RS232_RTS::ON
+FILE_LABEL_OFFSET          = 5*SCREEN_WIDTH+2
+FILE_VALUE_OFFSET          = 5*SCREEN_WIDTH+14
+FILE_SUFFIX_OFFSET         = FILE_VALUE_OFFSET+CFG_NAME_LEN+1
+FILE_BTN_LOAD_OFFSET       = 7*SCREEN_WIDTH+2
+FILE_BTN_SAVE_OFFSET       = 8*SCREEN_WIDTH+2
+FILE_BTN_DEF_OFFSET        = 9*SCREEN_WIDTH+2
+FILE_HINT_OFFSET           = 19*SCREEN_WIDTH+2
+FILE_STATUS_OFFSET         = 11*SCREEN_WIDTH+2
+FILE_STATUS_WIDTH          = 36
 
+FILE_FIELD_FIRST           = 0
+FILE_FIELD_COUNT           = 4
+
+FILE_ACTION_LOAD           = 1
+FILE_ACTION_SAVE           = 2
+FILE_ACTION_DEFAULT        = 3
+
+APRS_CALLSIGN_LABEL_OFFSET = 5*SCREEN_WIDTH+2
+APRS_CALLSIGN_VALUE_OFFSET = 5*SCREEN_WIDTH+16
+APRS_SSID_LABEL_OFFSET     = 6*SCREEN_WIDTH+2
+APRS_SSID_VALUE_OFFSET     = 6*SCREEN_WIDTH+16
+APRS_DIGI_LABEL_OFFSET     = 7*SCREEN_WIDTH+2
+APRS_DIGI_VALUE_OFFSET     = 7*SCREEN_WIDTH+16
+APRS_DIGI_VISIBLE          = 22
+APRS_TXD_LABEL_OFFSET      = 9*SCREEN_WIDTH+2
+APRS_TXD_VALUE_OFFSET      = 9*SCREEN_WIDTH+16
+APRS_PERS_LABEL_OFFSET     = 10*SCREEN_WIDTH+2
+APRS_PERS_VALUE_OFFSET     = 10*SCREEN_WIDTH+16
+APRS_SLOT_LABEL_OFFSET     = 11*SCREEN_WIDTH+2
+APRS_SLOT_VALUE_OFFSET     = 11*SCREEN_WIDTH+16
+APRS_TXT_LABEL_OFFSET      = 12*SCREEN_WIDTH+2
+APRS_TXT_VALUE_OFFSET      = 12*SCREEN_WIDTH+16
+APRS_DUP_LABEL_OFFSET      = 13*SCREEN_WIDTH+2
+APRS_DUP_VALUE_OFFSET      = 13*SCREEN_WIDTH+15
+APRS_UNITS_OFFSET          = 15*SCREEN_WIDTH+2
+APRS_HINT_OFFSET           = 19*SCREEN_WIDTH+2
+APRS_NUM_LEN               = 3
+
+APRS_FIELD_FIRST           = 15
+APRS_FIELD_COUNT           = 8
+
+SERIAL_BAUD_LABEL_OFFSET   = 5*SCREEN_WIDTH+2
+SERIAL_BAUD_VALUE_OFFSET   = 5*SCREEN_WIDTH+13
+SERIAL_DATA_LABEL_OFFSET   = 6*SCREEN_WIDTH+2
+SERIAL_DATA_VALUE_OFFSET   = 6*SCREEN_WIDTH+13
+SERIAL_STOP_LABEL_OFFSET   = 7*SCREEN_WIDTH+2
+SERIAL_STOP_VALUE_OFFSET   = 7*SCREEN_WIDTH+13
+SERIAL_PARITY_LABEL_OFFSET = 8*SCREEN_WIDTH+2
+SERIAL_PARITY_VALUE_OFFSET = 8*SCREEN_WIDTH+13
+SERIAL_CTS_LABEL_OFFSET    = 9*SCREEN_WIDTH+2
+SERIAL_CTS_VALUE_OFFSET    = 9*SCREEN_WIDTH+13
+SERIAL_DSR_LABEL_OFFSET    = 10*SCREEN_WIDTH+2
+SERIAL_DSR_VALUE_OFFSET    = 10*SCREEN_WIDTH+13
+SERIAL_DTR_LABEL_OFFSET    = 11*SCREEN_WIDTH+2
+SERIAL_DTR_VALUE_OFFSET    = 11*SCREEN_WIDTH+13
+SERIAL_RTS_LABEL_OFFSET    = 12*SCREEN_WIDTH+2
+SERIAL_RTS_VALUE_OFFSET    = 12*SCREEN_WIDTH+13
+SERIAL_HINT_OFFSET         = 19*SCREEN_WIDTH+2
+
+SERIAL_FIELD_FIRST         = 7
+SERIAL_FIELD_COUNT         = 8
+
+SESSION_LABEL_OFFSET       = 5*SCREEN_WIDTH+2
+SESSION_VALUE_OFFSET       = 5*SCREEN_WIDTH+12
+SESSION_HINT_OFFSET        = 19*SCREEN_WIDTH+2
+
+SESSION_FIELD_FIRST        = 6
+SESSION_FIELD_COUNT        = 1
+
+TERM_MODE_LABEL_OFFSET     = 5*SCREEN_WIDTH+2
+TERM_MODE_VALUE_OFFSET     = 5*SCREEN_WIDTH+15
+TERM_EOL_LABEL_OFFSET      = 6*SCREEN_WIDTH+2
+TERM_EOL_VALUE_OFFSET      = 6*SCREEN_WIDTH+15
+TERM_HINT_OFFSET           = 19*SCREEN_WIDTH+2
+
+TERM_FIELD_FIRST           = 4
+TERM_FIELD_COUNT           = 2
+
+int_load_default_config:
   lda #CONFIG_VERSION
   sta cfg_draft_config+Cfg::config_version
+
+  lda #TERM_PROTOCOL::TERM
+  sta cfg_draft_config+Cfg::session+CfgSession::protocol
+
+  lda #RS232_BAUD::B9600
+  sta cfg_draft_config+Cfg::serial+CfgSerial::baud
+  lda #RS232_WORDSIZE::N8
+  sta cfg_draft_config+Cfg::serial+CfgSerial::data_bits
+  lda #RS232_STOPBITS::N1
+  sta cfg_draft_config+Cfg::serial+CfgSerial::stop_bits
+  lda #RS232_PARITY::NONE
+  sta cfg_draft_config+Cfg::serial+CfgSerial::parity
+  lda #RS232_CTS::OFF
+  sta cfg_draft_config+Cfg::serial+CfgSerial::cts
+  lda #RS232_DSR::OFF
+  sta cfg_draft_config+Cfg::serial+CfgSerial::dsr
+  lda #RS232_CRX::OFF
+  sta cfg_draft_config+Cfg::serial+CfgSerial::crx
+  lda #RS232_DTR::ON
+  sta cfg_draft_config+Cfg::serial+CfgSerial::dtr
+  lda #RS232_RTS::ON
+  sta cfg_draft_config+Cfg::serial+CfgSerial::rets
+  lda #RS232_XMT::NO_CHANGE
+  sta cfg_draft_config+Cfg::serial+CfgSerial::xmt
+  lda #RS232_TRANSLATION::NONE
+  sta cfg_draft_config+Cfg::serial+CfgSerial::translation
+  lda #RS232_LINE_FEED::NO_APPEND_LF
+  sta cfg_draft_config+Cfg::serial+CfgSerial::line_feed
+
+  lda #TERMINAL_MODE::LINE
+  sta cfg_draft_config+Cfg::term+CfgTerm::terminal_mode
+  lda #TERM_LINE_ENDING::CRLF
+  sta cfg_draft_config+Cfg::term+CfgTerm::line_ending
+
+  lda #KISS_DEFAULT_TNC_TX_DELAY
+  sta cfg_draft_config+Cfg::tnc+CfgTnc::tx_delay
+  lda #KISS_DEFAULT_TNC_PERSISTENCE
+  sta cfg_draft_config+Cfg::tnc+CfgTnc::persistence
+  lda #KISS_DEFAULT_TNC_SLOT_TIME
+  sta cfg_draft_config+Cfg::tnc+CfgTnc::slot_time
+  lda #KISS_DEFAULT_TNC_TX_TAIL
+  sta cfg_draft_config+Cfg::tnc+CfgTnc::tx_tail
+  lda #KISS_DUPLEX_HALF
+  sta cfg_draft_config+Cfg::tnc+CfgTnc::duplex
 
   ldx #APRS_CALLSIGN_LEN-1
   lda #' '
@@ -48,6 +157,12 @@ int_load_default_config:
   lda #0
   sta cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
   sta cfg_draft_config+Cfg::aprs+CfgAprs::num_digi
+
+  ldx #.sizeof(CfgAprs::digi)
+@digi_loop:
+  sta cfg_draft_config+Cfg::aprs+CfgAprs::digi,x
+  dex
+  bpl @digi_loop
 
   jsr int_aprstab_config_to_text
   rts
@@ -281,71 +396,6 @@ int_start_clear_status:
   bpl @loop
   rts
 
-FILE_LABEL_OFFSET      = 5*SCREEN_WIDTH+2
-FILE_FIELD_OFFSET      = 5*SCREEN_WIDTH+14
-FILE_SUFFIX_OFFSET     = FILE_FIELD_OFFSET+CFG_NAME_LEN+1
-FILE_BTN_LOAD_OFFSET   = 7*SCREEN_WIDTH+2
-FILE_BTN_SAVE_OFFSET   = 8*SCREEN_WIDTH+2
-FILE_BTN_DEF_OFFSET    = 9*SCREEN_WIDTH+2
-FILE_HINT_OFFSET       = 19*SCREEN_WIDTH+2
-FILE_STATUS_OFFSET     = 11*SCREEN_WIDTH+2
-FILE_STATUS_WIDTH      = 36
-
-FILE_FIELD_FIRST       = 0
-FILE_FIELD_COUNT       = 4
-
-FILE_ACTION_LOAD       = 1
-FILE_ACTION_SAVE       = 2
-FILE_ACTION_DEFAULT    = 3
-
-APRS_CALL_LABEL_OFFSET = 5*SCREEN_WIDTH+2
-APRS_CALL_FIELD_OFFSET = 5*SCREEN_WIDTH+16
-APRS_SSID_LABEL_OFFSET = 6*SCREEN_WIDTH+2
-APRS_SSID_FIELD_OFFSET = 6*SCREEN_WIDTH+16
-APRS_DIGI_LABEL_OFFSET = 7*SCREEN_WIDTH+2
-APRS_DIGI_FIELD_OFFSET = 7*SCREEN_WIDTH+16
-APRS_DIGI_VISIBLE      = 22
-APRS_HINT_OFFSET       = 19*SCREEN_WIDTH+2
-
-APRS_FIELD_FIRST       = 15
-APRS_FIELD_COUNT       = 3
-
-SERIAL_BAUD_LABEL_OFFSET   = 5*SCREEN_WIDTH+2
-SERIAL_BAUD_FIELD_OFFSET   = 5*SCREEN_WIDTH+13
-SERIAL_DATA_LABEL_OFFSET   = 6*SCREEN_WIDTH+2
-SERIAL_DATA_FIELD_OFFSET   = 6*SCREEN_WIDTH+13
-SERIAL_STOP_LABEL_OFFSET   = 7*SCREEN_WIDTH+2
-SERIAL_STOP_FIELD_OFFSET   = 7*SCREEN_WIDTH+13
-SERIAL_PARITY_LABEL_OFFSET = 8*SCREEN_WIDTH+2
-SERIAL_PARITY_FIELD_OFFSET = 8*SCREEN_WIDTH+13
-SERIAL_CTS_LABEL_OFFSET    = 9*SCREEN_WIDTH+2
-SERIAL_CTS_FIELD_OFFSET    = 9*SCREEN_WIDTH+13
-SERIAL_DSR_LABEL_OFFSET    = 10*SCREEN_WIDTH+2
-SERIAL_DSR_FIELD_OFFSET    = 10*SCREEN_WIDTH+13
-SERIAL_DTR_LABEL_OFFSET    = 11*SCREEN_WIDTH+2
-SERIAL_DTR_FIELD_OFFSET    = 11*SCREEN_WIDTH+13
-SERIAL_RTS_LABEL_OFFSET    = 12*SCREEN_WIDTH+2
-SERIAL_RTS_FIELD_OFFSET    = 12*SCREEN_WIDTH+13
-SERIAL_HINT_OFFSET         = 19*SCREEN_WIDTH+2
-
-SERIAL_FIELD_FIRST     = 7
-SERIAL_FIELD_COUNT     = 8
-
-SESSION_LABEL_OFFSET   = 5*SCREEN_WIDTH+2
-SESSION_FIELD_OFFSET   = 5*SCREEN_WIDTH+12
-SESSION_HINT_OFFSET    = 19*SCREEN_WIDTH+2
-
-SESSION_FIELD_FIRST    = 6
-SESSION_FIELD_COUNT    = 1
-
-TERM_MODE_LABEL_OFFSET = 5*SCREEN_WIDTH+2
-TERM_MODE_FIELD_OFFSET = 5*SCREEN_WIDTH+15
-TERM_EOL_LABEL_OFFSET  = 6*SCREEN_WIDTH+2
-TERM_EOL_FIELD_OFFSET  = 6*SCREEN_WIDTH+15
-TERM_HINT_OFFSET       = 19*SCREEN_WIDTH+2
-
-TERM_FIELD_FIRST       = 4
-TERM_FIELD_COUNT       = 2
 
 int_filetab_init:
   jsr int_load_lastfile
@@ -362,11 +412,11 @@ int_filetab_init:
   sta cfg_filename_li+LineInput::data_cursor
   sta cfg_filename_li+LineInput::first_visible
 
-  lda #<FILE_FIELD_OFFSET
+  lda #<FILE_VALUE_OFFSET
   clc
   adc SCR_PTR_LO
   sta cfg_filename_li+LineInput::scr_ptr
-  lda #>FILE_FIELD_OFFSET
+  lda #>FILE_VALUE_OFFSET
   adc SCR_PTR_HI
   sta cfg_filename_li+LineInput::scr_ptr+1
 
@@ -439,11 +489,11 @@ int_filetab_load:
 ;   a,y
 int_filetab_filename_valid:
   lda #<cfg_filename_text
-  sta CMDDATA0
+  sta ut_input+0
   lda #>cfg_filename_text
-  sta CMDDATA1
+  sta ut_input+1
   lda #CFG_NAME_LEN
-  sta CMDDATA2
+  sta ut_input+2
   jsr ut_str_validate_no_gaps
   rts
 
@@ -498,70 +548,21 @@ int_aprstab_init:
   lda #0
   sta aprs_form+Form::focus
 
-  lda #0
-  sta cfg_callsign_li+LineInput::scr_cursor
-  sta cfg_callsign_li+LineInput::data_cursor
-  sta cfg_callsign_li+LineInput::first_visible
-  lda #<APRS_CALL_FIELD_OFFSET
-  clc
-  adc SCR_PTR_LO
-  sta cfg_callsign_li+LineInput::scr_ptr
-  lda #>APRS_CALL_FIELD_OFFSET
-  adc SCR_PTR_HI
-  sta cfg_callsign_li+LineInput::scr_ptr+1
-  lda #<cfg_callsign_text
-  sta cfg_callsign_li+LineInput::data_ptr
-  lda #>cfg_callsign_text
-  sta cfg_callsign_li+LineInput::data_ptr+1
-  lda #APRS_CALLSIGN_LEN
-  sta cfg_callsign_li+LineInput::num_visible
-  sta cfg_callsign_li+LineInput::data_size
+  init_li cfg_callsign_li, cfg_callsign_text, APRS_CALLSIGN_VALUE_OFFSET, APRS_CALLSIGN_LEN, APRS_CALLSIGN_LEN
+  init_li cfg_ssid_li, cfg_ssid_text, APRS_SSID_VALUE_OFFSET, APRS_SSID_LEN, APRS_SSID_LEN
+  init_li cfg_digi_li, cfg_digi_text, APRS_DIGI_VALUE_OFFSET, APRS_DIGI_VISIBLE, APRS_DIGI_LEN
 
-  lda #0
-  sta cfg_ssid_li+LineInput::scr_cursor
-  sta cfg_ssid_li+LineInput::data_cursor
-  sta cfg_ssid_li+LineInput::first_visible
-  lda #<APRS_SSID_FIELD_OFFSET
-  clc
-  adc SCR_PTR_LO
-  sta cfg_ssid_li+LineInput::scr_ptr
-  lda #>APRS_SSID_FIELD_OFFSET
-  adc SCR_PTR_HI
-  sta cfg_ssid_li+LineInput::scr_ptr+1
-  lda #<cfg_ssid_text
-  sta cfg_ssid_li+LineInput::data_ptr
-  lda #>cfg_ssid_text
-  sta cfg_ssid_li+LineInput::data_ptr+1
-  lda #APRS_SSID_LEN
-  sta cfg_ssid_li+LineInput::num_visible
-  sta cfg_ssid_li+LineInput::data_size
-
-  lda #0
-  sta cfg_digi_li+LineInput::scr_cursor
-  sta cfg_digi_li+LineInput::data_cursor
-  sta cfg_digi_li+LineInput::first_visible
-  lda #<APRS_DIGI_FIELD_OFFSET
-  clc
-  adc SCR_PTR_LO
-  sta cfg_digi_li+LineInput::scr_ptr
-  lda #>APRS_DIGI_FIELD_OFFSET
-  adc SCR_PTR_HI
-  sta cfg_digi_li+LineInput::scr_ptr+1
-  lda #<cfg_digi_text
-  sta cfg_digi_li+LineInput::data_ptr
-  lda #>cfg_digi_text
-  sta cfg_digi_li+LineInput::data_ptr+1
-  lda #APRS_DIGI_VISIBLE
-  sta cfg_digi_li+LineInput::num_visible
-  lda #APRS_DIGI_LEN
-  sta cfg_digi_li+LineInput::data_size
-
+  init_li cfg_txdelay_li, cfg_txdelay_text, APRS_TXD_VALUE_OFFSET, APRS_NUM_LEN, APRS_NUM_LEN
+  init_li cfg_pers_li, cfg_pers_text, APRS_PERS_VALUE_OFFSET, APRS_NUM_LEN, APRS_NUM_LEN
+  init_li cfg_slot_li, cfg_slot_text, APRS_SLOT_VALUE_OFFSET, APRS_NUM_LEN, APRS_NUM_LEN
+  init_li cfg_txtail_li, cfg_txtail_text, APRS_TXT_VALUE_OFFSET, APRS_NUM_LEN, APRS_NUM_LEN
   rts
 
 int_aprstab_config_to_text:
   jsr int_aprstab_callsign_to_text
   jsr int_aprstab_ssid_to_text
   jsr int_aprstab_digi_to_text
+  jsr int_aprstab_tnc_to_text
 
   lda #0
   sta cfg_callsign_li+LineInput::scr_cursor
@@ -573,6 +574,110 @@ int_aprstab_config_to_text:
   sta cfg_digi_li+LineInput::scr_cursor
   sta cfg_digi_li+LineInput::data_cursor
   sta cfg_digi_li+LineInput::first_visible
+  sta cfg_txdelay_li+LineInput::scr_cursor
+  sta cfg_txdelay_li+LineInput::data_cursor
+  sta cfg_txdelay_li+LineInput::first_visible
+  sta cfg_pers_li+LineInput::scr_cursor
+  sta cfg_pers_li+LineInput::data_cursor
+  sta cfg_pers_li+LineInput::first_visible
+  sta cfg_slot_li+LineInput::scr_cursor
+  sta cfg_slot_li+LineInput::data_cursor
+  sta cfg_slot_li+LineInput::first_visible
+  sta cfg_txtail_li+LineInput::scr_cursor
+  sta cfg_txtail_li+LineInput::data_cursor
+  sta cfg_txtail_li+LineInput::first_visible
+  rts
+
+int_aprstab_tnc_to_text:
+  ldx #0
+  lda cfg_draft_config+Cfg::tnc+CfgTnc::tx_delay
+  ut_byte_to_bcd_str_x cfg_txdelay_text
+  ut_pad_x cfg_txdelay_text, APRS_NUM_LEN
+
+  ldx #0
+  lda cfg_draft_config+Cfg::tnc+CfgTnc::persistence
+  ut_byte_to_bcd_str_x cfg_pers_text
+  ut_pad_x cfg_pers_text, APRS_NUM_LEN
+
+  ldx #0
+  lda cfg_draft_config+Cfg::tnc+CfgTnc::slot_time
+  ut_byte_to_bcd_str_x cfg_slot_text
+  ut_pad_x cfg_slot_text, APRS_NUM_LEN
+
+  ldx #0
+  lda cfg_draft_config+Cfg::tnc+CfgTnc::tx_tail
+  ut_byte_to_bcd_str_x cfg_txtail_text
+  ut_pad_x cfg_txtail_text, APRS_NUM_LEN
+
+  rts
+
+.macro buf_to_byte_3digit buf, dest_result, error_branch
+  ldx #0
+  lda buf,x
+  sta ut_input+0
+  inx
+  lda buf,x
+  sta ut_input+1
+  inx
+  lda buf,x
+  sta ut_input+2
+  jsr ut_bcd_byte_str_to_bin
+  bcs error_branch
+  lda ut_result
+  sta dest_result
+.endmacro
+
+; parses the numeric tnc fields into the draft config
+;
+; outputs:
+;   CMDDATA0/1 - ptr to the error message when carry is set
+;   c          - set if any field was invalid, clear otherwise
+int_aprstab_text_to_tnc:
+  buf_to_byte_3digit cfg_txdelay_text, \
+                     cfg_draft_config+Cfg::tnc+CfgTnc::tx_delay, \
+                     iattt_txdelay_error
+
+  buf_to_byte_3digit cfg_pers_text, \
+                     cfg_draft_config+Cfg::tnc+CfgTnc::persistence, \
+                     iattt_pers_error
+
+  buf_to_byte_3digit cfg_slot_text, \
+                     cfg_draft_config+Cfg::tnc+CfgTnc::slot_time, \
+                     iattt_slot_error
+
+  buf_to_byte_3digit cfg_txtail_text, \
+                     cfg_draft_config+Cfg::tnc+CfgTnc::tx_tail, \
+                     iattt_txtail_error
+
+  clc
+  rts
+iattt_txdelay_error:
+  lda #<msg_invalid_txdelay
+  sta CMDDATA0
+  lda #>msg_invalid_txdelay
+  sta CMDDATA1
+  sec
+  rts
+iattt_pers_error:
+  lda #<msg_invalid_pers
+  sta CMDDATA0
+  lda #>msg_invalid_pers
+  sta CMDDATA1
+  sec
+  rts
+iattt_slot_error:
+  lda #<msg_invalid_slot
+  sta CMDDATA0
+  lda #>msg_invalid_slot
+  sta CMDDATA1
+  sec
+  rts
+iattt_txtail_error:
+  lda #<msg_invalid_txtail
+  sta CMDDATA0
+  lda #>msg_invalid_txtail
+  sta CMDDATA1
+  sec
   rts
 
 int_aprstab_callsign_to_text:
@@ -587,33 +692,29 @@ int_aprstab_callsign_to_text:
 ; converts the draft config ssid byte (0-15) into digits
 ; for the ssid field.
 int_aprstab_ssid_to_text:
+  ldx #0
   lda cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
-  cmp #10
-  bcc @single
-  sbc #10
-  ldx #'1'
-  stx cfg_ssid_text+0
-  clc
-  adc #'0'
-  sta cfg_ssid_text+1
-  rts
-@single:
-  clc
-  adc #'0'
-  sta cfg_ssid_text+0
-  lda #' '
-  sta cfg_ssid_text+1
+  ut_byte_to_bcd_str_x cfg_ssid_text
+  ut_pad_x cfg_ssid_text, APRS_SSID_LEN
   rts
 
-; validates and converts the ssid field into a hex value for saving
+; validates and converts the ssid field into a byte value for saving
 ; outputs:
 ;   c - set if invalid ssid, clear otherwise
 int_aprstab_text_to_ssid:
-  lda #<cfg_ssid_text
-  sta CMDDATA0
-  lda #>cfg_ssid_text
-  sta CMDDATA1
-  jsr pk_text_to_ssid
+  ldx #0
+  lda cfg_ssid_text,x
+  sta ut_input+0
+  inx
+  lda cfg_ssid_text,x
+  sta ut_input+1
+  lda #' '
+  sta ut_input+2
+  jsr ut_bcd_byte_str_to_bin
+  bcs @error
+
+  lda ut_result
+  cmp #16
   bcs @error
   sta cfg_draft_config+Cfg::aprs+CfgAprs::me+CfgAprsAddr::ssid
   clc
@@ -623,16 +724,16 @@ int_aprstab_text_to_ssid:
   rts
 
 ; validates and converts the callsign field, uppercasing it
-; on the way into the draft config.
+; if needed, into the draft config.
 ; outputs:
 ;   c - set if invalid callsign, clear otherwise
 int_aprstab_text_to_callsign:
   lda #<cfg_callsign_text
-  sta CMDDATA0
+  sta ut_input+0
   lda #>cfg_callsign_text
-  sta CMDDATA1
+  sta ut_input+1
   lda #APRS_CALLSIGN_LEN
-  sta CMDDATA2
+  sta ut_input+2
   jsr ut_str_trim_end_find
   lda ut_result
   beq @blank
@@ -681,11 +782,11 @@ int_aprstab_text_to_digi:
   bpl @clear_loop
 
   lda #<cfg_digi_text
-  sta CMDDATA0
+  sta ut_input+0
   lda #>cfg_digi_text
-  sta CMDDATA1
+  sta ut_input+1
   lda #APRS_DIGI_LEN
-  sta CMDDATA2
+  sta ut_input+2
   jsr ut_str_trim_end_find
 
   lda #0
@@ -785,7 +886,7 @@ int_aprstab_text_to_digi:
   clc
   rts
 
-; converts all three aprs fields into the draft config. a blank
+; converts all the aprs fields into the draft config. a blank
 ; callsign is allowed here, callers that require one check for it.
 ; outputs:
 ;   CMDDATA0/1 - ptr to the error message when carry is set
@@ -797,7 +898,13 @@ int_aprstab_form_to_config:
   bcs @ssid_error
   jsr int_aprstab_text_to_digi
   bcs @digi_error
+  jsr int_aprstab_text_to_tnc
+  bcs @tnc_error
   clc
+  rts
+@tnc_error:
+  ; error loaded in int_aprstab_text_to_tnc
+  sec
   rts
 @callsign_error:
   lda #<msg_invalid_callsign
@@ -1278,73 +1385,73 @@ cfg_field_kind:
   .byte FIELD_SELECT, FIELD_SELECT
   .byte FIELD_SELECT
   .byte FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT, FIELD_SELECT
-  .byte FIELD_TEXT, FIELD_TEXT, FIELD_TEXT
+  .byte FIELD_TEXT, FIELD_TEXT, FIELD_TEXT, FIELD_TEXT, FIELD_TEXT, FIELD_TEXT, FIELD_TEXT, FIELD_SELECT
 cfg_field_scr_lo:
-  .byte <FILE_FIELD_OFFSET, <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
-  .byte <TERM_MODE_FIELD_OFFSET, <TERM_EOL_FIELD_OFFSET
-  .byte <SESSION_FIELD_OFFSET
-  .byte <SERIAL_BAUD_FIELD_OFFSET, <SERIAL_DATA_FIELD_OFFSET, <SERIAL_STOP_FIELD_OFFSET, <SERIAL_PARITY_FIELD_OFFSET, <SERIAL_CTS_FIELD_OFFSET, <SERIAL_DSR_FIELD_OFFSET, <SERIAL_DTR_FIELD_OFFSET, <SERIAL_RTS_FIELD_OFFSET
-  .byte <APRS_CALL_FIELD_OFFSET, <APRS_SSID_FIELD_OFFSET, <APRS_DIGI_FIELD_OFFSET
+  .byte <FILE_VALUE_OFFSET, <FILE_BTN_LOAD_OFFSET, <FILE_BTN_SAVE_OFFSET, <FILE_BTN_DEF_OFFSET
+  .byte <TERM_MODE_VALUE_OFFSET, <TERM_EOL_VALUE_OFFSET
+  .byte <SESSION_VALUE_OFFSET
+  .byte <SERIAL_BAUD_VALUE_OFFSET, <SERIAL_DATA_VALUE_OFFSET, <SERIAL_STOP_VALUE_OFFSET, <SERIAL_PARITY_VALUE_OFFSET, <SERIAL_CTS_VALUE_OFFSET, <SERIAL_DSR_VALUE_OFFSET, <SERIAL_DTR_VALUE_OFFSET, <SERIAL_RTS_VALUE_OFFSET
+  .byte <APRS_CALLSIGN_VALUE_OFFSET, <APRS_SSID_VALUE_OFFSET, <APRS_DIGI_VALUE_OFFSET, <APRS_TXD_VALUE_OFFSET, <APRS_PERS_VALUE_OFFSET, <APRS_SLOT_VALUE_OFFSET, <APRS_TXT_VALUE_OFFSET, <APRS_DUP_VALUE_OFFSET
 cfg_field_scr_hi:
-  .byte >FILE_FIELD_OFFSET, >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
-  .byte >TERM_MODE_FIELD_OFFSET, >TERM_EOL_FIELD_OFFSET
-  .byte >SESSION_FIELD_OFFSET
-  .byte >SERIAL_BAUD_FIELD_OFFSET, >SERIAL_DATA_FIELD_OFFSET, >SERIAL_STOP_FIELD_OFFSET, >SERIAL_PARITY_FIELD_OFFSET, >SERIAL_CTS_FIELD_OFFSET, >SERIAL_DSR_FIELD_OFFSET, >SERIAL_DTR_FIELD_OFFSET, >SERIAL_RTS_FIELD_OFFSET
-  .byte >APRS_CALL_FIELD_OFFSET, >APRS_SSID_FIELD_OFFSET, >APRS_DIGI_FIELD_OFFSET
+  .byte >FILE_VALUE_OFFSET, >FILE_BTN_LOAD_OFFSET, >FILE_BTN_SAVE_OFFSET, >FILE_BTN_DEF_OFFSET
+  .byte >TERM_MODE_VALUE_OFFSET, >TERM_EOL_VALUE_OFFSET
+  .byte >SESSION_VALUE_OFFSET
+  .byte >SERIAL_BAUD_VALUE_OFFSET, >SERIAL_DATA_VALUE_OFFSET, >SERIAL_STOP_VALUE_OFFSET, >SERIAL_PARITY_VALUE_OFFSET, >SERIAL_CTS_VALUE_OFFSET, >SERIAL_DSR_VALUE_OFFSET, >SERIAL_DTR_VALUE_OFFSET, >SERIAL_RTS_VALUE_OFFSET
+  .byte >APRS_CALLSIGN_VALUE_OFFSET, >APRS_SSID_VALUE_OFFSET, >APRS_DIGI_VALUE_OFFSET, >APRS_TXD_VALUE_OFFSET, >APRS_PERS_VALUE_OFFSET, >APRS_SLOT_VALUE_OFFSET, >APRS_TXT_VALUE_OFFSET, >APRS_DUP_VALUE_OFFSET
 cfg_field_width:
   .byte CFG_NAME_LEN, 6, 6, 15
   .byte 7, 7
   .byte 8
   .byte 6, 6, 6, 6, 6, 6, 6, 6
-  .byte APRS_CALLSIGN_LEN, APRS_SSID_LEN, APRS_DIGI_VISIBLE
+  .byte APRS_CALLSIGN_LEN, APRS_SSID_LEN, APRS_DIGI_VISIBLE, APRS_NUM_LEN, APRS_NUM_LEN, APRS_NUM_LEN, APRS_NUM_LEN, 6
 cfg_field_data_lo:
   .byte <cfg_filename_li, <btn_load, <btn_save, <btn_default
   .byte <(cfg_draft_config+Cfg::term+CfgTerm::terminal_mode),<(cfg_draft_config+Cfg::term+CfgTerm::line_ending)
   .byte <(cfg_draft_config+Cfg::session+CfgSession::protocol)
   .byte <(cfg_draft_config+Cfg::serial+CfgSerial::baud), <(cfg_draft_config+Cfg::serial+CfgSerial::data_bits), <(cfg_draft_config+Cfg::serial+CfgSerial::stop_bits), <(cfg_draft_config+Cfg::serial+CfgSerial::parity), <(cfg_draft_config+Cfg::serial+CfgSerial::cts), <(cfg_draft_config+Cfg::serial+CfgSerial::dsr), <(cfg_draft_config+Cfg::serial+CfgSerial::dtr), <(cfg_draft_config+Cfg::serial+CfgSerial::rets)
-  .byte <cfg_callsign_li, <cfg_ssid_li, <cfg_digi_li
+  .byte <cfg_callsign_li, <cfg_ssid_li, <cfg_digi_li, <cfg_txdelay_li, <cfg_pers_li, <cfg_slot_li, <cfg_txtail_li, <(cfg_draft_config+Cfg::tnc+CfgTnc::duplex)
 cfg_field_data_hi:
   .byte >cfg_filename_li, >btn_load, >btn_save, >btn_default
   .byte >(cfg_draft_config+Cfg::term+CfgTerm::terminal_mode),>(cfg_draft_config+Cfg::term+CfgTerm::line_ending)
   .byte >(cfg_draft_config+Cfg::session+CfgSession::protocol)
   .byte >(cfg_draft_config+Cfg::serial+CfgSerial::baud), >(cfg_draft_config+Cfg::serial+CfgSerial::data_bits), >(cfg_draft_config+Cfg::serial+CfgSerial::stop_bits), >(cfg_draft_config+Cfg::serial+CfgSerial::parity), >(cfg_draft_config+Cfg::serial+CfgSerial::cts), >(cfg_draft_config+Cfg::serial+CfgSerial::dsr), >(cfg_draft_config+Cfg::serial+CfgSerial::dtr), >(cfg_draft_config+Cfg::serial+CfgSerial::rets)
-  .byte >cfg_callsign_li, >cfg_ssid_li, >cfg_digi_li
+  .byte >cfg_callsign_li, >cfg_ssid_li, >cfg_digi_li, >cfg_txdelay_li, >cfg_pers_li, >cfg_slot_li, >cfg_txtail_li, >(cfg_draft_config+Cfg::tnc+CfgTnc::duplex)
 cfg_field_values_lo:
   .byte 0, 0, 0, 0
   .byte <term_mode_field_values, <term_eol_field_values
   .byte <session_protocol_field_values
   .byte <serial_baud_field_values, <serial_data_field_values, <serial_stop_field_values, <serial_parity_field_values, <serial_cts_field_values, <serial_dsr_field_values, <serial_dtr_field_values, <serial_rts_field_values
-  .byte 0, 0, 0
+  .byte 0, 0, 0, 0, 0, 0, 0, <aprs_duplex_field_values
 cfg_field_values_hi:
   .byte 0, 0, 0, 0
   .byte >term_mode_field_values, >term_eol_field_values
   .byte >session_protocol_field_values
   .byte >serial_baud_field_values, >serial_data_field_values, >serial_stop_field_values, >serial_parity_field_values, >serial_cts_field_values, >serial_dsr_field_values, >serial_dtr_field_values, >serial_rts_field_values
-  .byte 0, 0, 0
+  .byte 0, 0, 0, 0, 0, 0, 0, >aprs_duplex_field_values
 cfg_field_labels_lo:
   .byte 0, 0, 0, 0
   .byte <term_mode_field_labels_lo, <term_eol_field_labels_lo
   .byte <session_protocol_field_labels_lo
   .byte <serial_baud_field_labels_lo, <serial_data_field_labels_lo, <serial_stop_field_labels_lo, <serial_parity_field_labels_lo, <serial_cts_field_labels_lo, <serial_dsr_field_labels_lo, <serial_dtr_field_labels_lo, <serial_rts_field_labels_lo
-  .byte 0, 0, 0
+  .byte 0, 0, 0, 0, 0, 0, 0, <aprs_duplex_field_labels_lo
 cfg_field_labels_hi:
   .byte 0, 0, 0, 0
   .byte >term_mode_field_labels_lo, >term_eol_field_labels_lo
   .byte >session_protocol_field_labels_lo
   .byte >serial_baud_field_labels_lo, >serial_data_field_labels_lo, >serial_stop_field_labels_lo, >serial_parity_field_labels_lo, >serial_cts_field_labels_lo, >serial_dsr_field_labels_lo, >serial_dtr_field_labels_lo, >serial_rts_field_labels_lo
-  .byte 0, 0, 0
+  .byte 0, 0, 0, 0, 0, 0, 0, >aprs_duplex_field_labels_lo
 cfg_field_arg0:
   .byte CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE, FILE_ACTION_LOAD, FILE_ACTION_SAVE, FILE_ACTION_DEFAULT
   .byte 2, 4
   .byte 2
   .byte 15, 4, 2, 3, 2, 2, 3, 3
-  .byte CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE, CHAR_DIGIT|CHAR_SPACE, CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE|CHAR_DASH|CHAR_COMMA
+  .byte CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE, CHAR_DIGIT|CHAR_SPACE, CHAR_ALPHA|CHAR_DIGIT|CHAR_SPACE|CHAR_DASH|CHAR_COMMA, CHAR_DIGIT|CHAR_SPACE, CHAR_DIGIT|CHAR_SPACE, CHAR_DIGIT|CHAR_SPACE, CHAR_DIGIT|CHAR_SPACE, 2
 cfg_field_arg1:
   .byte INPUT_UPPER, 0, 0, 0
   .byte 0, 0
   .byte 0
   .byte 0, 0, 0, 0, 0, 0, 0, 0
-  .byte INPUT_UPPER, 0, INPUT_UPPER
+  .byte INPUT_UPPER, 0, INPUT_UPPER, 0, 0, 0, 0, 0
 
 serial_baud_field_values:
   .byte RS232_BAUD::B45_5, RS232_BAUD::B50, RS232_BAUD::B56_875, RS232_BAUD::B75, RS232_BAUD::B110, RS232_BAUD::B134_5, RS232_BAUD::B150, RS232_BAUD::B300, RS232_BAUD::B600, RS232_BAUD::B1200, RS232_BAUD::B1800, RS232_BAUD::B2400, RS232_BAUD::B4800, RS232_BAUD::B9600, RS232_BAUD::B19200
@@ -1416,6 +1523,13 @@ term_mode_field_labels_lo:
 term_mode_field_labels_hi:
   .byte >item_line, >item_char
 
+aprs_duplex_field_values:
+  .byte KISS_DUPLEX_HALF, KISS_DUPLEX_FULL
+aprs_duplex_field_labels_lo:
+  .byte <item_half, <item_full
+aprs_duplex_field_labels_hi:
+  .byte >item_half, >item_full
+
 term_eol_field_values:
   .byte TERM_LINE_ENDING::CR, TERM_LINE_ENDING::LF, TERM_LINE_ENDING::CRLF, TERM_LINE_ENDING::ATASCII
 term_eol_field_labels_lo:
@@ -1458,6 +1572,8 @@ item_cr:                .byte "CR",$00
 item_lf:                .byte "LF",$00
 item_crlf:              .byte "CR+LF",$00
 item_atascii:           .byte "ATASCII",$00
+item_half:              .byte "Half",$00
+item_full:              .byte "Full",$00
 
 
 serial_baud_label:      .byte "Baud:",$00
@@ -1481,28 +1597,28 @@ cfg_static_ptrs_lo:
   .byte <session_protocol_label, <form_hint
   .byte <serial_baud_label, <serial_data_label, <serial_stop_label, <serial_parity_label, <serial_cts_label, <serial_dsr_label, <serial_dtr_label, <serial_rts_label, <form_hint
   .byte <term_mode_label, <term_eol_label, <form_hint
-  .byte <aprs_callsign_label, <aprs_ssid_label, <aprs_digi_label, <form_hint
+  .byte <aprs_callsign_label, <aprs_ssid_label, <aprs_digi_label, <aprs_txdelay_label, <aprs_pers_label, <aprs_slot_label, <aprs_txtail_label, <aprs_duplex_label, <aprs_units_note, <form_hint
 cfg_static_ptrs_hi:
   .byte >filename_label, >file_cfg_suffix, >form_hint
   .byte >session_protocol_label, >form_hint
   .byte >serial_baud_label, >serial_data_label, >serial_stop_label, >serial_parity_label, >serial_cts_label, >serial_dsr_label, >serial_dtr_label, >serial_rts_label, >form_hint
   .byte >term_mode_label, >term_eol_label, >form_hint
-  .byte >aprs_callsign_label, >aprs_ssid_label, >aprs_digi_label, >form_hint
+  .byte >aprs_callsign_label, >aprs_ssid_label, >aprs_digi_label, >aprs_txdelay_label, >aprs_pers_label, >aprs_slot_label, >aprs_txtail_label, >aprs_duplex_label, >aprs_units_note, >form_hint
 cfg_static_offs_lo:
   .byte <FILE_LABEL_OFFSET, <FILE_SUFFIX_OFFSET, <FILE_HINT_OFFSET
   .byte <SESSION_LABEL_OFFSET, <SESSION_HINT_OFFSET
   .byte <SERIAL_BAUD_LABEL_OFFSET, <SERIAL_DATA_LABEL_OFFSET, <SERIAL_STOP_LABEL_OFFSET, <SERIAL_PARITY_LABEL_OFFSET, <SERIAL_CTS_LABEL_OFFSET, <SERIAL_DSR_LABEL_OFFSET, <SERIAL_DTR_LABEL_OFFSET, <SERIAL_RTS_LABEL_OFFSET, <SERIAL_HINT_OFFSET
   .byte <TERM_MODE_LABEL_OFFSET, <TERM_EOL_LABEL_OFFSET, <TERM_HINT_OFFSET
-  .byte <APRS_CALL_LABEL_OFFSET, <APRS_SSID_LABEL_OFFSET, <APRS_DIGI_LABEL_OFFSET, <APRS_HINT_OFFSET
+  .byte <APRS_CALLSIGN_LABEL_OFFSET, <APRS_SSID_LABEL_OFFSET, <APRS_DIGI_LABEL_OFFSET, <APRS_TXD_LABEL_OFFSET, <APRS_PERS_LABEL_OFFSET, <APRS_SLOT_LABEL_OFFSET, <APRS_TXT_LABEL_OFFSET, <APRS_DUP_LABEL_OFFSET, <APRS_UNITS_OFFSET, <APRS_HINT_OFFSET
 cfg_static_offs_hi:
   .byte >FILE_LABEL_OFFSET, >FILE_SUFFIX_OFFSET, >FILE_HINT_OFFSET
   .byte >SESSION_LABEL_OFFSET, >SESSION_HINT_OFFSET
   .byte >SERIAL_BAUD_LABEL_OFFSET, >SERIAL_DATA_LABEL_OFFSET, >SERIAL_STOP_LABEL_OFFSET, >SERIAL_PARITY_LABEL_OFFSET, >SERIAL_CTS_LABEL_OFFSET, >SERIAL_DSR_LABEL_OFFSET, >SERIAL_DTR_LABEL_OFFSET, >SERIAL_RTS_LABEL_OFFSET, >SERIAL_HINT_OFFSET
   .byte >TERM_MODE_LABEL_OFFSET, >TERM_EOL_LABEL_OFFSET, >TERM_HINT_OFFSET
-  .byte >APRS_CALL_LABEL_OFFSET, >APRS_SSID_LABEL_OFFSET, >APRS_DIGI_LABEL_OFFSET, >APRS_HINT_OFFSET
+  .byte >APRS_CALLSIGN_LABEL_OFFSET, >APRS_SSID_LABEL_OFFSET, >APRS_DIGI_LABEL_OFFSET, >APRS_TXD_LABEL_OFFSET, >APRS_PERS_LABEL_OFFSET, >APRS_SLOT_LABEL_OFFSET, >APRS_TXT_LABEL_OFFSET, >APRS_DUP_LABEL_OFFSET, >APRS_UNITS_OFFSET, >APRS_HINT_OFFSET
 
 tab_static_first:       .byte 0, 3, 5, 14, 17
-tab_static_count:       .byte 3, 2, 9, 3, 4
+tab_static_count:       .byte 3, 2, 9, 3, 10
 tab_form_ptrs_lo:       .byte <file_form, <session_form, <serial_form, <term_form, <aprs_form
 tab_form_ptrs_hi:       .byte >file_form, >session_form, >serial_form, >term_form, >aprs_form
 static_idx:             .byte 0
@@ -1545,6 +1661,14 @@ cfg_ssid_li:            .tag LineInput
 cfg_ssid_text:          .res APRS_SSID_LEN
 cfg_digi_li:            .tag LineInput
 cfg_digi_text:          .res APRS_DIGI_LEN
+cfg_txdelay_li:         .tag LineInput
+cfg_txdelay_text:       .res APRS_NUM_LEN
+cfg_pers_li:            .tag LineInput
+cfg_pers_text:          .res APRS_NUM_LEN
+cfg_slot_li:            .tag LineInput
+cfg_slot_text:          .res APRS_NUM_LEN
+cfg_txtail_li:          .tag LineInput
+cfg_txtail_text:        .res APRS_NUM_LEN
 digi_count:             .byte 0
 digi_write_offset:      .byte 0
 digi_text_end:          .byte 0
@@ -1554,6 +1678,12 @@ digi_entry_sep:         .byte 0
 aprs_callsign_label:    .byte "Callsign:",$00
 aprs_ssid_label:        .byte "SSID:",$00
 aprs_digi_label:        .byte "Digipeaters:",$00
+aprs_txdelay_label:     .byte "TX delay:",$00
+aprs_pers_label:        .byte "Persistence:",$00
+aprs_slot_label:        .byte "Slot time:",$00
+aprs_txtail_label:      .byte "TX tail:",$00
+aprs_duplex_label:      .byte "Duplex:",$00
+aprs_units_note:        .byte "Delay/slot/tail in 10ms units",$00
 
 
 filename_label:         .byte "File name:",$00
@@ -1571,4 +1701,8 @@ msg_start_first:        .byte "Press START to begin",$00
 msg_invalid_callsign:   .byte "Invalid APRS callsign",$00
 msg_invalid_ssid:       .byte "Invalid APRS ssid",$00
 msg_invalid_digi:       .byte "Invalid APRS digipeaters",$00
+msg_invalid_txdelay:    .byte "Invalid TX delay",$00
+msg_invalid_pers:       .byte "Invalid persistence",$00
+msg_invalid_slot:       .byte "Invalid slot time",$00
+msg_invalid_txtail:     .byte "Invalid TX tail",$00
 

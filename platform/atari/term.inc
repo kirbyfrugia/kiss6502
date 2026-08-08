@@ -29,35 +29,11 @@ TERM_EOL_ATASCII = $9b
   RTTY = %00100000
 .endenum
 
-.macro print_str str
+.macro prep_print_str str
   lda #<str
   sta CMDDATA0
   lda #>str
   sta CMDDATA1
-
-  jsr to_println
-.endmacro
-
-.macro print_str_with_code str, buf, err_code
-  lda #<str
-  sta CMDDATA0
-  lda #>str
-  sta CMDDATA1
-
-  lda #<buf
-  sta CMDDATA2
-  lda #>buf
-  sta CMDDATA3
-
-  lda err_code
-  sta CMDDATA4
-  jsr ut_str_with_code_to_buf
-
-  lda #<buf
-  sta CMDDATA0
-  lda #>buf
-  sta CMDDATA1
-  jsr to_println
 .endmacro
 
 .endif
