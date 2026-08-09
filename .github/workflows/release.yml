@@ -93,7 +93,9 @@ jobs:
         run: cargo deb -p kisstty --no-build
 
       - name: Build .rpm package
-        run: cargo generate-rpm -p platform/rust -o target/generate-rpm/
+        run: |
+          mkdir -p target/generate-rpm
+          cargo generate-rpm -p platform/rust -o target/generate-rpm/
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
