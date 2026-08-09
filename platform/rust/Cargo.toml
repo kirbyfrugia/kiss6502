@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Kirby Frugia <kirby.frugia@gmail.com>"]
 license = "MIT"
+description = "A dead simple terminal and packet radio app for APRS over KISS TNC"
+homepage = "https://github.com/kirbyfrugia/kisstty"
+repository = "https://github.com/kirbyfrugia/kisstty"
+readme = "../../README-RUST.md"
 
 [dependencies]
 color-eyre = "0.6.3"
@@ -16,3 +20,32 @@ toml = "1.1.2"
 tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+# -----------------------------------------------------------------------------
+# Packaging metadata (installers built via `cargo wix`, `cargo deb`,
+# `cargo generate-rpm` -- see .github/workflows/release.yml)
+# -----------------------------------------------------------------------------
+
+[package.metadata.deb]
+maintainer = "Kirby Frugia <kirby.frugia@gmail.com>"
+copyright = "2026, Kirby Frugia <kirby.frugia@gmail.com>"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+kisstty is a dead simple terminal and packet radio app for APRS over a KISS \
+TNC (e.g. direwolf) reachable over TCP."""
+section = "hamradio"
+priority = "optional"
+assets = [
+    ["target/release/kisstty", "usr/bin/", "755"],
+    ["../../README-RUST.md", "usr/share/doc/kisstty/README.md", "644"],
+    ["../../README.md", "usr/share/doc/kisstty/README-general.md", "644"],
+    ["../../LICENSE", "usr/share/doc/kisstty/LICENSE", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/kisstty", dest = "/usr/bin/kisstty", mode = "755" },
+    { source = "../../README-RUST.md", dest = "/usr/share/doc/kisstty/README.md", mode = "644", doc = true },
+    { source = "../../README.md", dest = "/usr/share/doc/kisstty/README-general.md", mode = "644", doc = true },
+    { source = "../../LICENSE", dest = "/usr/share/licenses/kisstty/LICENSE", mode = "644", doc = true },
+]

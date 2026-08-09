@@ -103,8 +103,7 @@ Here's where I used AI:
 * OCR. Specifically, I wrote code that dumped memory to my screen and I took a photo with my phone. I had Claude convert that to text for a file on my PC.
 * I copied and pasted the keycode to ATASCII lookup table from the Atari OS User's manual and had Claude turn that into a lookup table for me.
 * I used it to update some of the instructions in the readme files.
-* I used it to write some of the helper scripts like `run-atari.sh` and most of the rust unit tests.
-* I vibe-coded the manual scenario runner.
+* I used it to write some of the helper scripts like `run-atari.sh`, most of the rust unit tests, the manual scenario runner, and the installers. In other words, infra stuff.
 * I used it for some *non-logic-changing* refactors, like bulk renaming things or moving functionality from one file to another. I kept the prompts very narrow on these.
 
 ## License

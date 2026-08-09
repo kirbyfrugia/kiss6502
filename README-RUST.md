@@ -85,13 +85,13 @@ Everything below here is for developers wanting to work on kisstty.
 
 ------
 
-# Building
+# Building and running
 
 ```
-cargo build --release
+cargo build --release -p kisstty
 ```
 
-# Running
+Produces `target/release/kisstty` (`kisstty.exe` on Windows).
 
 ```
 cargo run --bin kisstty             # debug build
@@ -101,7 +101,35 @@ RUST_LOG=debug cargo run --bin kisstty   # verbose logging
 
 Logs land in your OS's standard data directory (e.g. `~/.local/share/kisstty/logs/kisstty.log` on Linux).
 
-# Connecting to direwolf
+# Releasing and distributing
 
-kisstty rust-version only speaks KISS over TCP. Make sure you follow the instructions above on connecting to a TNC.
+Pushing a tag matching the `version` in `platform/rust/Cargo.toml` (e.g. `v0.1.0`) runs `.github/workflows/release.yml`, which builds an MSI, a `.deb`, and a `.rpm`, and attaches them plus a `SHA256SUMS.txt` to a GitHub Release.
 
+Installers aren't code-signed, so the [Releases page](https://github.com/kirbyfrugia/kisstty/releases) is the only trusted source for official builds. Check a download against `SHA256SUMS.txt` to confirm it's unmodified.
+
+## Building installers locally
+
+### Windows: MSI
+
+Needs the WiX Toolset v3 (`candle.exe`/`light.exe`):
+
+1. Download and extract [wix314-binaries.zip](https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip).
+2. `cargo install cargo-wix --locked`
+3. From `platform/rust` (the license path in `wix/main.wxs` is relative to the crate directory):
+
+```
+cargo wix -p kisstty --nocapture --bin-path "<path-to-wix-bin>"
+```
+
+Drop `--bin-path` if the WiX binaries are already on `PATH`. Output: `target\wix\kisstty-<version>-x86_64.msi`.
+
+### Linux: .deb and .rpm
+
+```
+cargo install cargo-deb cargo-generate-rpm --locked
+cargo build --release -p kisstty
+cargo deb -p kisstty --no-build
+cargo generate-rpm -p platform/rust -o target/generate-rpm/
+```
+
+Output: `target/debian/*.deb` and `target/generate-rpm/*.rpm`. Both install to `/usr/bin/kisstty`, the standard location for a package-manager-installed tool, so installing needs root. Running `kisstty` doesn't. config, logs, and the lock file all resolve per-user at runtime (`~/.config/kisstty/`, `~/.local/share/kisstty/logs/`, `/tmp/kisstty.lock`).
