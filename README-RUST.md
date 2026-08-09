@@ -129,6 +129,7 @@ Drop `--bin-path` if the WiX binaries are already on `PATH`. Output: `target\wix
 cargo install cargo-deb cargo-generate-rpm --locked
 cargo build --release -p kisstty
 cargo deb -p kisstty --no-build
+mkdir -p target/generate-rpm
 cargo generate-rpm -p platform/rust -o target/generate-rpm/
 ```
 
