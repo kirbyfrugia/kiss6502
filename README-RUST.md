@@ -103,7 +103,7 @@ Logs land in your OS's standard data directory (e.g. `~/.local/share/kisstty/log
 
 # Releasing and distributing
 
-Pushing a tag matching the `version` in `platform/rust/Cargo.toml` (e.g. `v0.1.0`) runs `.github/workflows/release.yml`, which builds an MSI, a `.deb`, and a `.rpm`, and attaches them plus a `SHA256SUMS.txt` to a GitHub Release.
+Pushing a tag matching the `version` in `platform/rust/Cargo.toml` (e.g. `v0.1.0`) runs `.github/workflows/release.yml`, which builds an MSI, a `.deb`, a `.rpm`, and an Atari release zip (`.xex` + `.atr` + docs), and attaches them plus a `SHA256SUMS.txt` to a GitHub Release. See [README-ATARI.md](README-ATARI.md#building-kisstty) for the Atari build's own prerequisites.
 
 Installers aren't code-signed, so the [Releases page](https://github.com/kirbyfrugia/kisstty/releases) is the only trusted source for official builds. Check a download against `SHA256SUMS.txt` to confirm it's unmodified.
 

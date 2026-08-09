@@ -1,8 +1,8 @@
 name: Release
 
-# Builds a Windows MSI, a Linux .deb, and a Linux .rpm, and publishes them
-# to a GitHub Release. See README-RUST.md's "Releasing and distributing"
-# section for details.
+# Builds a Windows MSI, a Linux .deb, a Linux .rpm, and an Atari 8-bit
+# release zip, and publishes them to a GitHub Release. See README-RUST.md's
+# "Releasing and distributing" section for details.
 
 on:
   push:
@@ -108,8 +108,72 @@ jobs:
           name: linux-packages
           path: dist-linux/*
 
+  build-atari:
+    needs: [check-version, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Build and install cc65
+        # Pinned to the same commit already verified to build kisstty
+        # locally, rather than tracking HEAD, so the release toolchain is
+        # both reproducible and known-good. Ubuntu's packaged cc65 (e.g.
+        # 2.18) is too old and fails with "No such scope: 'TextArea'".
+        run: |
+          git clone https://github.com/cc65/cc65
+          cd cc65
+          git checkout cc3c40c54e51b2d9a22b63c85c418a2b11763377
+          make -j"$(nproc)"
+          sudo make install PREFIX=/usr
+
+      - name: Build and install dir2atr
+        # Same reasoning as the cc65 pin above: matches the commit already
+        # verified to build kisstty locally (dir2atr 0.30-240419).
+        run: |
+          git clone https://github.com/HiassofT/AtariSIO
+          cd AtariSIO
+          git checkout d3dee42471c3a84ce8d34d3c19f5721f97cb657e
+          cd tools
+          make dir2atr
+          sudo cp dir2atr /usr/local/bin/
+
+      - name: Restore DOS 2.5 boot files
+        # DOS.SYS/DUP.SYS are gitignored (Atari DOS 2.5 isn't ours to
+        # redistribute in the repo), so they're base64-encoded repo secrets
+        # instead. See README-ATARI.md's "Building" section.
+        env:
+          ATARI_DOS_SYS_B64: ${{ secrets.ATARI_DOS_SYS_B64 }}
+          ATARI_DUP_SYS_B64: ${{ secrets.ATARI_DUP_SYS_B64 }}
+        run: |
+          mkdir -p 3rdparty/atari/dos25
+          printf '%s' "$ATARI_DOS_SYS_B64" | base64 -d > 3rdparty/atari/dos25/DOS.SYS
+          printf '%s' "$ATARI_DUP_SYS_B64" | base64 -d > 3rdparty/atari/dos25/DUP.SYS
+
+      - name: Build atari release
+        run: make atari
+
+      - name: Stage atari release
+        run: |
+          mkdir -p dist-atari
+          cp build/atari/release/kisstty.xex dist-atari/
+          cp build/atari/release/kisstty.atr dist-atari/
+          cp README-ATARI.md dist-atari/README.md
+          cp README.md dist-atari/README-general.md
+          cp LICENSE dist-atari/
+
+      - name: Zip atari release
+        run: |
+          cd dist-atari
+          zip -r "../kisstty-atari-${GITHUB_REF_NAME}.zip" .
+
+      - name: Upload atari artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: atari-release
+          path: kisstty-atari-*.zip
+
   release:
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-atari]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -120,7 +184,7 @@ jobs:
       - name: Generate checksums
         run: |
           mkdir -p dist/checksums
-          for f in dist/windows-installer/*.msi dist/linux-packages/*.deb dist/linux-packages/*.rpm; do
+          for f in dist/windows-installer/*.msi dist/linux-packages/*.deb dist/linux-packages/*.rpm dist/atari-release/*.zip; do
             sha256sum "$f" | awk -v f="$(basename "$f")" '{print $1"  "f}' >> dist/checksums/SHA256SUMS.txt
           done
           cat dist/checksums/SHA256SUMS.txt
@@ -132,5 +196,6 @@ jobs:
             dist/windows-installer/*.msi
             dist/linux-packages/*.deb
             dist/linux-packages/*.rpm
+            dist/atari-release/*.zip
             dist/checksums/SHA256SUMS.txt
           generate_release_notes: true

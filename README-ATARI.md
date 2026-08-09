@@ -109,6 +109,12 @@ git clone https://github.com/HiassofT/AtariSIO
 cd AtariSIO/tools && make dir2atr && sudo cp dir2atr /usr/local/bin/
 ```
 
+DOS 2.5's `DOS.SYS`/`DUP.SYS` also have to be present in `3rdparty/atari/dos25/`
+(see that directory's own README.md); they're gitignored since they aren't
+ours to redistribute. `.github/workflows/release.yml` gets them from the
+`ATARI_DOS_SYS_B64`/`ATARI_DUP_SYS_B64` repo secrets (base64-encoded file
+contents) instead.
+
 ## Building
 
 ```
