@@ -156,7 +156,10 @@
               the license sidecar file from the installer.
             -->
             <ComponentRef Id='License'/>
-            
+
+            <ComponentRef Id='Readme'/>
+            <ComponentRef Id='ReadmeGeneral'/>
+
             <ComponentRef Id='binary0'/>
 
             <Feature
