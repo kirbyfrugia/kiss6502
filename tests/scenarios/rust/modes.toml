@@ -1,0 +1,61 @@
+name             = "modes"
+platform         = "rust"
+mycall           = "NOCALL"
+
+# net, monitor and qso, and how each one filters the log. See
+# ui/main_ui.rs AppMode for the rules this exercises.
+#
+# A message body is free text, so kisstty never touches its case; only the
+# addressee gets forced uppercase (by /qso, before send). A from_kisstty check
+# is a literal substring match, though, so a step's typed body deliberately
+# avoids anything you could plausibly retype in a different case than shown -
+# a mismatch there is the test being fussy, not a real bug.
+
+[[step]]
+description      = "default mode is net: broadcast sends go to CQ, all message traffic shows"
+look_for         = "the input box title reads 'MODE: net | RX: all messages | TX: CQ'"
+
+[[step]]
+description      = "net mode shows messages between any two other stations, not just ones involving us"
+to_kisstty       = "NOCALL-1>APKTY1::NOCALL-2 :Between two others"
+look_for         = "a new item: NOCALL-1 > NOCALL-2, body ': Between two others'"
+
+[[step]]
+description      = "qso mode narrows to one addressee"
+do               = 'type "/qso NOCALL-1" and press Enter'
+look_for         = "the input box title reads 'MODE: qso | RX: from NOCALL-1 | TX: to NOCALL-1'"
+
+[[step]]
+description      = "qso hides traffic between two other stations, even the one just seen in net mode"
+to_kisstty       = "NOCALL-2>APKTY1::NOCALL-3 :Not our conversation"
+look_for         = [
+  "nothing new appears",
+  "scrolling up, the earlier 'Between two others' item is gone too, since neither side of it is NOCALL-1",
+]
+
+[[step]]
+description      = "qso shows traffic addressed to us from the other party"
+to_kisstty       = "NOCALL-1>APKTY1::NOCALL   :To us from NOCALL-1"
+look_for         = "a new item: NOCALL-1 > NOCALL, body ': To us from NOCALL-1'"
+
+[[step]]
+description      = "and shows what we send back to them"
+do               = 'type "reply from us" and press Enter'
+from_kisstty     = "::NOCALL-1 :reply from us"
+look_for         = "a new item: NOCALL > NOCALL-1, body ': reply from us'"
+
+[[step]]
+description      = "qso hides our traffic with anyone else"
+to_kisstty       = "NOCALL-2>APKTY1::NOCALL   :Not from NOCALL-1"
+look_for         = "nothing new appears"
+
+[[step]]
+description      = "monitor mode shows everything again, addressed or not"
+do               = 'type "/monitor" and press Enter'
+to_kisstty       = "NOCALL-9>APKTY1:>status with no addressee at all"
+look_for         = "a new item with no '> addressee' on its header, body starting '> '"
+
+[[step]]
+description      = "back to net mode, leaving things as the next scenario expects"
+do               = 'type "/net" and press Enter'
+look_for         = "the input box title reads 'MODE: net | RX: all messages | TX: CQ' again"

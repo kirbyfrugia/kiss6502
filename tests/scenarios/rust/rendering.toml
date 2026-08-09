@@ -1,0 +1,80 @@
+name             = "rendering"
+platform         = "rust"
+mycall           = "NOCALL"
+
+# Position, weather, mic-e and status frames are actually parsed and shown
+# here (as raw undecoded text under their own data type id), unlike the atari
+# build where pk_process_frame only dispatches on ':' and the rest never
+# render at all. Monitor mode shows all of it; net and qso only show ':'.
+
+[[step]]
+description      = "switch to monitor mode so every data type shows, not just messages"
+do               = 'type "/monitor" and press Enter'
+look_for         = "the input box title reads 'MODE: monitor | RX: all data types | TX: CQ'"
+
+[[step]]
+description      = "a sender with no digipeaters shows no via line"
+to_kisstty       = "NOCALL-7>APKTY1::NOCALL-2 :No digis"
+look_for         = "a new item: header NOCALL-7 > NOCALL-2, straight to the body line ': No digis' with no 'via' line in between"
+
+[[step]]
+description      = "a sender with a digipeater path gets a via line"
+to_kisstty       = "NOCALL-3>APKTY1,WIDE2-1::NOCALL-2 :One digi"
+look_for         = "a new item with a 'via WIDE2-1' line between the header and the body"
+
+[[step]]
+description      = "ssid zero shows no trailing dash; one and two digit ssids render plainly"
+to_kisstty       = [
+  "NOCAL2>APKTY1::NOCALL-2 :No ssid at all",
+  "NOCALL-9>APKTY1::NOCALL-2 :Single digit ssid",
+  "NOCALL-15>APKTY1::NOCALL-2 :Two digit ssid",
+]
+look_for         = [
+  "three new items",
+  "the first is headed 'NOCAL2 >', no trailing dash after NOCAL2",
+  "the second is headed 'NOCALL-9 >'",
+  "the third is headed 'NOCALL-15 >'",
+]
+
+[[step]]
+description      = "a plain message still renders normally alongside the unhandled types"
+to_kisstty       = "NOCALL-7>APKTY1::NOCALL-2 :Still a normal message"
+look_for         = "a new item: header NOCALL-7 > NOCALL-2, body ': Still a normal message'"
+
+[[step]]
+description      = "position reports show in monitor mode now, unlike the atari build"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:!4433.37N/12318.23W-kisstty dev test"
+look_for         = "a new item, header NOCALL-7 with no '> addressee' since it isn't a message, body line starts with '! ' followed by the raw position text"
+
+[[step]]
+description      = "weather reports show the same way"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:@111111z4433.37N/12318.23W_270/005g010t065r000p000b10150h65"
+look_for         = "a new item, body line starts with '@ '"
+
+[[step]]
+description      = "mic-e shows too, as raw undecoded text"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:`kisstty dev test"
+look_for         = "a new item, body line starts with '` '"
+
+[[step]]
+description      = "status reports are parsed and shown, also unlike the atari build"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:>kisstty dev test"
+look_for         = "a new item, body line starts with '> ', no addressee on the header"
+
+[[step]]
+description      = "an empty status does not crash"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1:>"
+look_for         = "a new item, body line is just '> ' with nothing after it, and kisstty is still running"
+
+[[step]]
+description      = "switch back to net mode and confirm the unhandled types disappear"
+do               = 'type "/net" and press Enter'
+look_for         = [
+  "only the two ':' items ('Still a normal message' and the earlier ones from this file) remain visible",
+  "the position, weather, mic-e and status items from the last few steps are gone",
+]
+
+[[step]]
+description      = "a long body is clipped at the right edge, not wrapped - by design, not a bug"
+to_kisstty       = "NOCALL-7>APKTY1::NOCALL-2 :This is a longer message body meant to run past the right edge of the output box and show whether it wraps onto another line or gets clipped there instead!!"
+look_for         = "the body line is cut off flush with the right edge of the box; nothing spills onto a further line, and the border and the header's right-aligned ack/id fields on the line above are undisturbed"

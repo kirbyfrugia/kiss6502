@@ -1,0 +1,22 @@
+name             = "soak"
+platform         = "rust"
+mycall           = "NOCALL"
+
+# Runs until you interrupt it, so there is nothing after the traffic step.
+# A trailing look_for would never be reached.
+#
+# The runner's own do-step prompt says "q to quit", but that only applies to
+# this one prompt, before the traffic starts. The next step has no prompt at
+# all - repeat = 0 loops it forever with nothing asking you anything - so
+# once you press Enter here, q no longer does anything. ctrl-c is the only
+# way out from that point on.
+
+[[step]]
+description      = "get set up before the traffic starts"
+do               = "get kisstty on screen, then press Enter to start a message every 5s from a random station. Once you press Enter there is no further prompt and no more chance to type q - only ctrl-c stops it from here. Watch for torn lines, bad wrapping, a stuck scrollbar or a lockup"
+
+[[step]]
+description      = "random traffic until you interrupt it"
+random           = true
+repeat           = 0
+every            = 5

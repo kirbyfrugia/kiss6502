@@ -11,6 +11,7 @@ use ratatui::{
 
 use crate::{
     config::Config,
+    globals::TERMINAL_WIDTH,
     kiss::AprsMessage,
     log::{FrameLogItem, Log, LogItem},
     ui::{LineInput,LogView,MultiLineOutput},
@@ -19,7 +20,6 @@ use crate::{
 };
 
 const MAX_INPUT_LEN: usize             = 67;
-const TERMINAL_WIDTH: u16              = 80;
 const OUTPUT_AREA_WIDTH: u16           = TERMINAL_WIDTH + 4;
 const MAX_SLASH_POPUP_HEIGHT: u16      = 8;
 const INPUT_HEIGHT: u16                = 3;

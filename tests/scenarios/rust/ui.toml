@@ -1,0 +1,102 @@
+name             = "ui"
+platform         = "rust"
+
+# No step here sends or checks a packet, so this drives kisstty directly and
+# never touches direwolf. There's no automatic callsign prompt for that
+# reason, so the first step covers getting it configured.
+
+[[step]]
+description      = "setup: launch kisstty and make sure it's configured"
+do               = 'launch kisstty. If the Config screen appears, set Callsign to NOCALL, leave KISS host/port at their defaults (127.0.0.1 / 8001), leave Digipeaters blank, and select Save. If the main screen is already up, just press Enter'
+
+[[step]]
+description      = "typing a slash shows the command popup"
+do               = 'type "/" alone'
+look_for         = "a popup above the input listing every /command with a short description, /help highlighted first"
+
+[[step]]
+description      = "typing more narrows the list live"
+do               = 'type "mo" so the input reads "/mo"'
+look_for         = "the popup now shows only /monitor"
+
+[[step]]
+description      = "tab completes the highlighted command"
+do               = "press Tab"
+look_for         = "the input reads '/monitor ' (or '/monitor' with no trailing space)"
+
+[[step]]
+description      = "clear the input before the next step"
+do               = "press Ctrl+C, or backspace it out, so the input is empty"
+
+[[step]]
+description      = "/help lists every command"
+do               = 'type "/help" and press Enter'
+look_for         = "a notice block listing every slash command with its usage and a short description"
+
+[[step]]
+description      = "an unrecognized slash command shows the same help instead of erroring"
+do               = 'type "/bogus" and press Enter'
+look_for         = "the same help listing appears again"
+
+[[step]]
+description      = "send a couple of messages so there's something to dump and clear"
+do               = 'type "first message" and press Enter, then "second message" and press Enter'
+look_for         = "two new items, each showing an '[id: NNNN]' on the right of its header"
+
+[[step]]
+description      = "/dump shows every copy and ack seen for a frame id"
+do               = 'note the [id: NNNN] on the "first message" item, then type "/dump NNNN" using that number, and press Enter'
+look_for         = [
+  "a notice block starting 'dump of frame id NNNN:'",
+  "a source/dest/data type line, the body line, and a 'first' line with a timestamp and a digipeater path or 'direct'",
+]
+
+[[step]]
+description      = "/dump on an id that doesn't exist reports that instead of crashing"
+do               = 'type "/dump 9999" and press Enter'
+look_for         = "a notice reading '9999: frame not found'"
+
+[[step]]
+description      = "/clear wipes the screen"
+do               = 'type "/clear" and press Enter'
+look_for         = "the output pane is completely empty"
+
+[[step]]
+description      = "fill the pane so there's something to scroll"
+do               = "send a dozen or so short messages one after another (type text, press Enter, repeat) until the pane is full and scrolled"
+look_for         = "the pane stays scrolled to the newest line as each one arrives"
+
+[[step]]
+description      = "the up arrow pauses scrolling and steps backward"
+do               = "press Up arrow a few times"
+look_for         = "older items scroll into view; it does not jump back to the bottom on its own"
+
+[[step]]
+description      = "the down arrow steps forward and re-follows once it reaches the bottom"
+do               = "press Down arrow repeatedly until you're back at the newest item"
+look_for         = "it lands on the newest item and resumes following automatically"
+
+[[step]]
+description      = "ctrl+home and ctrl+end jump to the ends"
+do               = "press Ctrl+Home, then Ctrl+End"
+look_for         = "Ctrl+Home jumps to the very first item; Ctrl+End jumps straight back to the newest one"
+
+[[step]]
+description      = "shrinking below the minimum size swaps in the too-small screen"
+do               = "shrink the terminal window until it's smaller than kisstty's minimum size"
+look_for         = "the whole UI is replaced by a bordered 'kisstty' box saying 'Make the terminal window bigger.'"
+
+[[step]]
+description      = "growing back restores the previous screen"
+do               = "resize the terminal back to a comfortable size"
+look_for         = "the normal main screen reappears, with everything you sent still in the output"
+
+[[step]]
+description      = "esc or ctrl+c on the too-small screen quits, not just resizing out of it"
+do               = "shrink the terminal below the minimum size again, then press Ctrl+C"
+look_for         = "kisstty exits cleanly back to the shell"
+
+[[step]]
+description      = "a second instance refuses to start while one is already running"
+do               = "relaunch kisstty, then in another terminal try launching a second copy while the first is still running"
+look_for         = "the second copy prints that kisstty is already running and exits immediately; the first keeps running normally"

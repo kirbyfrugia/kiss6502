@@ -200,10 +200,15 @@ impl SessionFrame {
     ///
     /// Instances only differ by the digi path and the timestamp.
     pub fn render_dump(&self) -> Vec<String> {
-        let data = self.first_frame().data();
+        let first_frame = self.first_frame();
+        let data = first_frame.data();
         let mut lines = vec![
-            format!("dump of frame {:04}:", self.id),
-            self.to_frame_log_item().header(),
+            format!("dump of frame id {:04}:", self.id),
+            format!("  source: {}, dest: {}, data type: '{}'",
+                first_frame.source(),
+                first_frame.dest(),
+                data.data_type_id(),
+            ),
             format!("  {} {}", data.data_type_id(), data.body()),
             format!("  first {}", self.instances.first.describe()),
         ];
@@ -749,8 +754,8 @@ mod tests {
 
         let dump = session_frame.render_dump();
 
-        assert_eq!(dump[0], "dump of frame 0003:");
-        assert!(dump[1].starts_with("0003: "), "got {:?}", dump[1]);
+        assert_eq!(dump[0], "dump of frame id 0003:");
+        assert_eq!(dump[1], "  source: NOCALL, dest: APKTY1, data type: ':'");
         assert_eq!(dump[2], "  : hello");
         assert!(dump[3].starts_with("  first "), "got {:?}", dump[3]);
         assert!(dump[3].ends_with(" WIDE1-1"), "got {:?}", dump[3]);

@@ -1,0 +1,79 @@
+name             = "acks"
+platform         = "rust"
+mycall           = "NOCALL"
+
+# The rust build has no status bar. Ack and repeat state show inline on the
+# message's own line instead: "ack:_" / "ack:✓", and "rpt:N" once N > 0.
+# Every message tracks its own ack/repeat forever, not just the last one sent,
+# so there's no "only the last message is tracked" case to test here.
+#
+# Message ids are base36, assigned per addressee starting at 1, not the
+# zero-padded four digit ids the atari build sends. An incoming id can still
+# be whatever the scenario writes, since that's just wire content.
+#
+# /qso is the only way to send a directed, ackable message (typing without
+# it always broadcasts to CQ), but it also narrows what shows on screen to
+# just that one addressee. So step one hops into qso only long enough to
+# send, then hops straight back to net, which shows any addressee, before
+# the rest of the file brings in a message from a different station.
+
+[[step]]
+description      = "we send a message with an id"
+do               = 'type "/qso NOCALL-7" and press Enter, then type "hello there" and press Enter'
+from_kisstty     = "::NOCALL-7 :hello there{1"
+look_for         = [
+  "a new item: header reads NOCALL > NOCALL-7",
+  "body line reads ': hello there'",
+  "the right side of the header shows 'ack:_' and no 'rpt:' field",
+]
+
+[[step]]
+description      = "leave qso mode: the rest of this file needs traffic from other stations to show too"
+do               = 'type "/net" and press Enter'
+
+[[step]]
+description      = "an ack for a message we sent attaches to it instead of adding a line"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :ack1"
+look_for         = "no new item appears; the 'hello there' item's ack:_ flips to ack:✓"
+
+[[step]]
+description      = "a message addressed to us is acked automatically, but we don't see our own ack"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Test message{2"
+from_kisstty     = "::NOCALL-7 :ack2"
+look_for         = [
+  "a new item: header NOCALL-7 > NOCALL, body ': Test message'",
+  "ack:_ on this new item, still unacked, since kisstty never hears its own ack unless a digipeater hands it back",
+]
+
+[[step]]
+description      = "a two digit ssid pads the addressee to its full nine chars on the wire"
+to_kisstty       = "NOCALL-15>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Two digit ssid{3"
+from_kisstty     = "::NOCALL-15:ack3"
+look_for         = "a new item: header NOCALL-15 > NOCALL, body ': Two digit ssid'"
+
+[[step]]
+description      = "a message with no id is not ackable, so there's no ack: field at all"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :No id to ack"
+not_from_kisstty = "::NOCALL-7 :ack"
+look_for         = "a new item: body ': No id to ack', nothing reading ack: anywhere on its header"
+
+[[step]]
+description      = "a brace with nothing after it is not an id either"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Bare brace{"
+not_from_kisstty = "::NOCALL-7 :ack"
+look_for         = "a new item: body ': Bare brace{', still no ack: field"
+
+[[step]]
+description      = "an ack addressed to another station is dropped, not shown to us"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL-9 :ack1"
+look_for         = "nothing new on screen"
+
+[[step]]
+description      = "five chars is the longest id an ack can carry, so this still parses as an ack"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :ack12345"
+look_for         = "nothing new on screen; it parses as an ack for a message we have no record of, so it's dropped"
+
+[[step]]
+description      = "six chars is too long, so it parses as a plain message instead"
+to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :ack123456"
+look_for         = "a new item: body ': ack123456', no ack: field since it carries no id"

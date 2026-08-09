@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod event;
+mod globals;
 mod kiss;
 mod log;
 mod logging;

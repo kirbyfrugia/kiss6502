@@ -12,6 +12,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::globals::TERMINAL_WIDTH;
 use crate::kiss::Ax25Addr;
 
 const MAX_LOG_ITEMS: usize = 20000;
@@ -75,37 +76,35 @@ impl FrameLogItem {
     }
 
     pub fn header(&self) -> String {
-        let mut header = format!(
-            "{:04}: {} {} ({})",
-            self.seq,
-            utc_timestamp(self.at),
-            self.source,
-            self.dest,
-        );
+        let mut left_components: Vec<String> = Vec::new(); 
+        let mut right_components: Vec<String> = Vec::new();
+
+        left_components.push(utc_timestamp(self.at));
+        left_components.push(self.source.clone());
 
         if let Some(addressee) = &self.addressee {
-            header.push_str(&format!(" → {}", addressee));
-            if let Some(id) = &self.msg_id {
-                header.push_str(&format!(" {{{id}"));
-            }
+            left_components.push(format!("> {}", addressee));
         }
-
-        let mut markers: Vec<String> = Vec::new();
 
         if self.ackable {
-            markers.push(format!("ack:{}", if self.acked { "✓" } else { "_" }));
-        }
+            right_components.push(format!("ack:{}", if self.acked { "✓" } else { "_" }));
+        };
 
         if self.repeats > 0 {
-            markers.push(format!("rpt:{}", self.repeats));
+            right_components.push(format!("rpt:{}", self.repeats));
         }
 
-        if !markers.is_empty() {
-            header.push_str("  ");
-            header.push_str(&markers.join(" "));
-        }
+        right_components.push(format!("[id: {:04}]", self.seq));
 
-        header
+        let left = left_components.join(" ");
+        let right = right_components.join(" ");
+
+        let content_len = left.chars().count() + right.chars().count();
+        let terminal_width: usize = TERMINAL_WIDTH.into();
+        let pad_len = terminal_width.saturating_sub(content_len);
+        let middle = ' '.to_string().repeat(pad_len);
+
+        format!("{}{}{}", left_components.join(" "), middle, right_components.join(" "))
     }
 
     fn line_count(&self) -> usize {
@@ -277,16 +276,15 @@ mod tests {
     }
 
     #[test]
-    fn header_shows_addressee_and_message_id() {
+    fn header_shows_addressee_and_kiss_id() {
         let mut item = frame_log_item(3);
         item.addressee = Some(String::from("NOCALL-1"));
         item.msg_id = Some(String::from("5"));
 
         let header = item.header();
 
-        assert!(header.starts_with("0003: "), "got {header}");
-        assert!(header.contains("NOCALL (APKTY1)"), "got {header}");
-        assert!(header.contains("→ NOCALL-1 {5"), "got {header}");
+        assert!(header.contains("[id: 0003]"), "got {header}");
+        assert!(header.contains("> NOCALL-1"), "got {header}");
     }
 
     #[test]
@@ -296,7 +294,7 @@ mod tests {
         item.acked = true;
         item.repeats = 2;
 
-        assert!(item.header().ends_with("  ack:✓ rpt:2"), "got {}", item.header());
+        assert!(item.header().contains("  ack:✓ rpt:2"), "got {}", item.header());
     }
 
     #[test]
