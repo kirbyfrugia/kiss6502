@@ -97,13 +97,16 @@ jobs:
           mkdir -p target/generate-rpm
           cargo generate-rpm -p platform/rust -o target/generate-rpm/
 
+      - name: Stage Linux packages
+        run: |
+          mkdir -p dist-linux
+          cp target/debian/*.deb target/generate-rpm/*.rpm dist-linux/
+
       - name: Upload Linux packages
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: linux-packages
-          path: |
-            target/debian/*.deb
-            target/generate-rpm/*.rpm
+          path: dist-linux/*
 
   release:
     needs: [build-windows, build-linux]
