@@ -1,5 +1,6 @@
 use crate::message::Message;
 
+#[derive(Debug)]
 pub struct SlashCommand {
     pub slash:      &'static str,
     pub args:       &'static str,

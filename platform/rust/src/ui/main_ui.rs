@@ -71,6 +71,37 @@ impl Contact {
 }
 
 #[derive(Debug)]
+struct SlashPopupState {
+    in_slash: bool,
+    matching_slashes: Vec<&'static SlashCommand>,
+    selected_index: usize,
+}
+
+impl SlashPopupState {
+    pub fn new() -> SlashPopupState {
+        Self {
+            in_slash: false,
+            matching_slashes: Vec::new(),
+            selected_index: 0,
+        }
+    }
+
+    pub fn to_list(&self) -> List<'_> {
+        let usage_width = SlashCommand::max_usage_width();
+
+        let items: Vec<ListItem> = self.matching_slashes
+            .iter()
+            .map(|cmd| ListItem::new(format!("{:<usage_width$}  {}", cmd.usage(), cmd.friendly)))
+            .collect();
+
+        List::new(items)
+            .style(Color::White)
+            .highlight_style(Modifier::REVERSED)
+            .highlight_symbol("> ")
+    }
+}
+
+#[derive(Debug)]
 pub struct MainUi {
     terminal_input: LineInput,
     terminal_output: MultiLineOutput,
@@ -80,6 +111,8 @@ pub struct MainUi {
     message_sender: mpsc::Sender<Message>,
     command_popup_list_state: ListState,
     app_mode: AppMode,
+    in_at: bool,
+    slash_popup_state: SlashPopupState,
 }
 
 impl MainUi {
@@ -106,13 +139,13 @@ impl MainUi {
             message_sender,
             command_popup_list_state: ListState::default()
                 .with_selected(Some(0)),
+            in_at: false,
+            slash_popup_state: SlashPopupState::new(),
         }
     }
 
     fn render_slash_command_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
-        let matching = SlashCommand::matching(&self.terminal_input.data);
-
-        let num_matching: u16 = matching.len().try_into().unwrap();
+        let num_matching: u16 = self.slash_popup_state.matching_slashes.len().try_into().unwrap();
 
         if num_matching == 0 { return }
 
@@ -144,17 +177,7 @@ impl MainUi {
         };
         frame.render_widget(Clear, area);
 
-        let usage_width = SlashCommand::max_usage_width();
-
-        let items: Vec<ListItem> = matching
-            .iter()
-            .map(|cmd| ListItem::new(format!("{:<usage_width$}  {}", cmd.usage(), cmd.friendly)))
-            .collect();
-
-        let list = List::new(items)
-            .style(Color::White)
-            .highlight_style(Modifier::REVERSED)
-            .highlight_symbol("> ");
+        let list = self.slash_popup_state.to_list();
 
         frame.render_stateful_widget(list, area, &mut self.command_popup_list_state);
 
@@ -262,9 +285,7 @@ impl MainUi {
         };
         frame.set_cursor_position(cursor_pos);
 
-        let in_slash = self.terminal_input.is_typing_command(b'/');
-
-        if in_slash {
+        if self.slash_popup_state.in_slash {
             self.render_slash_command_popup(
                 frame, 
                 terminal_input_block_inner_area.x,
@@ -356,8 +377,14 @@ impl MainUi {
 
     pub fn handle_key(&mut self, key_event: KeyEvent) -> Option<Message> {
         match key_event.code {
-            KeyCode::Up => self.terminal_output.scroll_up(),
-            KeyCode::Down => self.terminal_output.scroll_down(),
+            KeyCode::Up if key_event.modifiers == KeyModifiers::CONTROL => {
+                self.terminal_output.scroll_up();
+            }
+            KeyCode::Down if key_event.modifiers == KeyModifiers::CONTROL => {
+                self.terminal_output.scroll_down();
+            }
+            KeyCode::Up => { self.handle_up(); },
+            KeyCode::Down => { self.handle_down(); },
             KeyCode::Home if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_top(),
             KeyCode::End if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_bottom(),
             KeyCode::Tab => { self.handle_tab(); }
@@ -366,9 +393,28 @@ impl MainUi {
             KeyCode::Char('c') | KeyCode::Char('C') if key_event.modifiers == KeyModifiers::CONTROL => {
                 self.clear_input();
             }
-            _ => return self.terminal_input.handle_key(key_event),
+            _ => {
+                let handled = self.terminal_input.handle_key(key_event);
+                if handled.is_none() {
+                    self.update_popup_state();
+                }
+                return handled;
+            }
         }
         None
+    }
+
+    fn update_popup_state(&mut self) {
+        self.slash_popup_state.in_slash = self.terminal_input.is_typing_command(b'/');
+
+        if self.slash_popup_state.in_slash {
+            self.slash_popup_state.matching_slashes = SlashCommand::matching(&self.terminal_input.data);
+        }
+        else {
+            self.slash_popup_state.matching_slashes = Vec::new();
+        }
+
+        self.in_at = self.terminal_input.is_typing_command(b'@');
     }
 
     fn tab_complete(&mut self) {
@@ -379,6 +425,14 @@ impl MainUi {
         let cmd = matched.first().expect("wtf");
         let completed = format!("{} ", cmd.slash);
         self.terminal_input.replace_data(&completed);
+    }
+
+    fn handle_up(&mut self) -> bool {
+        false
+    }
+
+    fn handle_down(&mut self) -> bool {
+        false
     }
 
     fn handle_tab(&mut self) -> bool {
@@ -412,6 +466,7 @@ impl MainUi {
                     ]));
                 }
             }
+            self.update_popup_state();
         }
         else {
             if name.starts_with("/") {
