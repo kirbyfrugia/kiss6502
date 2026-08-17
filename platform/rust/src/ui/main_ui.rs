@@ -60,7 +60,7 @@ pub struct MainUi {
     log: Log,
     mycall: String,
     message_sender: mpsc::Sender<Message>,
-    slash_popup_list_state: ListState,
+    command_popup_list_state: ListState,
     app_mode: AppMode,
 }
 
@@ -85,12 +85,12 @@ impl MainUi {
             log: Log::new(),
             mycall: String::new(),
             message_sender,
-            slash_popup_list_state: ListState::default()
+            command_popup_list_state: ListState::default()
                 .with_selected(Some(0)),
         }
     }
 
-    fn render_slash_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
+    fn render_command_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
         let matching = SlashCommand::matching(&self.terminal_input.data);
 
         let num_matching: u16 = matching.len().try_into().unwrap();
@@ -137,7 +137,7 @@ impl MainUi {
             .highlight_style(Modifier::REVERSED)
             .highlight_symbol("> ");
 
-        frame.render_stateful_widget(list, area, &mut self.slash_popup_list_state);
+        frame.render_stateful_widget(list, area, &mut self.command_popup_list_state);
 
     }
 
@@ -246,7 +246,7 @@ impl MainUi {
         let in_slash = self.terminal_input.is_typing_slash_command();
 
         if in_slash {
-            self.render_slash_popup(
+            self.render_command_popup(
                 frame, 
                 terminal_input_block_inner_area.x,
                 terminal_input_block_inner_area.y,
@@ -321,7 +321,7 @@ impl MainUi {
             KeyCode::Down => self.terminal_output.scroll_down(),
             KeyCode::Home if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_top(),
             KeyCode::End if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_bottom(),
-            KeyCode::Tab => self.handle_tab(),
+            KeyCode::Tab => { self.handle_tab(); }
             KeyCode::Esc => self.terminal_output.toggle_view_mode(),
             KeyCode::Enter => self.handle_enter(),
             KeyCode::Char('c') | KeyCode::Char('C') if key_event.modifiers == KeyModifiers::CONTROL => {
@@ -338,20 +338,21 @@ impl MainUi {
         if matched.len() == 0 { return }
 
         let cmd = matched.first().expect("wtf");
-        let completed = if cmd.args.is_empty() {
-            cmd.slash.to_string()
-        } else {
-            format!("{} ", cmd.slash)
-        };
+        let completed = format!("{} ", cmd.slash);
         self.terminal_input.replace_data(&completed);
     }
 
-    fn handle_tab(&mut self) {
-        let in_slash = self.terminal_input.is_typing_slash_command();
-        if in_slash { self.tab_complete(); }
+    fn handle_tab(&mut self) -> bool {
+        if self.terminal_input.is_typing_slash_command() {
+            self.tab_complete();
+            return true;
+        }
+        false
     }
 
     fn handle_enter(&mut self) {
+        if self.handle_tab() { return }
+
         let input = self.terminal_input.data.clone();
         if input.len() == 0 { return }
         let mut parts = input.split_whitespace();
@@ -361,6 +362,7 @@ impl MainUi {
         if let Some(slash) = SlashCommand::find(name) {
             match (slash.to_message)(&args) {
                 Some(message) => {
+                    self.tab_complete();
                     let _ = self.message_sender.send(message);
                     self.clear_input();
                 }
