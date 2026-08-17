@@ -75,6 +75,20 @@ impl FrameLogItem {
         from_one || from_other
     }
 
+    /// If this is a contact between a station and me, returns
+    /// the station
+    pub fn get_contact_station(&self, me: &str) -> Option<String> {
+        let Some(ref addressee) = self.addressee else { return None };
+        if self.source.eq_ignore_ascii_case(me) {
+            return Some(addressee.to_string());
+        }
+
+        if addressee.eq_ignore_ascii_case(me) {
+            return Some(self.source.to_string());
+        }
+        None
+    }
+
     pub fn header(&self) -> String {
         let mut left_components: Vec<String> = Vec::new(); 
         let mut right_components: Vec<String> = Vec::new();

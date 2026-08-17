@@ -393,12 +393,6 @@ impl KissSession {
     }
 
     /// True if the frame source is our callsign but no digipeater repeated it.
-    ///
-    /// This could happen if:
-    /// * the TNC hands back the bytes we gave it
-    /// * someone is impersonating us
-    ///
-    /// In that case, we log it but don't count it in our totals.
     fn is_local_echo(&self, frame: &Ax25Frame) -> bool {
         if !self.is_mycall(&frame.source().to_string()) {
             return false;

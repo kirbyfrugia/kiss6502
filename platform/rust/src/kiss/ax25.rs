@@ -259,15 +259,15 @@ mod tests {
         let source = Ax25Addr::new("NOCALL".to_string(), 0);
 
         assert_eq!(
-            source.encode(true),
-            [0x9C, 0x9E, 0x86, 0x82, 0x98, 0x98, 0x61],
+            source.encode(true), [0x9C, 0x9E, 0x86, 0x82, 0x98, 0x98, 0x61],
         );
     }
 
     #[test]
     fn ssid_lands_in_bits_four_through_one() {
-        let source = Ax25Addr::new("W1AW".to_string(), 9);
+        let source = Ax25Addr::new("NOCA".to_string(), 9);
 
-        assert_eq!(source.encode(true), [0xAE, 0x62, 0x82, 0xAE, 0x40, 0x40, 0x73]);
+        assert_eq!(source.encode(true), [0x9C, 0x9E, 0x86, 0x82, 0x40, 0x40, 0x73]);
     }
+
 }

@@ -1,4 +1,6 @@
-use std::{ cmp, sync::mpsc };
+use std::{
+    cmp, sync::mpsc, time::{ Instant },
+};
 
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -54,10 +56,26 @@ impl AppMode {
 }
 
 #[derive(Debug)]
+pub struct Contact {
+    station: String,
+    last_comm: Instant,
+}
+
+impl Contact {
+    pub fn new(station: String) -> Contact {
+        Contact {
+            station,
+            last_comm: Instant::now(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MainUi {
     terminal_input: LineInput,
     terminal_output: MultiLineOutput,
     log: Log,
+    contacts: Vec<Contact>,
     mycall: String,
     message_sender: mpsc::Sender<Message>,
     command_popup_list_state: ListState,
@@ -83,6 +101,7 @@ impl MainUi {
             terminal_input,
             terminal_output: MultiLineOutput::new(),
             log: Log::new(),
+            contacts: Vec::new(),
             mycall: String::new(),
             message_sender,
             command_popup_list_state: ListState::default()
@@ -90,7 +109,7 @@ impl MainUi {
         }
     }
 
-    fn render_command_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
+    fn render_slash_command_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
         let matching = SlashCommand::matching(&self.terminal_input.data);
 
         let num_matching: u16 = matching.len().try_into().unwrap();
@@ -243,10 +262,10 @@ impl MainUi {
         };
         frame.set_cursor_position(cursor_pos);
 
-        let in_slash = self.terminal_input.is_typing_slash_command();
+        let in_slash = self.terminal_input.is_typing_command(b'/');
 
         if in_slash {
-            self.render_command_popup(
+            self.render_slash_command_popup(
                 frame, 
                 terminal_input_block_inner_area.x,
                 terminal_input_block_inner_area.y,
@@ -271,16 +290,36 @@ impl MainUi {
         self.terminal_output.scroll_to_bottom();
     }
 
+    fn update_contact(&mut self, station: String) {
+        if let Some(s) = self.contacts.iter_mut().find(|s| s.station == station) {
+            s.last_comm = Instant::now();
+        }
+        else {
+            let contact = Contact::new(station);
+            self.contacts.push(contact);
+        }
+    }
+
+    fn update_contacts(&mut self, log_item: &LogItem) {
+        if let LogItem::Frame {item,..} = log_item {
+            if let Some(station) = item.get_contact_station(&self.mycall) {
+                self.update_contact(station);
+            }
+        }
+    }
+
     pub fn try_claim(&mut self, message: Message) -> Option<Message> {
         match message {
             Message::LogPublish(item) => {
+                self.update_contacts(&item);
                 self.log.push(item);
                 None
-            }
+            },
             Message::LogUpdate(item) => {
+                self.update_contacts(&item);
                 self.log.replace(item);
                 None
-            }
+            },
             other => Some(other),
         }
     }
@@ -343,7 +382,7 @@ impl MainUi {
     }
 
     fn handle_tab(&mut self) -> bool {
-        if self.terminal_input.is_typing_slash_command() {
+        if self.terminal_input.is_typing_command(b'/') {
             self.tab_complete();
             return true;
         }

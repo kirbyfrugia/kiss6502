@@ -127,12 +127,12 @@ impl LineInput {
         self.update_screen_vars();
     }
 
-    pub fn is_typing_slash_command(&mut self) -> bool {
+    pub fn is_typing_command(&mut self, command_byte: u8) -> bool {
         if self.data_cursor == 0 { return false }
 
         let data_bytes = self.data.as_bytes();
         let first_byte = data_bytes[0];
-        if first_byte != b'/' { return false }
+        if first_byte != command_byte { return false }
 
         for &this_char in data_bytes {
             match this_char {
