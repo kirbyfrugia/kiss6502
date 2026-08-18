@@ -71,37 +71,6 @@ impl Contact {
 }
 
 #[derive(Debug)]
-struct SlashPopupState {
-    in_slash: bool,
-    matching_slashes: Vec<&'static SlashCommand>,
-    selected_index: usize,
-}
-
-impl SlashPopupState {
-    pub fn new() -> SlashPopupState {
-        Self {
-            in_slash: false,
-            matching_slashes: Vec::new(),
-            selected_index: 0,
-        }
-    }
-
-    pub fn to_list(&self) -> List<'_> {
-        let usage_width = SlashCommand::max_usage_width();
-
-        let items: Vec<ListItem> = self.matching_slashes
-            .iter()
-            .map(|cmd| ListItem::new(format!("{:<usage_width$}  {}", cmd.usage(), cmd.friendly)))
-            .collect();
-
-        List::new(items)
-            .style(Color::White)
-            .highlight_style(Modifier::REVERSED)
-            .highlight_symbol("> ")
-    }
-}
-
-#[derive(Debug)]
 pub struct MainUi {
     terminal_input: LineInput,
     terminal_output: MultiLineOutput,
@@ -109,10 +78,12 @@ pub struct MainUi {
     contacts: Vec<Contact>,
     mycall: String,
     message_sender: mpsc::Sender<Message>,
-    command_popup_list_state: ListState,
     app_mode: AppMode,
+    in_slash: bool,
+    matching_slashes: Vec<&'static SlashCommand>,
+    selected_slash_index: usize,
+    command_popup_list_state: ListState,
     in_at: bool,
-    slash_popup_state: SlashPopupState,
 }
 
 impl MainUi {
@@ -137,15 +108,17 @@ impl MainUi {
             contacts: Vec::new(),
             mycall: String::new(),
             message_sender,
+            in_at: false,
+            in_slash: false,
+            matching_slashes: Vec::new(),
+            selected_slash_index: 0,
             command_popup_list_state: ListState::default()
                 .with_selected(Some(0)),
-            in_at: false,
-            slash_popup_state: SlashPopupState::new(),
         }
     }
 
     fn render_slash_command_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
-        let num_matching: u16 = self.slash_popup_state.matching_slashes.len().try_into().unwrap();
+        let num_matching: u16 = self.matching_slashes.len().try_into().unwrap();
 
         if num_matching == 0 { return }
 
@@ -177,10 +150,21 @@ impl MainUi {
         };
         frame.render_widget(Clear, area);
 
-        let list = self.slash_popup_state.to_list();
+        let usage_width = SlashCommand::max_usage_width();
+
+        let items: Vec<ListItem> = self.matching_slashes
+            .iter()
+            .map(|cmd| ListItem::new(format!("{:<usage_width$}  {}", cmd.usage(), cmd.friendly)))
+            .collect();
+
+        let list = List::new(items)
+            .style(Color::White)
+            .highlight_style(Modifier::REVERSED)
+            .highlight_symbol("> ");
+
+        self.command_popup_list_state.select(Some(self.selected_slash_index));
 
         frame.render_stateful_widget(list, area, &mut self.command_popup_list_state);
-
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
@@ -285,7 +269,7 @@ impl MainUi {
         };
         frame.set_cursor_position(cursor_pos);
 
-        if self.slash_popup_state.in_slash {
+        if self.in_slash {
             self.render_slash_command_popup(
                 frame, 
                 terminal_input_block_inner_area.x,
@@ -404,34 +388,57 @@ impl MainUi {
         None
     }
 
+    /// Called whenever the user types something and our
+    /// popup state might be invalidated
     fn update_popup_state(&mut self) {
-        self.slash_popup_state.in_slash = self.terminal_input.is_typing_command(b'/');
+        self.in_slash = self.terminal_input.is_typing_command(b'/');
 
-        if self.slash_popup_state.in_slash {
-            self.slash_popup_state.matching_slashes = SlashCommand::matching(&self.terminal_input.data);
-        }
-        else {
-            self.slash_popup_state.matching_slashes = Vec::new();
+        if self.in_slash {
+            self.matching_slashes = SlashCommand::matching(&self.terminal_input.data);
+            self.selected_slash_index = 0;
         }
 
         self.in_at = self.terminal_input.is_typing_command(b'@');
     }
 
     fn tab_complete(&mut self) {
-        let matched = SlashCommand::matching(&self.terminal_input.data);
+        if self.matching_slashes.len() == 0 { return }
 
-        if matched.len() == 0 { return }
+        let cmd = self.matching_slashes[self.selected_slash_index];
 
-        let cmd = matched.first().expect("wtf");
+        //let cmd = matched.first().expect("wtf");
         let completed = format!("{} ", cmd.slash);
         self.terminal_input.replace_data(&completed);
+        self.update_popup_state();
     }
 
     fn handle_up(&mut self) -> bool {
+        if self.in_slash {
+            let len = self.matching_slashes.len();
+            if len == 0 {
+                self.selected_slash_index = 0;
+            } else if self.selected_slash_index == 0 {
+                self.selected_slash_index = len - 1;
+            } else {
+                self.selected_slash_index -= 1;
+            }
+            return true;
+        }
         false
     }
 
     fn handle_down(&mut self) -> bool {
+        if self.in_slash {
+            let len = self.matching_slashes.len();
+            if len == 0 {
+                self.selected_slash_index = 0;
+            } else if self.selected_slash_index >= len - 1 {
+                self.selected_slash_index = 0;
+            } else {
+                self.selected_slash_index += 1;
+            }
+            return true;
+        }
         false
     }
 
