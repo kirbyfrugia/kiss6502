@@ -1,5 +1,5 @@
 use std::{
-    cmp, cmp::min, sync::mpsc, time::{ Instant },
+    cmp::min, sync::mpsc, time::{ Instant },
 };
 
 use ratatui::{
@@ -21,10 +21,10 @@ use crate::{
     slash::{SlashCommand, SLASH_COMMANDS},
 };
 
-const MAX_INPUT_LEN: usize             = 67;
-const OUTPUT_AREA_WIDTH: u16           = TERMINAL_WIDTH + 4;
-const MAX_SLASH_POPUP_HEIGHT: u16      = 8;
-const INPUT_HEIGHT: u16                = 3;
+const MAX_INPUT_LEN: usize     = 67;
+const OUTPUT_AREA_WIDTH: u16   = TERMINAL_WIDTH + 4;
+const MAX_AUTOCOMP_HEIGHT: u16 = 8;
+const INPUT_HEIGHT: u16        = 3;
 
 /// APRS data type ids that count as conversations
 const CONVERSATIONAL_DATA_TYPES: &[char] = &[':'];
@@ -82,14 +82,14 @@ pub struct MainUi {
     in_slash: bool,
     matching_slashes: Vec<&'static SlashCommand>,
     selected_slash: usize,
-    command_popup_list_state: ListState,
+    slash_command_popup_state: ListState,
     in_at: bool,
 }
 
 impl MainUi {
     pub const MIN_SIZE: Size = Size {
         width: OUTPUT_AREA_WIDTH,
-        height: INPUT_HEIGHT + MAX_SLASH_POPUP_HEIGHT + 3,
+        height: INPUT_HEIGHT + MAX_AUTOCOMP_HEIGHT + 3,
     };
 
     pub fn new(message_sender: mpsc::Sender<Message>) -> Self {
@@ -112,22 +112,29 @@ impl MainUi {
             in_slash: false,
             matching_slashes: Vec::new(),
             selected_slash: 0,
-            command_popup_list_state: ListState::default()
+            slash_command_popup_state: ListState::default()
                 .with_selected(Some(0)),
         }
     }
 
-    fn render_slash_command_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
-        let num_matching: u16 = self.matching_slashes.len().try_into().unwrap();
+    /// Renders the '/' or '@' popup if needed.
+    fn maybe_render_autocomp_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
+        let num_items: u16 = if self.in_slash {
+            self.matching_slashes.len().try_into().unwrap()
+        } else if self.in_at {
+            0 as u16
+        } else {
+            0 as u16
+        };
 
-        if num_matching == 0 { return }
+        if num_items == 0 { return }
 
-        let popup_height: u16 = min(num_matching, MAX_SLASH_POPUP_HEIGHT);
+        let popup_height: u16 = min(num_items, MAX_AUTOCOMP_HEIGHT);
         let mut popupy = inputy - (popup_height + 1);
 
         // if we have too many items in the popup, render a ...
-        if popup_height < num_matching {
-            let num_hidden = num_matching - popup_height;
+        if popup_height < num_items {
+            let num_hidden = num_items - popup_height;
             let ellipsis_str = format!("  ...{} more", num_hidden);
 
             popupy -= 1;
@@ -142,29 +149,46 @@ impl MainUi {
             frame.render_widget(ellipsis, area);
         }
 
+        let output_width_u16: u16 = OUTPUT_AREA_WIDTH - 3; // minus border and scroll
+        let output_width_usize: usize = output_width_u16 as usize;
+
+        let divider_area = Rect {
+            x: inputx,
+            y: popupy.saturating_sub(1),
+            width: output_width_u16,
+            height: 1,
+        };
+
+        let divider = Paragraph::new("=".repeat(output_width_usize.into()))
+            .style(Style::default())
+            .alignment(Alignment::Left);
+
+        frame.render_widget(divider, divider_area);
+
         let area = Rect {
             x: inputx,
             y: popupy,
-            width: OUTPUT_AREA_WIDTH - 3, // minus border and scroll
+            width: output_width_u16,
             height: popup_height,
         };
         frame.render_widget(Clear, area);
 
-        let usage_width = SlashCommand::max_usage_width();
+        if self.in_slash {
+            let usage_width = SlashCommand::max_usage_width();
+            let items: Vec<ListItem> = self.matching_slashes
+                .iter()
+                .map(|cmd| ListItem::new(format!("{:<usage_width$}  {}", cmd.usage(), cmd.friendly)))
+                .collect();
 
-        let items: Vec<ListItem> = self.matching_slashes
-            .iter()
-            .map(|cmd| ListItem::new(format!("{:<usage_width$}  {}", cmd.usage(), cmd.friendly)))
-            .collect();
+            let list = List::new(items)
+                .style(Color::White)
+                .highlight_style(Modifier::REVERSED)
+                .highlight_symbol("> ");
 
-        let list = List::new(items)
-            .style(Color::White)
-            .highlight_style(Modifier::REVERSED)
-            .highlight_symbol("> ");
+            self.slash_command_popup_state.select(Some(self.selected_slash));
 
-        self.command_popup_list_state.select(Some(self.selected_slash));
-
-        frame.render_stateful_widget(list, area, &mut self.command_popup_list_state);
+            frame.render_stateful_widget(list, area, &mut self.slash_command_popup_state);
+        }
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
@@ -269,13 +293,11 @@ impl MainUi {
         };
         frame.set_cursor_position(cursor_pos);
 
-        if self.in_slash {
-            self.render_slash_command_popup(
-                frame, 
-                terminal_input_block_inner_area.x,
-                terminal_input_block_inner_area.y,
-            );
-        }
+        self.maybe_render_autocomp_popup(
+            frame, 
+            terminal_input_block_inner_area.x,
+            terminal_input_block_inner_area.y,
+        );
 
     }
 
