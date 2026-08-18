@@ -162,12 +162,12 @@ impl MainUi {
 
     /// Renders the '/' or '@' popup if needed.
     fn maybe_render_autocomp_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
-        let num_items: u16 = if self.typing_slash {
-            self.matching_slashes.len().try_into().unwrap()
+        let (color, num_items) = if self.typing_slash {
+            (Color::Green, self.matching_slashes.len().try_into().unwrap())
         } else if self.typing_contact {
-            self.matching_contacts.len().try_into().unwrap()
+            (Color::Yellow, self.matching_contacts.len().try_into().unwrap())
         } else {
-            0 as u16
+            (Color::Red, 0 as u16)
         };
 
         if num_items == 0 { return }
@@ -203,7 +203,7 @@ impl MainUi {
         };
 
         let divider = Paragraph::new("=".repeat(output_width_usize.into()))
-            .style(Color::Blue)
+            .style(color)
             .alignment(Alignment::Left);
 
         frame.render_widget(divider, divider_area);
@@ -224,7 +224,7 @@ impl MainUi {
                 .collect();
 
             let list = List::new(items)
-                .style(Color::Green)
+                .style(color)
                 .highlight_style(Modifier::REVERSED)
                 .highlight_symbol("> ");
 
@@ -239,7 +239,7 @@ impl MainUi {
                 .collect();
 
             let list = List::new(items)
-                .style(Color::Yellow)
+                .style(color)
                 .highlight_style(Modifier::REVERSED)
                 .highlight_symbol("> ");
 
@@ -529,19 +529,10 @@ impl MainUi {
         false
     }
 
-    fn handle_enter(&mut self) {
-        if self.handle_tab() { return }
-
-        let input = self.terminal_input.data.clone();
-        if input.len() == 0 { return }
-        let mut parts = input.split_whitespace();
-        let name = parts.next().unwrap_or("");
-        let args: Vec<&str> = parts.collect();
-
+    fn handle_slash_command(&mut self, input: &str, name: &str, args: Vec<&str>) {
         if let Some(slash) = SlashCommand::find(name) {
             match (slash.to_message)(&args) {
                 Some(message) => {
-                    self.tab_complete_slash();
                     let _ = self.message_sender.send(message);
                     self.clear_input();
                 }
@@ -552,16 +543,33 @@ impl MainUi {
                     ]));
                 }
             }
-            self.update_popup_state();
+        } else {
+            self.print_help();
         }
-        else {
-            if name.starts_with("/") {
-                self.print_help();
-                return
-            }
-            self.send_message(input);
-            self.clear_input();
+    }
+
+    fn handle_message_command(&mut self, input: &str, name: &str, args: Vec<&str>) {
+        self.send_message(&input);
+        self.clear_input();
+    }
+
+    fn handle_enter(&mut self) {
+        if self.handle_tab() { return }
+
+        let input = self.terminal_input.data.clone();
+        if input.len() == 0 { return }
+        let mut parts = input.split_whitespace();
+        let name = parts.next().unwrap_or("").trim();
+        let args: Vec<&str> = parts.collect();
+
+        if name.len() == 0 { return }
+
+        if name.starts_with("/") {
+            self.handle_slash_command(&input, name, args);
+        } else if name.starts_with("@") {
+            self.handle_message_command(&input, name, args);
         }
+
     }
 
     fn clear_input(&mut self) {
@@ -583,11 +591,14 @@ impl MainUi {
         self.log.push(LogItem::notice(lines));
     }
 
-    fn send_message(&mut self, text: String) {
+    fn send_message(&mut self, text: &str) {
         let addressee = match &self.app_mode {
-            AppMode::Qso { addressee, .. } => addressee.to_string(),
-            _ => AprsMessage::BROADCAST_ADDRESSEE.to_string(),
+            AppMode::Qso { addressee, .. } => addressee,
+            _ => AprsMessage::BROADCAST_ADDRESSEE,
         };
+
+        let addressee = addressee.to_string();
+        let text = text.to_string();
 
         let _ = self.message_sender.send(Message::SendAprsMessage { addressee, text });
     }
