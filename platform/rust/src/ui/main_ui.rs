@@ -55,7 +55,7 @@ impl AppMode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct Contact {
     station: String,
     last_comm: Instant,
@@ -70,20 +70,59 @@ impl Contact {
     }
 }
 
+#[derive(Clone,Debug)]
+pub struct ContactBook {
+    contacts: Vec<Contact>,
+}
+
+impl ContactBook {
+    pub fn new() -> ContactBook {
+        Self {
+            contacts: Vec::new(),
+        }
+    }
+
+    fn add_or_update_contact(&mut self, station: String) {
+        if let Some(s) = self.contacts.iter_mut().find(|s| s.station == station) {
+            s.last_comm = Instant::now();
+        }
+        else {
+            let contact = Contact::new(station.to_uppercase());
+            self.contacts.push(contact);
+        }
+    }
+
+    pub fn matching(&self, match_str: &str) -> Vec<Contact> {
+        let match_str = match_str.to_uppercase();
+
+        let mut matching_contacts: Vec<Contact> = self.contacts
+            .iter()
+            .filter(|c| c.station.starts_with(&match_str))
+            .cloned()
+            .collect();
+
+        matching_contacts.sort_by(|a, b| b.last_comm.cmp(&a.last_comm));
+        matching_contacts
+    }
+}
+
 #[derive(Debug)]
 pub struct MainUi {
+    message_sender: mpsc::Sender<Message>,
     terminal_input: LineInput,
     terminal_output: MultiLineOutput,
-    log: Log,
-    contacts: Vec<Contact>,
     mycall: String,
-    message_sender: mpsc::Sender<Message>,
     app_mode: AppMode,
-    in_slash: bool,
+    log: Log,
+    contact_book: ContactBook,
+    typing_slash: bool,
     matching_slashes: Vec<&'static SlashCommand>,
     selected_slash: usize,
     slash_command_popup_state: ListState,
-    in_at: bool,
+    typing_contact: bool,
+    matching_contacts: Vec<Contact>,
+    selected_contact: usize,
+    contact_command_popup_state: ListState,
 }
 
 impl MainUi {
@@ -105,24 +144,28 @@ impl MainUi {
             terminal_input,
             terminal_output: MultiLineOutput::new(),
             log: Log::new(),
-            contacts: Vec::new(),
+            contact_book: ContactBook::new(),
             mycall: String::new(),
             message_sender,
-            in_at: false,
-            in_slash: false,
+            typing_slash: false,
             matching_slashes: Vec::new(),
             selected_slash: 0,
             slash_command_popup_state: ListState::default()
+                .with_selected(Some(0)),
+            typing_contact: false,
+            matching_contacts: Vec::new(),
+            selected_contact: 0,
+            contact_command_popup_state: ListState::default()
                 .with_selected(Some(0)),
         }
     }
 
     /// Renders the '/' or '@' popup if needed.
     fn maybe_render_autocomp_popup(&mut self, frame: &mut Frame, inputx: u16, inputy: u16) {
-        let num_items: u16 = if self.in_slash {
+        let num_items: u16 = if self.typing_slash {
             self.matching_slashes.len().try_into().unwrap()
-        } else if self.in_at {
-            0 as u16
+        } else if self.typing_contact {
+            self.matching_contacts.len().try_into().unwrap()
         } else {
             0 as u16
         };
@@ -160,7 +203,7 @@ impl MainUi {
         };
 
         let divider = Paragraph::new("=".repeat(output_width_usize.into()))
-            .style(Style::default())
+            .style(Color::Blue)
             .alignment(Alignment::Left);
 
         frame.render_widget(divider, divider_area);
@@ -173,7 +216,7 @@ impl MainUi {
         };
         frame.render_widget(Clear, area);
 
-        if self.in_slash {
+        if self.typing_slash {
             let usage_width = SlashCommand::max_usage_width();
             let items: Vec<ListItem> = self.matching_slashes
                 .iter()
@@ -181,13 +224,27 @@ impl MainUi {
                 .collect();
 
             let list = List::new(items)
-                .style(Color::White)
+                .style(Color::Green)
                 .highlight_style(Modifier::REVERSED)
                 .highlight_symbol("> ");
 
             self.slash_command_popup_state.select(Some(self.selected_slash));
-
             frame.render_stateful_widget(list, area, &mut self.slash_command_popup_state);
+        }
+
+        if self.typing_contact {
+            let items: Vec<ListItem> = self.matching_contacts
+                .iter()
+                .map(|m| ListItem::new(m.station.clone()))
+                .collect();
+
+            let list = List::new(items)
+                .style(Color::Yellow)
+                .highlight_style(Modifier::REVERSED)
+                .highlight_symbol("> ");
+
+            self.contact_command_popup_state.select(Some(self.selected_contact));
+            frame.render_stateful_widget(list, area, &mut self.contact_command_popup_state);
         }
     }
 
@@ -317,20 +374,10 @@ impl MainUi {
         self.terminal_output.scroll_to_bottom();
     }
 
-    fn update_contact(&mut self, station: String) {
-        if let Some(s) = self.contacts.iter_mut().find(|s| s.station == station) {
-            s.last_comm = Instant::now();
-        }
-        else {
-            let contact = Contact::new(station);
-            self.contacts.push(contact);
-        }
-    }
-
     fn update_contacts(&mut self, log_item: &LogItem) {
         if let LogItem::Frame {item,..} = log_item {
             if let Some(station) = item.get_contact_station(&self.mycall) {
-                self.update_contact(station);
+                self.contact_book.add_or_update_contact(station);
             }
         }
     }
@@ -413,39 +460,59 @@ impl MainUi {
     /// Called whenever the user types something and our
     /// popup state might be invalidated
     fn update_popup_state(&mut self) {
-        self.in_slash = self.terminal_input.is_typing_command(b'/');
-
-        if self.in_slash {
+        self.typing_slash = self.terminal_input.is_typing_command(b'/');
+        if self.typing_slash {
             self.matching_slashes = SlashCommand::matching(&self.terminal_input.data);
             self.selected_slash = 0;
+            return;
         }
 
-        self.in_at = self.terminal_input.is_typing_command(b'@');
+        self.typing_contact = self.terminal_input.is_typing_command(b'@');
+        if self.typing_contact {
+            let match_str = &self.terminal_input.data[1..].trim().to_uppercase();
+            self.matching_contacts = self.contact_book.matching(match_str);
+            self.selected_contact = 0;
+            return;
+        }
     }
 
-    fn tab_complete(&mut self) {
+    fn tab_complete_slash(&mut self) {
         if self.matching_slashes.len() == 0 { return }
-
         let cmd = self.matching_slashes[self.selected_slash];
 
-        //let cmd = matched.first().expect("wtf");
         let completed = format!("{} ", cmd.slash);
         self.terminal_input.replace_data(&completed);
         self.update_popup_state();
     }
 
+    fn tab_complete_contact(&mut self) {
+        if self.matching_contacts.len() == 0 { return }
+        let contact = &self.matching_contacts[self.selected_contact];
+
+        let completed = format!("@{} ", contact.station);
+        self.terminal_input.replace_data(&completed);
+        self.update_popup_state();
+    }
+
     fn handle_up(&mut self) -> bool {
-        if self.in_slash {
+        if self.typing_slash {
             self.selected_slash = self.selected_slash.saturating_sub(1);
+            return true;
+        } else if self.typing_contact {
+            self.selected_contact = self.selected_contact.saturating_sub(1);
             return true;
         }
         false
     }
 
     fn handle_down(&mut self) -> bool {
-        if self.in_slash {
+        if self.typing_slash {
             let len = self.matching_slashes.len();
             self.selected_slash = min(self.selected_slash+1, len-1);
+            return true;
+        } else if self.typing_contact {
+            let len = self.matching_contacts.len();
+            self.selected_contact = min(self.selected_contact+1, len-1);
             return true;
         }
         false
@@ -453,7 +520,10 @@ impl MainUi {
 
     fn handle_tab(&mut self) -> bool {
         if self.terminal_input.is_typing_command(b'/') {
-            self.tab_complete();
+            self.tab_complete_slash();
+            return true;
+        } else if self.terminal_input.is_typing_command(b'@') {
+            self.tab_complete_contact();
             return true;
         }
         false
@@ -471,7 +541,7 @@ impl MainUi {
         if let Some(slash) = SlashCommand::find(name) {
             match (slash.to_message)(&args) {
                 Some(message) => {
-                    self.tab_complete();
+                    self.tab_complete_slash();
                     let _ = self.message_sender.send(message);
                     self.clear_input();
                 }

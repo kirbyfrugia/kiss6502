@@ -69,7 +69,7 @@ impl SlashCommand {
     pub fn matching(prefix: &str) -> Vec<&'static SlashCommand> {
         SLASH_COMMANDS
             .iter()
-            .filter(|cmd| cmd.slash.starts_with(prefix))
+            .filter(|cmd| cmd.slash.to_uppercase().starts_with(&prefix.to_uppercase()))
             .collect()
     }
 
