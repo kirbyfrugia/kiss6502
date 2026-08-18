@@ -369,8 +369,6 @@ impl MainUi {
             }
             KeyCode::Up => { self.handle_up(); },
             KeyCode::Down => { self.handle_down(); },
-            KeyCode::Left if self.in_slash => { },
-            KeyCode::Right if self.in_slash => { self.handle_tab(); },
             KeyCode::Home if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_top(),
             KeyCode::End if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_bottom(),
             KeyCode::Tab => { self.handle_tab(); }
