@@ -1,5 +1,5 @@
 use std::{
-    cmp, sync::mpsc, time::{ Instant },
+    cmp, cmp::min, sync::mpsc, time::{ Instant },
 };
 
 use ratatui::{
@@ -81,7 +81,7 @@ pub struct MainUi {
     app_mode: AppMode,
     in_slash: bool,
     matching_slashes: Vec<&'static SlashCommand>,
-    selected_slash_index: usize,
+    selected_slash: usize,
     command_popup_list_state: ListState,
     in_at: bool,
 }
@@ -111,7 +111,7 @@ impl MainUi {
             in_at: false,
             in_slash: false,
             matching_slashes: Vec::new(),
-            selected_slash_index: 0,
+            selected_slash: 0,
             command_popup_list_state: ListState::default()
                 .with_selected(Some(0)),
         }
@@ -122,7 +122,7 @@ impl MainUi {
 
         if num_matching == 0 { return }
 
-        let popup_height: u16 = cmp::min(num_matching, MAX_SLASH_POPUP_HEIGHT);
+        let popup_height: u16 = min(num_matching, MAX_SLASH_POPUP_HEIGHT);
         let mut popupy = inputy - (popup_height + 1);
 
         // if we have too many items in the popup, render a ...
@@ -162,7 +162,7 @@ impl MainUi {
             .highlight_style(Modifier::REVERSED)
             .highlight_symbol("> ");
 
-        self.command_popup_list_state.select(Some(self.selected_slash_index));
+        self.command_popup_list_state.select(Some(self.selected_slash));
 
         frame.render_stateful_widget(list, area, &mut self.command_popup_list_state);
     }
@@ -369,6 +369,8 @@ impl MainUi {
             }
             KeyCode::Up => { self.handle_up(); },
             KeyCode::Down => { self.handle_down(); },
+            KeyCode::Left if self.in_slash => { },
+            KeyCode::Right if self.in_slash => { self.handle_tab(); },
             KeyCode::Home if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_top(),
             KeyCode::End if key_event.modifiers == KeyModifiers::CONTROL => self.terminal_output.scroll_to_bottom(),
             KeyCode::Tab => { self.handle_tab(); }
@@ -395,7 +397,7 @@ impl MainUi {
 
         if self.in_slash {
             self.matching_slashes = SlashCommand::matching(&self.terminal_input.data);
-            self.selected_slash_index = 0;
+            self.selected_slash = 0;
         }
 
         self.in_at = self.terminal_input.is_typing_command(b'@');
@@ -404,7 +406,7 @@ impl MainUi {
     fn tab_complete(&mut self) {
         if self.matching_slashes.len() == 0 { return }
 
-        let cmd = self.matching_slashes[self.selected_slash_index];
+        let cmd = self.matching_slashes[self.selected_slash];
 
         //let cmd = matched.first().expect("wtf");
         let completed = format!("{} ", cmd.slash);
@@ -414,14 +416,7 @@ impl MainUi {
 
     fn handle_up(&mut self) -> bool {
         if self.in_slash {
-            let len = self.matching_slashes.len();
-            if len == 0 {
-                self.selected_slash_index = 0;
-            } else if self.selected_slash_index == 0 {
-                self.selected_slash_index = len - 1;
-            } else {
-                self.selected_slash_index -= 1;
-            }
+            self.selected_slash = self.selected_slash.saturating_sub(1);
             return true;
         }
         false
@@ -430,13 +425,7 @@ impl MainUi {
     fn handle_down(&mut self) -> bool {
         if self.in_slash {
             let len = self.matching_slashes.len();
-            if len == 0 {
-                self.selected_slash_index = 0;
-            } else if self.selected_slash_index >= len - 1 {
-                self.selected_slash_index = 0;
-            } else {
-                self.selected_slash_index += 1;
-            }
+            self.selected_slash = min(self.selected_slash+1, len-1);
             return true;
         }
         false
