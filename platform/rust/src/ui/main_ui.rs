@@ -21,13 +21,22 @@ use crate::{
     slash::{SlashCommand, SLASH_COMMANDS},
 };
 
-const MAX_INPUT_LEN: usize     = 67;
-const OUTPUT_AREA_WIDTH: u16   = TERMINAL_WIDTH + 4;
-const MAX_AUTOCOMP_HEIGHT: u16 = 8;
-const INPUT_HEIGHT: u16        = 3;
+const MAX_APRS_MESSAGE_LEN: usize = 67;
+const MAX_INPUT_DATA_LEN: usize   = 80;
+const MAX_INPUT_SCREEN_LEN: usize = 72;
+const OUTPUT_AREA_WIDTH: u16      = TERMINAL_WIDTH + 4;
+const MAX_AUTOCOMP_HEIGHT: u16    = 8;
+const INPUT_HEIGHT: u16           = 3;
 
 /// APRS data type ids that count as conversations
 const CONVERSATIONAL_DATA_TYPES: &[char] = &[':'];
+
+#[derive(Debug)]
+pub enum CommandType {
+    Unknown,
+    Slash,
+    AprsMessage,
+}
 
 #[derive(Debug)]
 pub enum AppMode {
@@ -123,6 +132,9 @@ pub struct MainUi {
     matching_contacts: Vec<Contact>,
     selected_contact: usize,
     contact_command_popup_state: ListState,
+    current_command_type: CommandType,
+    current_input_len: usize,
+    max_input_len: usize,
 }
 
 impl MainUi {
@@ -134,8 +146,8 @@ impl MainUi {
     pub fn new(message_sender: mpsc::Sender<Message>) -> Self {
         let li_message_sender = message_sender.clone();
         let terminal_input = LineInput::new(
-            MAX_INPUT_LEN,
-            MAX_INPUT_LEN,
+            MAX_INPUT_DATA_LEN,
+            MAX_INPUT_SCREEN_LEN,
             li_message_sender,
         );
 
@@ -157,6 +169,9 @@ impl MainUi {
             selected_contact: 0,
             contact_command_popup_state: ListState::default()
                 .with_selected(Some(0)),
+            current_command_type: CommandType::Unknown,
+            current_input_len: 0,
+            max_input_len: MAX_INPUT_DATA_LEN,
         }
     }
 
@@ -320,9 +335,9 @@ impl MainUi {
             .direction(Direction::Horizontal)
             .spacing(Spacing::Overlap(1))
             .constraints(vec![
-                Constraint::Length(3),                     // prompt
-                Constraint::Length(MAX_INPUT_LEN as u16 + 1), // input field (+1 spacer the divider overlaps)
-                Constraint::Fill(1),                       // divider + char counter
+                Constraint::Length(3),                               // prompt
+                Constraint::Length(MAX_INPUT_SCREEN_LEN as u16 + 1), // input field (+1 spacer the divider overlaps)
+                Constraint::Fill(1),                                 // divider + char counter
             ])
             .split(terminal_input_block_inner_area);
 
@@ -333,15 +348,19 @@ impl MainUi {
         frame.render_widget(terminal_input_prompt, terminal_input_layout[0]);
         frame.render_widget(&self.terminal_input, terminal_input_layout[1]);
 
-        let char_counter = Paragraph::new(format!(
-            "│ {}/{}",
-            self.terminal_input.data.len(),
-            MAX_INPUT_LEN,
-        ))
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Left);
+        match self.current_command_type {
+            CommandType::AprsMessage if !self.typing_contact => {
+                let char_counter = Paragraph::new(format!(
+                    "│ {}/{}",
+                    self.current_input_len,
+                    self.max_input_len,
+                )).style(Style::default().fg(Color::DarkGray))
+                    .alignment(Alignment::Left);
 
-        frame.render_widget(char_counter, terminal_input_layout[2]);
+                frame.render_widget(char_counter, terminal_input_layout[2]);
+            }
+            _ => {}
+        }
 
         let terminal_input_area = terminal_input_layout[1];
         let cursor_pos = Position{
@@ -449,12 +468,42 @@ impl MainUi {
             _ => {
                 let handled = self.terminal_input.handle_key(key_event);
                 if handled.is_none() {
+                    self.user_input_changed();
                     self.update_popup_state();
                 }
                 return handled;
             }
         }
         None
+    }
+
+    fn user_input_changed(&mut self) {
+        let input = self.terminal_input.data.clone();
+
+        if input.len() == 0 {
+            self.current_command_type = CommandType::Unknown;
+            self.max_input_len = MAX_INPUT_DATA_LEN;
+            self.current_input_len = 0;
+            return
+        }
+
+        let mut parts = input.trim().splitn(2, char::is_whitespace);
+        let arg0 = parts.next().unwrap_or("");
+        let rest = parts.next().unwrap_or("").trim_start();
+
+        if arg0.starts_with("/") {
+            self.current_command_type = CommandType::Slash;
+            self.max_input_len = MAX_INPUT_DATA_LEN;
+            self.current_input_len = input.len();
+        } else if arg0.starts_with("@") {
+            self.current_command_type = CommandType::AprsMessage;
+            self.max_input_len = MAX_APRS_MESSAGE_LEN;
+            self.current_input_len = rest.len();
+        } else {
+            self.current_command_type = CommandType::Unknown;
+            self.max_input_len = MAX_INPUT_DATA_LEN;
+            self.current_input_len = 0;
+        }
     }
 
     /// Called whenever the user types something and our
@@ -476,22 +525,24 @@ impl MainUi {
         }
     }
 
-    fn tab_complete_slash(&mut self) {
-        if self.matching_slashes.len() == 0 { return }
+    fn tab_complete_slash(&mut self) -> bool {
+        if self.matching_slashes.len() == 0 { return false }
         let cmd = self.matching_slashes[self.selected_slash];
 
         let completed = format!("{} ", cmd.slash);
         self.terminal_input.replace_data(&completed);
         self.update_popup_state();
+        true
     }
 
-    fn tab_complete_contact(&mut self) {
-        if self.matching_contacts.len() == 0 { return }
+    fn tab_complete_contact(&mut self) -> bool {
+        if self.matching_contacts.len() == 0 { return false }
         let contact = &self.matching_contacts[self.selected_contact];
 
         let completed = format!("@{} ", contact.station);
         self.terminal_input.replace_data(&completed);
         self.update_popup_state();
+        true
     }
 
     fn handle_up(&mut self) -> bool {
@@ -520,11 +571,9 @@ impl MainUi {
 
     fn handle_tab(&mut self) -> bool {
         if self.terminal_input.is_typing_command(b'/') {
-            self.tab_complete_slash();
-            return true;
+            return self.tab_complete_slash();
         } else if self.terminal_input.is_typing_command(b'@') {
-            self.tab_complete_contact();
-            return true;
+            return self.tab_complete_contact();
         }
         false
     }
@@ -549,6 +598,14 @@ impl MainUi {
     }
 
     fn handle_send_message_command(&mut self, addressee: &str, text: &str) {
+        if text.len() > MAX_APRS_MESSAGE_LEN {
+            self.log.push(LogItem::notice(vec![
+                format!("Message too long, must be less than {} chars", MAX_APRS_MESSAGE_LEN),
+                String::new(),
+            ]));
+            return
+        }
+
         let addr = match Ax25Addr::parse(addressee) {
             Ok(addr) => addr,
             Err(_) => {
@@ -560,8 +617,6 @@ impl MainUi {
             }
         };
 
-        // TODO: Validate: < 67 chars.
-        // Update: char count (not here, but on typing).
         self.send_message(addr.to_string(), text.to_string());
         self.clear_input();
     }
@@ -578,13 +633,19 @@ impl MainUi {
 
         if arg0.is_empty() { return }
 
-        if arg0.starts_with("/") {
-            let args: Vec<&str> = rest.split_whitespace().collect();
-            self.handle_slash_command(arg0, args);
-        } else if arg0.starts_with("@") {
-            if rest.is_empty() { return }
-            let addressee = &arg0[1..];
-            self.handle_send_message_command(addressee, rest);
+        match self.current_command_type {
+            CommandType::Slash => {
+                let args: Vec<&str> = rest.split_whitespace().collect();
+                self.handle_slash_command(arg0, args);
+            },
+            CommandType::AprsMessage => {
+                if rest.is_empty() { return }
+                let addressee = &arg0[1..];
+                self.handle_send_message_command(addressee, rest);
+            },
+            _ => {
+                self.print_help();
+            }
         }
 
     }
