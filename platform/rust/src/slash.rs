@@ -16,25 +16,25 @@ pub const SLASH_COMMANDS: &[SlashCommand] = &[
         to_message: |_| Some(Message::Help),
     },
     SlashCommand {
-        slash:      "/net",
+        slash:      "/all",
         args:       "",
-        friendly:   "Net mode (broadcast send, rcv only APRS msg data type)",
-        to_message: |_| Some(Message::Net),
+        friendly:   "Display all Aprs packets",
+        to_message: |_| Some(Message::DisplayAprsAll),
     },
     SlashCommand {
-        slash:      "/qso",
-        args:       "<callsign>",
-        friendly:   "QSO mode (one-to-one convo)",
+        slash:      "/messages",
+        args:       "",
+        friendly:   "Display only Aprs 'message' packets",
+        to_message: |_| Some(Message::DisplayAprsMessages),
+    },
+    SlashCommand {
+        slash:      "/forget",
+        args:       "<station>",
+        friendly:   "Don't highlight <station> or show in auto-complete",
         to_message: |a| match a {
-            [c] => Some(Message::Qso(c.to_uppercase())),
+            [c] => Some(Message::Forget(c.to_uppercase())),
             _   => None,
         },
-    },
-    SlashCommand {
-        slash:      "/monitor",
-        args:       "",
-        friendly:   "Monitor mode (broadcast send, rcv all APRS data types)",
-        to_message: |_| Some(Message::Monitor),
     },
     SlashCommand {
         slash:      "/dump",

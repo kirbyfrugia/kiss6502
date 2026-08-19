@@ -14,7 +14,7 @@ use ratatui::{
 
 use crate::{
     log::{Log, LogItem},
-    ui::AppMode,
+    ui::DisplayMode,
 };
 
 #[derive(Debug)]
@@ -34,17 +34,17 @@ pub struct MultiLineOutput {
 pub struct LogView<'a> {
     log: &'a Log,
     output: &'a MultiLineOutput,
-    app_mode: &'a AppMode,
+    display_mode: &'a DisplayMode,
 }
 
 impl<'a> LogView<'a> {
-    pub fn new(log: &'a Log, output: &'a MultiLineOutput, app_mode: &'a AppMode) -> Self {
-        Self { log, output, app_mode }
+    pub fn new(log: &'a Log, output: &'a MultiLineOutput, display_mode: &'a DisplayMode) -> Self {
+        Self { log, output, display_mode }
     }
 
     /// The items shown based on the current mode admits, oldest first.
     fn visible(&self) -> impl Iterator<Item = &LogItem> {
-        self.log.iter().filter(|item| self.app_mode.shows(item))
+        self.log.iter().filter(|item| self.display_mode.shows(item))
     }
 
     fn total_lines(&self) -> usize {
