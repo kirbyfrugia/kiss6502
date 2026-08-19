@@ -85,12 +85,18 @@ impl ContactBook {
     }
 
     fn add_or_update_contact(&mut self, station: String) {
-        if let Some(s) = self.contacts.iter_mut().find(|s| s.station == station) {
+        if let Some(s) = self.contacts.iter_mut().find(|c| c.station == station) {
             s.last_comm = Instant::now();
         }
         else {
             let contact = Contact::new(station.to_uppercase());
             self.contacts.push(contact);
+        }
+    }
+
+    fn remove_contact(&mut self, station: &str) {
+        if let Some(index) = self.contacts.iter().position(|c| c.station == station) {
+            self.contacts.swap_remove(index);
         }
     }
 
@@ -384,6 +390,10 @@ impl MainUi {
         }
     }
 
+    fn forget_station(&mut self, station: &str) {
+        self.contact_book.remove_contact(station);
+    }
+
     pub fn try_claim(&mut self, message: Message) -> Option<Message> {
         match message {
             Message::LogPublish(item) => {
@@ -413,6 +423,10 @@ impl MainUi {
             }
             Message::DisplayAprsMessages => {
                 self.set_display_mode(DisplayMode::AprsMessages);
+                None
+            }
+            Message::Forget(station) => {
+                self.forget_station(&station);
                 None
             }
             Message::Clear => {
