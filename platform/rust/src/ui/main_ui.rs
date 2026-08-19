@@ -548,7 +548,7 @@ impl MainUi {
         }
     }
 
-    fn handle_send_message_command(&mut self, addressee: &str, message: &str) {
+    fn handle_send_message_command(&mut self, addressee: &str, text: &str) {
         let addr = match Ax25Addr::parse(addressee) {
             Ok(addr) => addr,
             Err(_) => {
@@ -560,14 +560,9 @@ impl MainUi {
             }
         };
 
-        self.log.push(LogItem::notice(vec![
-            format!("to: '{}', msg: '{}'", addr.to_string(), message),
-            String::new(),
-        ]));
-
-        // Validate: station, message > 0 character, < 67 chars.
+        // TODO: Validate: < 67 chars.
         // Update: char count (not here, but on typing).
-        //self.send_message(&input);
+        self.send_message(addr.to_string(), text.to_string());
         self.clear_input();
     }
 
@@ -613,15 +608,7 @@ impl MainUi {
         self.log.push(LogItem::notice(lines));
     }
 
-    fn send_message(&mut self, text: &str) {
-        let addressee = match &self.app_mode {
-            AppMode::Qso { addressee, .. } => addressee,
-            _ => AprsMessage::BROADCAST_ADDRESSEE,
-        };
-
-        let addressee = addressee.to_string();
-        let text = text.to_string();
-
+    fn send_message(&mut self, addressee: String, text: String) {
         let _ = self.message_sender.send(Message::SendAprsMessage { addressee, text });
     }
 
