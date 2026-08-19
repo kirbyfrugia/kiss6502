@@ -94,10 +94,11 @@ impl FrameLogItem {
         let mut right_components: Vec<String> = Vec::new();
 
         left_components.push(utc_timestamp(self.at));
-        left_components.push(self.source.clone());
 
         if let Some(addressee) = &self.addressee {
-            left_components.push(format!("> {}", addressee));
+            left_components.push(format!("from: {} to: {}", self.source.clone(), addressee));
+        } else {
+            left_components.push(format!("from: {}", self.source.clone()));
         }
 
         if self.ackable {
