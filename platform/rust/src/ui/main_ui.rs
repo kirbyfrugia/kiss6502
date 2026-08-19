@@ -14,7 +14,7 @@ use ratatui::{
 use crate::{
     config::Config,
     globals::TERMINAL_WIDTH,
-    kiss::AprsMessage,
+    kiss::{Ax25Addr, AprsMessage},
     log::{FrameLogItem, Log, LogItem},
     ui::{LineInput,LogView,MultiLineOutput},
     message::Message,
@@ -529,8 +529,8 @@ impl MainUi {
         false
     }
 
-    fn handle_slash_command(&mut self, input: &str, name: &str, args: Vec<&str>) {
-        if let Some(slash) = SlashCommand::find(name) {
+    fn handle_slash_command(&mut self, command_name: &str, args: Vec<&str>) {
+        if let Some(slash) = SlashCommand::find(command_name) {
             match (slash.to_message)(&args) {
                 Some(message) => {
                     let _ = self.message_sender.send(message);
@@ -548,8 +548,26 @@ impl MainUi {
         }
     }
 
-    fn handle_message_command(&mut self, input: &str, name: &str, args: Vec<&str>) {
-        self.send_message(&input);
+    fn handle_send_message_command(&mut self, addressee: &str, message: &str) {
+        let addr = match Ax25Addr::parse(addressee) {
+            Ok(addr) => addr,
+            Err(_) => {
+                self.log.push(LogItem::notice(vec![
+                    format!("Invalid callsign: '{}'", addressee),
+                    String::new(),
+                ]));
+                return
+            }
+        };
+
+        self.log.push(LogItem::notice(vec![
+            format!("to: '{}', msg: '{}'", addr.to_string(), message),
+            String::new(),
+        ]));
+
+        // Validate: station, message > 0 character, < 67 chars.
+        // Update: char count (not here, but on typing).
+        //self.send_message(&input);
         self.clear_input();
     }
 
@@ -558,16 +576,20 @@ impl MainUi {
 
         let input = self.terminal_input.data.clone();
         if input.len() == 0 { return }
-        let mut parts = input.split_whitespace();
-        let name = parts.next().unwrap_or("").trim();
-        let args: Vec<&str> = parts.collect();
 
-        if name.len() == 0 { return }
+        let mut parts = input.trim().splitn(2, char::is_whitespace);
+        let arg0 = parts.next().unwrap_or("");
+        let rest = parts.next().unwrap_or("").trim_start();
 
-        if name.starts_with("/") {
-            self.handle_slash_command(&input, name, args);
-        } else if name.starts_with("@") {
-            self.handle_message_command(&input, name, args);
+        if arg0.is_empty() { return }
+
+        if arg0.starts_with("/") {
+            let args: Vec<&str> = rest.split_whitespace().collect();
+            self.handle_slash_command(arg0, args);
+        } else if arg0.starts_with("@") {
+            if rest.is_empty() { return }
+            let addressee = &arg0[1..];
+            self.handle_send_message_command(addressee, rest);
         }
 
     }
