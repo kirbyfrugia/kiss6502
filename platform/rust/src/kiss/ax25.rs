@@ -1,18 +1,42 @@
-use super::aprs::AprsData;
+use super::aprs::{AprsData, AprsError, AprsMessage};
 
 pub const MAX_DIGIPEATERS: usize = 8;
 
-pub fn parse_digipeater_path(path: &[String]) -> Result<Vec<Ax25Addr>, String> {
+pub fn parse_digipeater_path(path: &[String]) -> Result<Vec<Ax25Addr>, Ax25Error> {
     let digis = path
         .iter()
         .map(|d| Ax25Addr::parse(d))
         .collect::<Result<Vec<_>, _>>()?;
 
     if digis.len() > MAX_DIGIPEATERS {
-        return Err(format!("at most {MAX_DIGIPEATERS} digipeaters are allowed"));
+        return Err(Ax25Error::TooManyDigis)
     }
 
     Ok(digis)
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Ax25Error {
+    #[error("invalid frame")]
+    InvalidFrame,
+    #[error("invalid wrapped frame")]
+    InvalidWrappedFrame,
+    #[error("missing dest")]
+    MissingDest,
+    #[error("missing source")]
+    MissingSource,
+    #[error("invalid station")]
+    InvalidStation,
+    #[error("invalid ssid")]
+    InvalidSsid,
+    #[error("missing control")]
+    MissingControl,
+    #[error("missing PID")]
+    MissingPid,
+    #[error("at most 8 digipeaters are allowed")]
+    TooManyDigis,
+    #[error("aprs parse error")]
+    Aprs(#[from] AprsError),
 }
 
 #[derive(Debug,Clone)]
@@ -27,7 +51,7 @@ impl Ax25Addr {
 
     const COMMAND: u8 = 0b1000_0000;
 
-    pub fn parse(s: &str) -> Result<Self, String> {
+    pub fn parse(s: &str) -> Result<Self, Ax25Error> {
         let s = s.trim();
         let (addr, ssid) = match s.split_once('-') {
             Some((addr, ssid)) => {
@@ -35,14 +59,14 @@ impl Ax25Addr {
                     .parse::<u8>()
                     .ok()
                     .filter(|&n| n <= 15)
-                    .ok_or_else(|| format!("'{s}' has an invalid SSID (must be 0-15)"))?;
+                    .ok_or(Ax25Error::InvalidSsid)?;
                 (addr, ssid)
             }
             None => (s, 0),
         };
 
         if addr.is_empty() || addr.len() > 6 || !addr.chars().all(|c| c.is_ascii_alphanumeric()) {
-            return Err(format!("'{addr}' is not a valid station"));
+            return Err(Ax25Error::InvalidStation);
         }
 
         Ok(Self::new(addr.to_string(), ssid))
@@ -115,6 +139,10 @@ impl Ax25Addr {
         (Self { addr, ssid, repeated }, last_addr)
     }
 
+    pub fn set_repeated(&mut self, repeated: bool) {
+        self.repeated = repeated;
+    }
+
     pub fn repeated(&self) -> bool {
         self.repeated
     }
@@ -183,11 +211,11 @@ impl Ax25Frame {
         bytes
     }
 
-    pub fn decode(bytes: &[u8]) -> Option<Self> {
+    pub fn decode(bytes: &[u8]) -> Result<Self, Ax25Error> {
         const MIN_AX25_FRAME_SIZE: usize = 17; // dest + source + ctrl + pid + 1 info byte
         if bytes.len() < MIN_AX25_FRAME_SIZE {
             tracing::warn!(len = bytes.len(), "discarding invalid ax25 frame - too small");
-            return None
+            return Err(Ax25Error::InvalidFrame); 
         }
 
         const MAX_AX25_ADDRS: usize = 10;
@@ -205,23 +233,23 @@ impl Ax25Frame {
 
         let Some(dest) = addrs.next() else {
             tracing::warn!("ax25 frame missing dest field");
-            return None
+            return Err(Ax25Error::MissingDest); 
         };
 
         let Some(source) = addrs.next() else {
             tracing::warn!("ax25 frame missing source field");
-            return None
+            return Err(Ax25Error::MissingSource); 
         };
 
         let digipeaters = addrs.collect();
 
         let Some(&control) = bytes.get(control_field_start) else {
             tracing::warn!("ax25 frame missing control byte");
-            return None
+            return Err(Ax25Error::MissingControl); 
         };
         let Some(&pid) = bytes.get(control_field_start + 1) else {
             tracing::warn!("ax25 frame missing pid byte");
-            return None
+            return Err(Ax25Error::MissingPid); 
         };
 
         let info_field_start = control_field_start + 2;
@@ -234,15 +262,52 @@ impl Ax25Frame {
 
         match info[0] {
             b'}' => {
-                let inner_bytes = info;
-                let mut inner_frame = Ax25Frame::decode(inner_bytes)?;
+                tracing::warn!(
+                    info_len=info.len(),
+                    "third party"
+                );
+                if info.len() <= 1 {
+                    return Err(Ax25Error::InvalidWrappedFrame)
+                }
+                let inner_bytes = &info[1..];
+                let mut inner_frame = Ax25Frame::parse_wrapped_aprs_message(inner_bytes)?;
                 inner_frame.outer_frame = Some(Box::new(this_frame));
-                return Some(inner_frame)
+                return Ok(inner_frame)
             },
             _ => {
-                return Some(this_frame)
+                tracing::warn!(
+                    first_char=info[0],
+                    "first char"
+                );
+                return Ok(this_frame)
             }
         }
+    }
+
+    /// Parse from a string, e.g. ascii data in a third party message
+    pub fn parse_wrapped_aprs_message(bytes: &[u8]) -> Result<Ax25Frame, Ax25Error> {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        let (header, info) = text.split_once(':').ok_or(Ax25Error::InvalidWrappedFrame)?;
+        let (source, rest) = header.split_once('>').ok_or(Ax25Error::InvalidWrappedFrame)?;
+        let mut header_fields = rest.split(',');
+        let dest = header_fields.next().ok_or(Ax25Error::InvalidWrappedFrame)?;
+
+        let parse_addr = |s: &str| -> Result<Ax25Addr, Ax25Error> {
+            let (s, repeated) = match s.strip_suffix('*') {
+                Some(s) => (s, true),
+                None => (s, false),
+            };
+            let mut addr = Ax25Addr::parse(s)?;
+            addr.set_repeated(repeated);
+            Ok(addr)
+        };
+
+        let source = parse_addr(source)?;
+        let dest = parse_addr(dest)?;
+        let digis = header_fields.map(parse_addr).collect::<Result<Vec<_>, _>>()?;
+
+        let msg = AprsMessage::parse(info)?;
+        Ok(Ax25Frame::new(dest, source, digis, AprsData::Message(msg)))
     }
 
     pub fn digipeaters(&self) -> &[Ax25Addr] {

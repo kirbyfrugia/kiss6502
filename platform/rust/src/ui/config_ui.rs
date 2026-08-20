@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    config::{self, Config},
+    config::{self, Config, ConfigError},
     message::Message,
     ui::LineInput,
 };
@@ -38,7 +38,7 @@ enum FieldKey {
     Digipeaters,
 }
 
-fn validate_field(key: FieldKey, value: &str) -> Result<(), String> {
+fn validate_field(key: FieldKey, value: &str) -> Result<(), ConfigError> {
     let value = value.trim();
     match key {
         FieldKey::Station => return config::validate_station(value),
@@ -46,7 +46,7 @@ fn validate_field(key: FieldKey, value: &str) -> Result<(), String> {
         FieldKey::KissHost => return config::validate_host(value),
         FieldKey::KissPort => match value.parse::<u16>() {
             Ok(port) => return config::validate_port(port),
-            Err(_) => return Err("port must be a number from 1-65535".into()),
+            Err(_) => return Err(ConfigError::InvalidPort),
         },
     }
 }
@@ -335,8 +335,8 @@ impl ConfigUi {
         for (i, field) in self.config_fields.iter_mut().enumerate() {
             match validate_field(field.key, &field.input.data) {
                 Ok(()) => field.error = None,
-                Err(msg) => {
-                    field.error = Some(msg);
+                Err(config_error) => {
+                    field.error = Some(config_error.to_string());
                     first_invalid.get_or_insert(i);
                 }
             }

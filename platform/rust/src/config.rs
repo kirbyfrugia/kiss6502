@@ -7,38 +7,62 @@ use serde::{Deserialize, Serialize};
 use color_eyre::eyre::eyre;
 
 use crate::kiss;
+use crate::kiss::Ax25Error;
 
 // DNS limits from RFC 1035
 pub const MAX_HOST_LEN: usize = 253;
 const MAX_SEGMENT_LEN: usize = 63;
 
-pub fn validate_host(host: &str) -> Result<(), String> {
+#[derive(thiserror::Error, Debug)]
+pub enum ConfigError {
+    #[error("station cannot be empty")]
+    EmptyStation,
+    #[error("host cannot be empty")]
+    EmptyHost,
+    #[error("host is too long")]
+    HostTooLong,
+    #[error("host cannot contain an empty segment")]
+    HostContainsEmptySegment,
+    #[error("host segment too long")]
+    HostSegmentTooLong,
+    #[error("host segment cannot start or end with '-'")]
+    HostSegmentStartsOrEndsWithDash,
+    #[error("invalid host")]
+    InvalidHost,
+    #[error("port must be a number from 1-65535")]
+    InvalidPort,
+    #[error("{0}")]
+    Ax25(#[from] Ax25Error),
+}
+
+pub fn validate_host(host: &str) -> Result<(), ConfigError> {
     let host = host.trim();
     if host.is_empty() {
-        return Err("host cannot be empty".into());
+        return Err(ConfigError::EmptyHost)
     }
 
-    if host.parse::<IpAddr>().is_ok() {
-        return Ok(());
-    }
 
     if host.len() > MAX_HOST_LEN {
-        return Err("host is too long".into());
+        return Err(ConfigError::HostTooLong)
     }
 
     for segment in host.split('.') {
         if segment.is_empty() {
-            return Err("host cannot contain an empty segment".into());
+            return Err(ConfigError::HostContainsEmptySegment)
         }
         if segment.len() > MAX_SEGMENT_LEN {
-            return Err("host segment is too long".into());
+            return Err(ConfigError::HostSegmentTooLong)
         }
         if segment.starts_with('-') || segment.ends_with('-') {
-            return Err("host segment cannot start or end with '-'".into());
+            return Err(ConfigError::HostSegmentStartsOrEndsWithDash)
         }
         if !segment.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return Err("host must be a valid hostname or IP address".into());
+            return Err(ConfigError::InvalidHost)
         }
+    }
+
+    if !host.parse::<IpAddr>().is_ok() {
+        return Err(ConfigError::InvalidHost)
     }
 
     Ok(())
@@ -52,21 +76,21 @@ pub fn parse_digipeaters(value: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn validate_digipeaters(value: &str) -> Result<(), String> {
+pub fn validate_digipeaters(value: &str) -> Result<(), ConfigError> {
     kiss::parse_digipeater_path(&parse_digipeaters(value))?;
     Ok(())
 }
 
-pub fn validate_port(port: u16) -> Result<(), String> {
+pub fn validate_port(port: u16) -> Result<(), ConfigError> {
     if port == 0 {
-        return Err("port must be a number from 1-65535".into());
+        return Err(ConfigError::InvalidPort);
     }
     Ok(())
 }
 
-pub fn validate_station(value: &str) -> Result<(), String> {
+pub fn validate_station(value: &str) -> Result<(), ConfigError> {
     if value.trim().is_empty() {
-        return Err("station cannot be empty".into());
+        return Err(ConfigError::EmptyStation)
     }
     kiss::Ax25Addr::parse(value)?;
     Ok(())
@@ -108,7 +132,7 @@ impl Config {
         dirs::config_dir().map(|dir| dir.join("kisstty").join("config.toml"))
     }
 
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), ConfigError> {
         validate_station(&self.station)?;
         validate_host(&self.kiss_host)?;
         validate_port(self.kiss_port)?;

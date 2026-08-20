@@ -1,3 +1,12 @@
+
+#[derive(thiserror::Error, Debug)]
+pub enum AprsError {
+    #[error("empty info field")]
+    EmptyInfo,
+    #[error("empty message format")]
+    InvalidFormat,
+}
+
 #[derive(Debug,Clone)]
 pub enum AprsData {
     Message(AprsMessage),
@@ -59,17 +68,17 @@ impl AprsData {
         bytes
     }
 
-    pub fn decode(info: &[u8]) -> Option<Self> {
+    pub fn decode(info: &[u8]) -> Result<Self, AprsError> {
         let Some((&data_type_id, rest)) = info.split_first() else {
-            tracing::warn!("ax25 frame has empty info field");
-            return None;
+            tracing::warn!("frame has empty info field");
+            return Err(AprsError::EmptyInfo);
         };
 
         match data_type_id {
-            b':' => Some(AprsData::Message(AprsMessage::decode(rest))),
-            b'>' => Some(AprsData::Status(AprsStatus::decode(rest))),
-            b'}' => Some(AprsData::ThirdParty(AprsThirdParty::decode(rest))),
-            other => Some(AprsData::ToBeImplemented(AprsToBeImplemented::decode(other, rest))),
+            b':' => Ok(AprsData::Message(AprsMessage::decode(rest))),
+            b'>' => Ok(AprsData::Status(AprsStatus::decode(rest))),
+            b'}' => Ok(AprsData::ThirdParty(AprsThirdParty::decode(rest))),
+            other => Ok(AprsData::ToBeImplemented(AprsToBeImplemented::decode(other, rest))),
         }
     }
 }
@@ -124,6 +133,21 @@ impl AprsMessage {
         };
 
         Self { addressee, text, id }
+    }
+
+    /// Parses from a string, e.g.
+    /// :ADDRESSEE:message
+    pub fn parse(info: &str) -> Result<AprsMessage, AprsError> {
+        let rest = info.strip_prefix(':').ok_or(AprsError::InvalidFormat)?;
+        let (addressee, rest) = rest.split_once(':').ok_or(AprsError::InvalidFormat)?;
+        let addressee = addressee.trim_end().to_string();
+
+        let (text, id) = match rest.split_once('{') {
+            Some((text, id)) => (text.to_string(), Some(id.to_string())),
+            None => (rest.to_string(), None),
+        };
+
+        Ok(AprsMessage { addressee, text, id })
     }
 }
 

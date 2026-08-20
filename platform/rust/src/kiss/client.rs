@@ -14,7 +14,7 @@ use crate::{
     message::Message,
 };
 
-use super::ax25::Ax25Frame;
+use super::ax25::{Ax25Error, Ax25Frame};
 use super::KISS;
 
 pub struct KissFrame {
@@ -184,13 +184,15 @@ impl KissClient {
         }
     }
 
-    fn process_frame(kiss_frame: &KissFrame) -> Option<Ax25Frame> {
-        if kiss_frame.raw_bytes.is_empty() { return None }
+    fn process_frame(kiss_frame: &KissFrame) -> Result<Ax25Frame, Ax25Error> {
+        if kiss_frame.raw_bytes.is_empty() {
+            return Err(Ax25Error::InvalidFrame)
+        }
 
         let cmd_type = kiss_frame.raw_bytes[0] & 0x0f;
         if cmd_type != KISS::CMD_TYPE_DATA {
             tracing::debug!(cmd_type, "ignoring non-data kiss frame");
-            return None
+            return Err(Ax25Error::InvalidFrame)
         }
 
         //tracing::debug!(raw = ?kiss_frame.raw_bytes, "raw bytes");
@@ -228,10 +230,12 @@ impl KissClient {
                         kiss_frame_state.waiting_on_first_fend = false;
                     }
 
-                    if let Some(frame) = Self::process_frame(&kiss_frame_state.current_frame) {
-                        let _ = message_sender.send(Message::Ax25FrameReceived(frame));
+                    match Self::process_frame(&kiss_frame_state.current_frame) {
+                        Ok(frame) => {
+                            let _ = message_sender.send(Message::Ax25FrameReceived(frame));
+                        }
+                        _ => {}
                     }
-
                     kiss_frame_state.current_frame = KissFrame::default();
                 },
                 KISS::FESC => {
