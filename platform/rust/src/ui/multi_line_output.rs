@@ -6,7 +6,7 @@ use std::cell::Cell;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{ Color, Style, },
+    style::{ Color, Modifier, Style },
     text::Line,
     widgets::{
         Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
@@ -81,10 +81,7 @@ impl Widget for LogView<'_> {
                 continue;
             }
 
-            let color = match item.get_level(item) {
-                LogItemLevel::Normal => Color::White,
-                LogItemLevel::High => Color::Green,
-            };
+            let level = item.get_level();
 
             let skip = top.saturating_sub(consumed);
             for line in item.lines().into_iter().skip(skip) {
@@ -92,10 +89,22 @@ impl Widget for LogView<'_> {
                     break 'items;
                 }
 
-                let line = Line::styled(
-                    line.as_str(),
-                    Style::default().fg(color)
-                );
+                let line = match level {
+                    LogItemLevel::Normal => {
+                        Line::styled(
+                            line.as_str(),
+                            Style::default().fg(Color::Gray)
+                        )
+                    }
+                    LogItemLevel::High => {
+                        Line::styled(
+                            line.as_str(),
+                            Style::default()
+                                .fg(Color::Blue)
+                                .add_modifier(Modifier::BOLD)
+                        )
+                    }
+                };
 
                 buf.set_line(
                     text_area.x,

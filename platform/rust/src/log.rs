@@ -189,8 +189,8 @@ impl LogItem {
         }
     }
 
-    pub fn get_level(&self, item: &LogItem) -> LogItemLevel {
-        match item {
+    pub fn get_level(&self) -> LogItemLevel {
+        match self {
             LogItem::Notice { .. } => LogItemLevel::Normal,
             LogItem::Frame { item, .. } => self.get_frame_level(item),
         }
