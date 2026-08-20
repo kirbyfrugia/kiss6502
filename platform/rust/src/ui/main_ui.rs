@@ -691,6 +691,7 @@ mod tests {
             ackable: false,
             acked: false,
             repeats: 0,
+            user_station: String::from("NOCALL"),
         })
     }
 

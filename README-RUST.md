@@ -113,6 +113,14 @@ To cut a release:
 
 Installers aren't code-signed, so the [Releases page](https://github.com/kirbyfrugia/kisstty/releases) is the only trusted source for official builds. Check a download against `SHA256SUMS.txt` to confirm it's unmodified.
 
+If you need to delete a tag you pushed in order to re-create the same build:
+
+```
+# e.g., deleting tab v0.1.2
+git push --delete origin v0.1.2
+# Then cut a new release as per before.
+```
+
 ## Building installers locally
 
 ### Windows: MSI

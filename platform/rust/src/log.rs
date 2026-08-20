@@ -289,7 +289,7 @@ mod tests {
         let id = next_log_id();
 
         log.push(LogItem::frame(id, frame_log_item(1)));
-        log.push(LogItem::notice(vec![String::from("unrelated")]));
+        log.push(LogItem::notice(vec![String::from("unrelated")], LogItemLevel::Normal));
 
         let mut changed = frame_log_item(1);
         changed.repeats = 2;
@@ -339,7 +339,7 @@ mod tests {
         let header = item.header();
 
         assert!(header.contains("[id: 0003]"), "got {header}");
-        assert!(header.contains("> NOCALL-1"), "got {header}");
+        assert!(header.contains("to: NOCALL-1"), "got {header}");
     }
 
     #[test]
