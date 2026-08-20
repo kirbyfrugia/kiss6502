@@ -42,7 +42,7 @@ impl Ax25Addr {
         };
 
         if addr.is_empty() || addr.len() > 6 || !addr.chars().all(|c| c.is_ascii_alphanumeric()) {
-            return Err(format!("'{addr}' is not a valid callsign"));
+            return Err(format!("'{addr}' is not a valid station"));
         }
 
         Ok(Self::new(addr.to_string(), ssid))

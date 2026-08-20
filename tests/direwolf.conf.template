@@ -13,7 +13,7 @@
 #############################################################
 
 # RX from WAV via stdin; TX to system audio (PipeWire/pulse)
-ADEVICE stdin pulse
+ADEVICE stdin default
 
 CHANNEL 0
 

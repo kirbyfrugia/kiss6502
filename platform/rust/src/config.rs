@@ -64,9 +64,9 @@ pub fn validate_port(port: u16) -> Result<(), String> {
     Ok(())
 }
 
-pub fn validate_callsign(value: &str) -> Result<(), String> {
+pub fn validate_station(value: &str) -> Result<(), String> {
     if value.trim().is_empty() {
-        return Err("callsign cannot be empty".into());
+        return Err("station cannot be empty".into());
     }
     kiss::Ax25Addr::parse(value)?;
     Ok(())
@@ -82,7 +82,8 @@ fn default_kiss_port() -> u16 {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub callsign: String,
+    #[serde(rename = "callsign")]
+    pub station: String,
     #[serde(default="default_kiss_host")]
     pub kiss_host: String,
     #[serde(default="default_kiss_port")]
@@ -94,7 +95,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            callsign: String::new(),
+            station: String::new(),
             kiss_host: default_kiss_host(),
             kiss_port: default_kiss_port(),
             digipeaters: Vec::new(),
@@ -108,7 +109,7 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        validate_callsign(&self.callsign)?;
+        validate_station(&self.station)?;
         validate_host(&self.kiss_host)?;
         validate_port(self.kiss_port)?;
         kiss::parse_digipeater_path(&self.digipeaters)?;

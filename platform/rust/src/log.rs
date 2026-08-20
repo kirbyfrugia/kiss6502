@@ -5,7 +5,6 @@
 //! A `Log` owns its items outright and holds no reference back to whatever
 //! produced them. Producers keep the `LogId` of anything they published and
 //! send a whole replacement item when it changes.
-
 use std::{
     collections::VecDeque,
     sync::atomic::{AtomicU64, Ordering},
@@ -59,11 +58,11 @@ pub struct FrameLogItem {
     pub ackable: bool,
     pub acked: bool,
     pub repeats: usize,
+    pub user_station: String,
 }
 
 impl FrameLogItem {
-    /// Whether this packet is traffic between two callsigns, in either
-    /// direction.
+    /// Whether this packet is traffic between two stations in either direction.
     pub fn between(&self, one: &str, other: &str) -> bool {
         let Some(addressee) = self.addressee.as_deref() else { return false };
 
@@ -75,15 +74,15 @@ impl FrameLogItem {
         from_one || from_other
     }
 
-    /// If this is a contact between a station and me, returns
+    /// If this is a contact between a station and user's station, returns
     /// the station
-    pub fn get_contact_station(&self, me: &str) -> Option<String> {
+    pub fn get_contact_station(&self, my_station: &str) -> Option<String> {
         let Some(ref addressee) = self.addressee else { return None };
-        if self.source.eq_ignore_ascii_case(me) {
+        if self.source.eq_ignore_ascii_case(my_station) {
             return Some(addressee.to_string());
         }
 
-        if addressee.eq_ignore_ascii_case(me) {
+        if addressee.eq_ignore_ascii_case(my_station) {
             return Some(self.source.to_string());
         }
         None
@@ -135,12 +134,20 @@ impl FrameLogItem {
         lines.push(String::new());
         lines
     }
+
 }
 
 /// General purpose text, e.g. help/usage, a frame dump, an error.
 #[derive(Debug, Clone)]
 pub struct Notice {
     pub lines: Vec<String>,
+    pub level: LogItemLevel,
+}
+
+#[derive(Debug, Clone)]
+pub enum LogItemLevel {
+    Normal,
+    High,
 }
 
 #[derive(Debug, Clone)]
@@ -154,8 +161,11 @@ impl LogItem {
         Self::Frame { id, item }
     }
 
-    pub fn notice(lines: Vec<String>) -> Self {
-        Self::Notice { id: next_log_id(), notice: Notice { lines } }
+    pub fn notice(lines: Vec<String>, level: LogItemLevel) -> Self {
+        Self::Notice {
+            id: next_log_id(),
+            notice: Notice { lines, level },
+        }
     }
 
     pub fn id(&self) -> LogId {
@@ -178,6 +188,35 @@ impl LogItem {
             Self::Notice { notice, .. } => notice.lines.clone(),
         }
     }
+
+    pub fn get_level(&self, item: &LogItem) -> LogItemLevel {
+        match item {
+            LogItem::Notice { .. } => LogItemLevel::Normal,
+            LogItem::Frame { item, .. } => self.get_frame_level(item),
+        }
+    }
+
+    fn get_frame_level(&self, item: &FrameLogItem) -> LogItemLevel {
+        if item.source.eq_ignore_ascii_case(&item.user_station) {
+            return LogItemLevel::High
+        }
+
+        if item.addressee.is_none() {
+            return LogItemLevel::Normal
+        }
+
+        match &item.addressee {
+            Some(addressee) => {
+                if addressee.eq_ignore_ascii_case(&item.user_station) {
+                    return LogItemLevel::High
+                } else {
+                    return LogItemLevel::Normal
+                }
+            },
+            _ => { return LogItemLevel::Normal }
+        }
+    }
+
 }
 
 /// The items on screen, oldest first.
@@ -240,6 +279,7 @@ mod tests {
             ackable: false,
             acked: false,
             repeats: 0,
+            user_station: String::from("NOCALL"),
         }
     }
 

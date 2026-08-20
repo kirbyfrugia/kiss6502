@@ -32,7 +32,7 @@ fn button_label(label: &str) -> String {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum FieldKey {
-    Callsign,
+    Station,
     KissHost,
     KissPort,
     Digipeaters,
@@ -41,7 +41,7 @@ enum FieldKey {
 fn validate_field(key: FieldKey, value: &str) -> Result<(), String> {
     let value = value.trim();
     match key {
-        FieldKey::Callsign => return config::validate_callsign(value),
+        FieldKey::Station => return config::validate_station(value),
         FieldKey::Digipeaters => return config::validate_digipeaters(value),
         FieldKey::KissHost => return config::validate_host(value),
         FieldKey::KissPort => match value.parse::<u16>() {
@@ -83,13 +83,13 @@ impl ConfigUi {
 
     pub fn new(message_sender: mpsc::Sender<Message>) -> Self {
         let input_len: usize = 40;
-        let callsign_input = LineInput::new(9, input_len, message_sender.clone());
+        let station_input = LineInput::new(9, input_len, message_sender.clone());
         let digipeaters_input = LineInput::new(80, input_len, message_sender.clone());
         let kiss_host_input = LineInput::new(config::MAX_HOST_LEN, input_len, message_sender.clone());
         let kiss_port_input = LineInput::new(5, input_len, message_sender.clone());
 
         let config_fields = vec![
-            ConfigField::new(FieldKey::Callsign, String::from("Callsign:"), callsign_input),
+            ConfigField::new(FieldKey::Station, String::from("Station:"), station_input),
             ConfigField::new(FieldKey::Digipeaters, String::from("Digipeaters:"), digipeaters_input),
             ConfigField::new(FieldKey::KissHost, String::from("KISS host:"), kiss_host_input),
             ConfigField::new(FieldKey::KissPort, String::from("KISS port:"), kiss_port_input),
@@ -113,7 +113,7 @@ impl ConfigUi {
     pub fn load_config(&mut self, config: &Config) {
         for field in &mut self.config_fields {
             let value = match field.key {
-                FieldKey::Callsign => config.callsign.clone(),
+                FieldKey::Station => config.station.clone(),
                 FieldKey::Digipeaters => config.digipeaters.join(", "),
                 FieldKey::KissHost => config.kiss_host.clone(),
                 FieldKey::KissPort => config.kiss_port.to_string(),
@@ -128,7 +128,7 @@ impl ConfigUi {
         for field in &self.config_fields {
             let value = field.input.data.trim();
             match field.key {
-                FieldKey::Callsign => config.callsign = value.to_uppercase(),
+                FieldKey::Station => config.station = value.to_uppercase(),
                 FieldKey::Digipeaters => {
                     config.digipeaters = config::parse_digipeaters(value);
                 },

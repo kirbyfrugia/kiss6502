@@ -6,6 +6,7 @@ use std::cell::Cell;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
+    style::{ Color, Style, },
     text::Line,
     widgets::{
         Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
@@ -13,7 +14,7 @@ use ratatui::{
 };
 
 use crate::{
-    log::{Log, LogItem},
+    log::{Log, LogItem, LogItemLevel},
     ui::DisplayMode,
 };
 
@@ -42,9 +43,9 @@ impl<'a> LogView<'a> {
         Self { log, output, display_mode }
     }
 
-    /// The items shown based on the current mode admits, oldest first.
+    /// The visible based on the current display mode, oldest first.
     fn visible(&self) -> impl Iterator<Item = &LogItem> {
-        self.log.iter().filter(|item| self.display_mode.shows(item))
+        self.log.iter().filter(|item| self.display_mode.shows(item) )
     }
 
     fn total_lines(&self) -> usize {
@@ -80,15 +81,26 @@ impl Widget for LogView<'_> {
                 continue;
             }
 
+            let color = match item.get_level(item) {
+                LogItemLevel::Normal => Color::White,
+                LogItemLevel::High => Color::Green,
+            };
+
             let skip = top.saturating_sub(consumed);
             for line in item.lines().into_iter().skip(skip) {
                 if y == max_lines {
                     break 'items;
                 }
+
+                let line = Line::styled(
+                    line.as_str(),
+                    Style::default().fg(color)
+                );
+
                 buf.set_line(
                     text_area.x,
                     text_area.y + y as u16,
-                    &Line::from(line.as_str()),
+                    &line,
                     text_area.width,
                 );
                 y += 1;

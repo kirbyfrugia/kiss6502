@@ -15,7 +15,7 @@ use crate::{
     config::Config,
     globals::TERMINAL_WIDTH,
     kiss::Ax25Addr,
-    log::{FrameLogItem, Log, LogItem},
+    log::{FrameLogItem, Log, LogItem, LogItemLevel},
     ui::{LineInput,LogView,MultiLineOutput},
     message::Message,
     slash::{SlashCommand, SLASH_COMMANDS},
@@ -49,12 +49,14 @@ impl DisplayMode {
         }
     }
 
-    fn shows_frame(&self, frame: &FrameLogItem) -> bool {
+    fn shows_frame(&self, item: &FrameLogItem) -> bool {
         match self {
-            Self::AprsAll => true,
-            Self::AprsMessages => { frame.data_type_id == ':' }
+            Self::AprsAll => { true }
+            Self::AprsMessages if item.data_type_id == ':' => { true },
+            _ => { false }
         }
     }
+
 }
 
 #[derive(Clone,Debug)]
@@ -119,7 +121,7 @@ pub struct MainUi {
     message_sender: mpsc::Sender<Message>,
     terminal_input: LineInput,
     terminal_output: MultiLineOutput,
-    mycall: String,
+    my_station: String,
     display_mode: DisplayMode,
     log: Log,
     contact_book: ContactBook,
@@ -156,7 +158,7 @@ impl MainUi {
             terminal_output: MultiLineOutput::new(),
             log: Log::new(),
             contact_book: ContactBook::new(),
-            mycall: String::new(),
+            my_station: String::new(),
             message_sender,
             typing_slash: false,
             matching_slashes: Vec::new(),
@@ -302,7 +304,7 @@ impl MainUi {
             terminal_output_block_inner_area,
         );
 
-        let mode_text = match self.display_mode {
+        let mode_text = match &self.display_mode {
             DisplayMode::AprsAll => { String::from("Displaying: all APRS packets") }
             DisplayMode::AprsMessages => { String::from("Displaying: only 'message' packets") }
         };
@@ -373,7 +375,7 @@ impl MainUi {
     }
 
     pub fn configure(&mut self, config: &Config) {
-        self.mycall = config.callsign.clone();
+        self.my_station = config.station.clone();
     }
 
     /// Switches modes and jumps to the newest traffic.
@@ -384,7 +386,7 @@ impl MainUi {
 
     fn update_contacts(&mut self, log_item: &LogItem) {
         if let LogItem::Frame {item,..} = log_item {
-            if let Some(station) = item.get_contact_station(&self.mycall) {
+            if let Some(station) = item.get_contact_station(&self.my_station) {
                 self.contact_book.add_or_update_contact(station);
             }
         }
@@ -581,7 +583,7 @@ impl MainUi {
                     self.log.push(LogItem::notice(vec![
                         format!("usage: {}", slash.usage()),
                         String::new(),
-                    ]));
+                    ], LogItemLevel::Normal));
                 }
             }
         } else {
@@ -594,7 +596,7 @@ impl MainUi {
             self.log.push(LogItem::notice(vec![
                 format!("Message too long, must be less than {} chars", MAX_APRS_MESSAGE_LEN),
                 String::new(),
-            ]));
+            ], LogItemLevel::Normal));
             return
         }
 
@@ -602,9 +604,9 @@ impl MainUi {
             Ok(addr) => addr,
             Err(_) => {
                 self.log.push(LogItem::notice(vec![
-                    format!("Invalid callsign: '{}'", addressee),
+                    format!("Invalid station: '{}'", addressee),
                     String::new(),
-                ]));
+                ], LogItemLevel::Normal));
                 return
             }
         };
@@ -658,7 +660,7 @@ impl MainUi {
             ));
         }
         lines.push(String::new());
-        self.log.push(LogItem::notice(lines));
+        self.log.push(LogItem::notice(lines, LogItemLevel::Normal));
     }
 
     fn send_message(&mut self, addressee: String, text: String) {
@@ -718,7 +720,7 @@ mod tests {
 
     #[test]
     fn every_mode_shows_notices() {
-        let notice = LogItem::notice(vec![String::from("usage: /qso CALLSIGN")]);
+        let notice = LogItem::notice(vec![String::from("usage: /blah BLAH")], LogItemLevel::Normal);
 
         assert!(DisplayMode::AprsAll.shows(&notice));
         assert!(DisplayMode::AprsMessages.shows(&notice));

@@ -17,7 +17,7 @@
 //!   recorded   - a new SessionFrame, displayed as output to user
 //!   attached   - attached to the SessionFrame we have, updates visual header
 //!   dropped    - an ack we cannot match to any message we know about
-//!   suppressed - a frame from our callsign that no digipeater repeated.
+//!   suppressed - a frame from our station that no digipeater repeated.
 //!                Either the TNC handed our own bytes back, or somebody
 //!                transmitted as us.
 //!
@@ -40,7 +40,7 @@ use crate::{
         AprsData, AprsMessage, Ax25Addr, Ax25Frame,
         KissClient,
     },
-    log::{format_digipeaters, next_log_id, utc_timestamp, FrameLogItem, LogId, LogItem},
+    log::{format_digipeaters, next_log_id, utc_timestamp, FrameLogItem, LogId, LogItem, LogItemLevel},
     message::Message,
 };
 
@@ -133,15 +133,17 @@ struct SessionFrame {
     log_id: LogId,
     instances: FrameGroup,
     acked_by: Vec<FrameGroup>,
+    user_station: String,
 }
 
 impl SessionFrame {
-    pub fn new(id: u64, frame: Ax25Frame) -> Self {
+    pub fn new(id: u64, frame: Ax25Frame, user_station: String) -> Self {
         Self {
             id,
             log_id: next_log_id(),
             instances: FrameGroup::new(frame),
             acked_by: Vec::new(),
+            user_station,
         }
     }
 
@@ -189,6 +191,7 @@ impl SessionFrame {
             ackable: self.is_ackable(),
             acked: self.is_acked(),
             repeats: self.instances.repeat_count(),
+            user_station: self.user_station.clone(),
         }
     }
 
@@ -233,7 +236,7 @@ impl SessionFrame {
 pub struct KissSession {
     message_sender: mpsc::Sender<Message>,
     client: Option<KissClient>,
-    mycall: Option<Ax25Addr>,
+    user_station: Option<Ax25Addr>,
     digipeaters: Vec<Ax25Addr>,
     outgoing_ids: HashMap<String, u64>,
     last_ack_sent: HashMap<(String, String), Instant>,
@@ -262,7 +265,7 @@ impl KissSession {
         Self {
             message_sender: message_sender,
             client: None,
-            mycall: None,
+            user_station: None,
             digipeaters: Vec::new(),
             outgoing_ids: HashMap::new(),
             last_ack_sent: HashMap::new(),
@@ -285,10 +288,10 @@ impl KissSession {
     }
 
     fn configure(&mut self, config: &Config) {
-        self.mycall = match Ax25Addr::parse(&config.callsign) {
+        self.user_station = match Ax25Addr::parse(&config.station) {
             Ok(addr) => Some(addr),
             Err(err) => {
-                tracing::warn!(%err, "ignoring invalid source callsign from config");
+                tracing::warn!(%err, "ignoring invalid source station from config");
                 None
             }
         };
@@ -329,7 +332,7 @@ impl KissSession {
     }
 
     fn send_aprs_message(&mut self, message: AprsMessage) -> Option<Ax25Frame> {
-        let Some(source) = self.mycall.clone() else { return None; };
+        let Some(source) = self.user_station.clone() else { return None; };
 
         let dest = Ax25Addr::new(Ax25Addr::AX25DEST.to_string(), 0);
         let data = AprsData::Message(message);
@@ -388,13 +391,13 @@ impl KissSession {
         self.record_first_frame(frame);
     }
 
-    fn is_mycall(&self, call: &str) -> bool {
-        self.mycall.as_ref().is_some_and(|c| c.to_string() == call)
+    fn is_user_station(&self, call: &str) -> bool {
+        self.user_station.as_ref().is_some_and(|c| c.to_string() == call)
     }
 
-    /// True if the frame source is our callsign but no digipeater repeated it.
+    /// True if the frame source is our station but no digipeater repeated it.
     fn is_local_echo(&self, frame: &Ax25Frame) -> bool {
-        if !self.is_mycall(&frame.source().to_string()) {
+        if !self.is_user_station(&frame.source().to_string()) {
             return false;
         }
 
@@ -404,7 +407,7 @@ impl KissSession {
 
         tracing::debug!(
             body = %frame.data().body(),
-            "suppressing frame from our callsign that no digipeater repeated",
+            "suppressing frame from our station that no digipeater repeated",
         );
         true
     }
@@ -498,7 +501,7 @@ impl KissSession {
     }
 
     fn send_lines(&self, lines: Vec<String>) {
-        let _ = self.message_sender.send(Message::LogPublish(LogItem::notice(lines)));
+        let _ = self.message_sender.send(Message::LogPublish(LogItem::notice(lines, LogItemLevel::Normal)));
     }
 
     /// Stores a frame we have not seen before and puts it on screen.
@@ -515,7 +518,8 @@ impl KissSession {
         let id = self.next_frame_id;
         self.next_frame_id = (self.next_frame_id + 1) % self.max_frames as u64;
 
-        let session_frame = SessionFrame::new(id, frame);
+        let user_station = self.user_station.as_ref().expect("wtf").to_string();
+        let session_frame = SessionFrame::new(id, frame, user_station);
         let _ = self.message_sender.send(Message::LogPublish(session_frame.to_log_item()));
 
         if self.frames.len() == self.max_frames {
@@ -529,7 +533,7 @@ impl KissSession {
     /// throttle is the only thing stopping us from acking each one.
     fn maybe_send_ack(&mut self, frame: &Ax25Frame) {
         let AprsData::Message(msg) = frame.data() else { return };
-        if !self.is_mycall(&msg.addressee) || msg.is_ack() { return }
+        if !self.is_user_station(&msg.addressee) || msg.is_ack() { return }
         let Some(msg_id) = msg.id.as_deref() else { return };
         let ack_addressee = frame.source();
 
@@ -556,7 +560,7 @@ mod tests {
         let (sender, receiver) = mpsc::channel();
         let mut session = KissSession::new(sender);
         session.configure(&Config {
-            callsign: MYCALL.to_string(),
+            station: MYCALL.to_string(),
             digipeaters: vec!["WIDE1-1".to_string()],
             ..Config::default()
         });
@@ -564,7 +568,7 @@ mod tests {
     }
 
     fn addr(call: &str) -> Ax25Addr {
-        Ax25Addr::parse(call).expect("test callsign should be valid")
+        Ax25Addr::parse(call).expect("test station should be valid")
     }
 
     fn message(source: &str, addressee: &str, text: &str, id: Option<&str>) -> Ax25Frame {
@@ -672,7 +676,7 @@ mod tests {
     #[test]
     fn to_frame_log_item_carries_the_fields_the_display_filters_on() {
         let frame = message_with_digis(MYCALL, "NOCALL-1", "hello", Some("5"), &["WIDE1-1"]);
-        let item = SessionFrame::new(3, frame).to_frame_log_item();
+        let item = SessionFrame::new(3, frame, String::from("NOCALL")).to_frame_log_item();
 
         assert_eq!(item.seq, 3);
         assert_eq!(item.source, MYCALL);
@@ -861,7 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn send_to_a_callsign_carries_a_message_id() {
+    fn send_to_a_station_carries_a_message_id() {
         let (mut session, _receiver) = session();
         send(&mut session, "NOCALL-1", "hello");
 
