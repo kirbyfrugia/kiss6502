@@ -31,9 +31,9 @@ to_kisstty       = [
 ]
 look_for         = [
   "three new items",
-  "the first is headed 'NOCAL2 >', no trailing dash after NOCAL2",
-  "the second is headed 'NOCALL-9 >'",
-  "the third is headed 'NOCALL-15 >'",
+  "the first starts with 'from: NOCAL2' with no trailing dash after NOCAL2",
+  "the second starts with 'from: NOCALL-9'",
+  "the third starts with 'from: NOCALL-15'",
 ]
 
 [[step]]
@@ -43,8 +43,8 @@ look_for         = "a new item: header 'from: NOCALL-7 to: NOCALL-2', body ': St
 
 [[step]]
 description      = "a third party message renders like a plain message"
-to_kisstty       = "IGATE-01>APDW17,WIDE1-1,WIDE2-1:}NOCALL-6>APKTY1::NOCALL-2 :Third party message"
-look_for         = "a new item: header 'from: NOCALL-6 to: NOCALL-2', body ': Third party message'"
+to_kisstty       = "DIGIB-2>APKTY1,WIDE1-1:}NOCALL-6>APKTY1,DIGIA-1,WIDE2-1*,qAR,DIGIA-1::NOCALL-2 :howdy"
+look_for         = "a new item: header 'from: NOCALL-6 to: NOCALL-2', body ': howdy'"
 
 [[step]]
 description      = "position reports show"
@@ -75,8 +75,8 @@ look_for         = "a new item, body line is just '> ' with nothing after it, ki
 description      = "switch back to messages mode and confirm the unhandled types disappear"
 do               = 'type "/messages" and press Enter'
 look_for         = [
-  "only the two ':' items ('Still a normal message' and the earlier ones from this file) remain visible",
-  "the position, weather, mic-e and status items from the last few steps are gone",
+  "only the ':' items remain visible",
+  "the position, weather, mic-e and status items from the last few steps are not displayed",
 ]
 
 [[step]]

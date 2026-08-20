@@ -19,17 +19,13 @@ mycall           = "NOCALL"
 
 [[step]]
 description      = "we send a message with an id"
-do               = 'type "/qso NOCALL-7" and press Enter, then type "hello there" and press Enter'
+do               = 'type "@NOCALL-7 hello there" and press Enter'
 from_kisstty     = "::NOCALL-7 :hello there{1"
 look_for         = [
-  "a new item: header reads NOCALL > NOCALL-7",
+  "a new item: header reads from: NOCALL to: NOCALL-7",
   "body line reads ': hello there'",
   "the right side of the header shows 'ack:_' and no 'rpt:' field",
 ]
-
-[[step]]
-description      = "leave qso mode: the rest of this file needs traffic from other stations to show too"
-do               = 'type "/net" and press Enter'
 
 [[step]]
 description      = "an ack for a message we sent attaches to it instead of adding a line"
@@ -41,7 +37,7 @@ description      = "a message addressed to us is acked automatically, but we don
 to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Test message{2"
 from_kisstty     = "::NOCALL-7 :ack2"
 look_for         = [
-  "a new item: header NOCALL-7 > NOCALL, body ': Test message'",
+  "a new item from: NOCALL-7 to: NOCALL, body ': Test message'",
   "ack:_ on this new item, still unacked, since kisstty never hears its own ack unless a digipeater hands it back",
 ]
 
@@ -49,19 +45,19 @@ look_for         = [
 description      = "a two digit ssid pads the addressee to its full nine chars on the wire"
 to_kisstty       = "NOCALL-15>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Two digit ssid{3"
 from_kisstty     = "::NOCALL-15:ack3"
-look_for         = "a new item: header NOCALL-15 > NOCALL, body ': Two digit ssid'"
+look_for         = "a new item from: NOCALL-15 to: NOCALL, body ': Two digit ssid'"
 
 [[step]]
 description      = "a message with no id is not ackable, so there's no ack: field at all"
 to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :No id to ack"
 not_from_kisstty = "::NOCALL-7 :ack"
-look_for         = "a new item: body ': No id to ack', nothing reading ack: anywhere on its header"
+look_for         = "a new item with body ': No id to ack', nothing reading ack: anywhere on its header"
 
 [[step]]
 description      = "a brace with nothing after it is not an id either"
 to_kisstty       = "NOCALL-7>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :Bare brace{"
 not_from_kisstty = "::NOCALL-7 :ack"
-look_for         = "a new item: body ': Bare brace{', still no ack: field"
+look_for         = "a new item with body ': Bare brace{', still no ack: field"
 
 [[step]]
 description      = "an ack addressed to another station is dropped, not shown to us"

@@ -72,11 +72,42 @@ impl FrameInstance {
         Self { at: SystemTime::now(), frame }
     }
 
-    /// Outputs the unique part of a FrameInstance (digis, timestamp)
-    pub fn describe(&self) -> String {
+    /// Outputs the unique parts of a FrameInstance, short version
+    pub fn describe_short(&self) -> String {
         let path = format_digipeaters(self.frame.digipeaters());
         let path = if path.is_empty() { String::from("direct") } else { path };
         format!("{} {}", utc_timestamp(self.at), path)
+    }
+
+    /// Outputs the unique parts of a FrameInstance, more detailed
+    pub fn describe(&self, instance_id: usize) -> Vec<String> {
+        let mut lines = Vec::new();
+
+        lines.push(format!(" > instance: {} heard at: {}", instance_id, utc_timestamp(self.at)));
+
+        if self.frame.digipeaters().len() > 0 {
+            let path = format_digipeaters(self.frame.digipeaters());
+            lines.push(format!(" > via {}", path));
+        }
+
+        let outer_frame = match self.frame.outer_frame() {
+            Some(outer_frame) => outer_frame,
+            _ => return lines,
+        };
+
+        lines.push(String::from(" > arrived as 3rd party:"));
+
+        let outer_source = outer_frame.source();
+        let outer_dest = outer_frame.dest();
+
+        lines.push(format!("  > source: {}, dest: {}", outer_source, outer_dest));
+
+        if outer_frame.digipeaters().len() > 0 {
+            let path = format_digipeaters(outer_frame.digipeaters());
+            lines.push(format!("  > via {}", path));
+        }
+        
+        lines
     }
 }
 
@@ -207,23 +238,28 @@ impl SessionFrame {
         let data = first_frame.data();
         let mut lines = vec![
             format!("dump of frame id {:04}:", self.id),
-            format!("  source: {}, dest: {}, data type: '{}'",
+            format!("{} {}", data.data_type_id(), data.body()),
+            format!("> source: {}, dest: {}, data type: '{}'",
                 first_frame.source(),
                 first_frame.dest(),
                 data.data_type_id(),
             ),
-            format!("  {} {}", data.data_type_id(), data.body()),
-            format!("  first {}", self.instances.first.describe()),
         ];
 
+        let mut counter = 1;
+
+        let first_lines = self.instances.first.describe(counter);
+        lines.extend(first_lines);
+
         for repeat in &self.instances.repeats {
-            lines.push(format!("  rpt   {}", repeat.describe()));
+            counter += 1;
+            lines.extend(repeat.describe(counter));
         }
 
         for ack in &self.acked_by {
-            lines.push(format!("  ack   {} {}", ack.source(), ack.first.describe()));
+            lines.push(format!("  > ack {} {}", ack.source(), ack.first.describe_short()));
             for repeat in &ack.repeats {
-                lines.push(format!("    rpt {}", repeat.describe()));
+                lines.push(format!("   >  rpt {}", repeat.describe_short()));
             }
         }
 

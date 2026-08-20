@@ -318,6 +318,10 @@ impl Ax25Frame {
         &self.source
     }
 
+    pub fn outer_frame(&self) -> Option<&Ax25Frame> {
+        self.outer_frame.as_deref()
+    }
+
     pub fn dest(&self) -> &Ax25Addr {
         &self.dest
     }
