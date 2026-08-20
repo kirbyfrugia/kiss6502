@@ -275,10 +275,6 @@ impl Ax25Frame {
                 return Ok(inner_frame)
             },
             _ => {
-                tracing::warn!(
-                    first_char=info[0],
-                    "first char"
-                );
                 return Ok(this_frame)
             }
         }
