@@ -2,6 +2,7 @@
 pub enum AprsData {
     Message(AprsMessage),
     Status(AprsStatus),
+    ThirdParty(AprsThirdParty),
     ToBeImplemented(AprsToBeImplemented),
 }
 
@@ -18,6 +19,11 @@ pub struct AprsStatus {
 }
 
 #[derive(Debug,Clone)]
+pub struct AprsThirdParty {
+    pub text: String,
+}
+
+#[derive(Debug,Clone)]
 pub struct AprsToBeImplemented {
     pub data_type_id: char,
     pub text: String,
@@ -28,6 +34,7 @@ impl AprsData {
         match self {
             AprsData::Message(_) => ':',
             AprsData::Status(_) => '>',
+            AprsData::ThirdParty(_) => '}',
             AprsData::ToBeImplemented(unimplemented) => unimplemented.data_type_id,
         }
     }
@@ -36,6 +43,7 @@ impl AprsData {
         match self {
             AprsData::Message(msg) => &msg.text,
             AprsData::Status(status) => &status.text,
+            AprsData::ThirdParty(third_party) => &third_party.text,
             AprsData::ToBeImplemented(unimplemented) => &unimplemented.text,
         }
     }
@@ -45,6 +53,7 @@ impl AprsData {
         match self {
             AprsData::Message(msg) => bytes.extend(msg.encode()),
             AprsData::Status(status) => bytes.extend(status.encode()),
+            AprsData::ThirdParty(third_party) => bytes.extend(third_party.encode()),
             AprsData::ToBeImplemented(unimplemented) => bytes.extend(unimplemented.encode()),
         }
         bytes
@@ -59,6 +68,7 @@ impl AprsData {
         match data_type_id {
             b':' => Some(AprsData::Message(AprsMessage::decode(rest))),
             b'>' => Some(AprsData::Status(AprsStatus::decode(rest))),
+            b'}' => Some(AprsData::ThirdParty(AprsThirdParty::decode(rest))),
             other => Some(AprsData::ToBeImplemented(AprsToBeImplemented::decode(other, rest))),
         }
     }
@@ -124,6 +134,18 @@ impl std::fmt::Display for AprsMessage {
 }
 
 impl AprsStatus {
+    fn encode(&self) -> Vec<u8> {
+        self.text.as_bytes().to_vec()
+    }
+
+    fn decode(info: &[u8]) -> Self {
+        Self {
+            text: String::from_utf8_lossy(info).into_owned(),
+        }
+    }
+}
+
+impl AprsThirdParty {
     fn encode(&self) -> Vec<u8> {
         self.text.as_bytes().to_vec()
     }

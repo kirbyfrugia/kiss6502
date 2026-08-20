@@ -130,16 +130,25 @@ impl std::fmt::Display for Ax25Addr {
     }
 }
 
+/// The Ax25Frame as received or to be sent. Third-party Aprs messages
+/// are special. For example, if an internet gateway repeats
+/// a packet it picks up over RF, it will create a third-party
+/// packet (type '}') with the original packet being stored in
+/// the info field (source, dest, digis, and all).
+///
+/// Since kisstty mostly operates on `message` types, the Ax25Frame 
+/// is inverted and we share around the inner packet as if it
+/// was sent over RF. In that case, the outer_frame field will
+/// be set to the third-party frame.
 #[derive(Debug,Clone)]
 pub struct Ax25Frame {
     dest: Ax25Addr,
     source: Ax25Addr,
     digipeaters: Vec<Ax25Addr>,
-    #[allow(dead_code)]
     control: u8,
-    #[allow(dead_code)]
     pid: u8,
     data: AprsData,
+    outer_frame: Option<Box<Ax25Frame>>,
 }
 
 impl Ax25Frame {
@@ -151,6 +160,7 @@ impl Ax25Frame {
             data,
             control: 0x03,
             pid: 0xf0,
+            outer_frame: None,
         }
     }
 
@@ -218,7 +228,21 @@ impl Ax25Frame {
         let info = bytes.get(info_field_start..).unwrap_or(&[]);
         let data = AprsData::decode(info)?;
 
-        Some(Ax25Frame { dest, source, digipeaters, control, pid, data })
+        let mut this_frame = Ax25Frame::new(dest, source, digipeaters, data);
+        this_frame.set_control(control);
+        this_frame.set_pid(pid);
+
+        match info[0] {
+            b'}' => {
+                let inner_bytes = info;
+                let mut inner_frame = Ax25Frame::decode(inner_bytes)?;
+                inner_frame.outer_frame = Some(Box::new(this_frame));
+                return Some(inner_frame)
+            },
+            _ => {
+                return Some(this_frame)
+            }
+        }
     }
 
     pub fn digipeaters(&self) -> &[Ax25Addr] {
@@ -235,6 +259,14 @@ impl Ax25Frame {
 
     pub fn data(&self) -> &AprsData {
         &self.data
+    }
+
+    pub fn set_control(&mut self, control: u8) {
+        self.control = control
+    }
+
+    pub fn set_pid(&mut self, pid: u8) {
+        self.pid = pid
     }
 }
 
