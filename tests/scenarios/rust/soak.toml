@@ -19,4 +19,4 @@ do               = "get kisstty on screen, then press Enter to start a message e
 description      = "random traffic until you interrupt it"
 random           = true
 repeat           = 0
-every            = 5
+every            = 3
