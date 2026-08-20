@@ -41,11 +41,22 @@ pub fn validate_host(host: &str) -> Result<(), ConfigError> {
         return Err(ConfigError::EmptyHost)
     }
 
-
     if host.len() > MAX_HOST_LEN {
         return Err(ConfigError::HostTooLong)
     }
 
+    // valid ip address
+    if host.parse::<IpAddr>().is_ok() {
+        return Ok(());
+    }
+
+    // if it looks like an ip address but wasn't valid (from previous call), fail out.
+    let segments: Vec<&str> = host.split('.').collect();
+    if segments.len() == 4 && segments.iter().all(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())) {
+        return Err(ConfigError::InvalidHost);
+    }
+
+    // now assume it's a hostname, not an ip address, to test hostname rules.
     for segment in host.split('.') {
         if segment.is_empty() {
             return Err(ConfigError::HostContainsEmptySegment)
@@ -59,10 +70,6 @@ pub fn validate_host(host: &str) -> Result<(), ConfigError> {
         if !segment.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
             return Err(ConfigError::InvalidHost)
         }
-    }
-
-    if !host.parse::<IpAddr>().is_ok() {
-        return Err(ConfigError::InvalidHost)
     }
 
     Ok(())
