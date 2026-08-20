@@ -30,15 +30,15 @@ const INPUT_HEIGHT: u16           = 3;
 
 #[derive(Debug)]
 pub enum CommandType {
-    Unknown,
-    Slash,
-    AprsMessage,
+    CtUnknown,
+    CtSlash,
+    CtAprsMessage,
 }
 
 #[derive(Debug)]
 pub enum DisplayMode {
-    AprsAll,
-    AprsMessages,
+    DmAprsAll,
+    DmAprsMessageOnly,
 }
 
 impl DisplayMode {
@@ -51,8 +51,8 @@ impl DisplayMode {
 
     fn shows_frame(&self, item: &FrameLogItem) -> bool {
         match self {
-            Self::AprsAll => { true }
-            Self::AprsMessages if item.data_type_id == ':' => { true },
+            Self::DmAprsAll => { true }
+            Self::DmAprsMessageOnly if item.data_type_id == ':' => { true },
             _ => { false }
         }
     }
@@ -153,7 +153,7 @@ impl MainUi {
         );
 
         Self {
-            display_mode: DisplayMode::AprsAll,
+            display_mode: DisplayMode::DmAprsAll,
             terminal_input,
             terminal_output: MultiLineOutput::new(),
             log: Log::new(),
@@ -170,7 +170,7 @@ impl MainUi {
             selected_contact: 0,
             contact_command_popup_state: ListState::default()
                 .with_selected(Some(0)),
-            current_command_type: CommandType::Unknown,
+            current_command_type: CommandType::CtUnknown,
             current_input_len: 0,
             max_input_len: MAX_INPUT_DATA_LEN,
         }
@@ -305,8 +305,8 @@ impl MainUi {
         );
 
         let mode_text = match &self.display_mode {
-            DisplayMode::AprsAll => { String::from("Displaying: all APRS packets") }
-            DisplayMode::AprsMessages => { String::from("Displaying: only 'message' packets") }
+            DisplayMode::DmAprsAll => { String::from("Displaying: all APRS packets") }
+            DisplayMode::DmAprsMessageOnly => { String::from("Displaying: only 'message' packets") }
         };
 
         let terminal_input_block = Block::bordered()
@@ -340,7 +340,7 @@ impl MainUi {
         frame.render_widget(&self.terminal_input, terminal_input_layout[1]);
 
         match self.current_command_type {
-            CommandType::AprsMessage if !self.typing_contact => {
+            CommandType::CtAprsMessage if !self.typing_contact => {
                 let char_counter = Paragraph::new(format!(
                     "│ {}/{}",
                     self.current_input_len,
@@ -420,11 +420,11 @@ impl MainUi {
                 None
             },
             Message::DisplayAprsAll => {
-                self.set_display_mode(DisplayMode::AprsAll);
+                self.set_display_mode(DisplayMode::DmAprsAll);
                 None
             }
             Message::DisplayAprsMessages => {
-                self.set_display_mode(DisplayMode::AprsMessages);
+                self.set_display_mode(DisplayMode::DmAprsMessageOnly);
                 None
             }
             Message::Forget(station) => {
@@ -475,7 +475,7 @@ impl MainUi {
         let input = self.terminal_input.data.clone();
 
         if input.len() == 0 {
-            self.current_command_type = CommandType::Unknown;
+            self.current_command_type = CommandType::CtUnknown;
             self.max_input_len = MAX_INPUT_DATA_LEN;
             self.current_input_len = 0;
             return
@@ -486,15 +486,15 @@ impl MainUi {
         let rest = parts.next().unwrap_or("").trim_start();
 
         if arg0.starts_with("/") {
-            self.current_command_type = CommandType::Slash;
+            self.current_command_type = CommandType::CtSlash;
             self.max_input_len = MAX_INPUT_DATA_LEN;
             self.current_input_len = input.len();
         } else if arg0.starts_with("@") {
-            self.current_command_type = CommandType::AprsMessage;
+            self.current_command_type = CommandType::CtAprsMessage;
             self.max_input_len = MAX_APRS_MESSAGE_LEN;
             self.current_input_len = rest.len();
         } else {
-            self.current_command_type = CommandType::Unknown;
+            self.current_command_type = CommandType::CtUnknown;
             self.max_input_len = MAX_INPUT_DATA_LEN;
             self.current_input_len = 0;
         }
@@ -628,11 +628,11 @@ impl MainUi {
         if arg0.is_empty() { return }
 
         match self.current_command_type {
-            CommandType::Slash => {
+            CommandType::CtSlash => {
                 let args: Vec<&str> = rest.split_whitespace().collect();
                 self.handle_slash_command(arg0, args);
             },
-            CommandType::AprsMessage => {
+            CommandType::CtAprsMessage => {
                 if rest.is_empty() { return }
                 let addressee = &arg0[1..];
                 self.handle_send_message_command(addressee, rest);
@@ -704,7 +704,7 @@ mod tests {
 
     #[test]
     fn all_display_mode_shows_every_data_type() {
-        let mode = DisplayMode::AprsAll;
+        let mode = DisplayMode::DmAprsAll;
 
         assert!(mode.shows(&message("NOCALL-1", "NOCALL-2")));
         assert!(mode.shows(&status("NOCALL-1")));
@@ -712,7 +712,7 @@ mod tests {
 
     #[test]
     fn message_display_mode_shows_only_aprs_messages() {
-        let mode = DisplayMode::AprsMessages;
+        let mode = DisplayMode::DmAprsMessageOnly;
 
         assert!(mode.shows(&message("NOCALL-1", "NOCALL-2")));
         assert!(!mode.shows(&status("NOCALL-1")));
@@ -722,7 +722,7 @@ mod tests {
     fn every_mode_shows_notices() {
         let notice = LogItem::notice(vec![String::from("usage: /blah BLAH")], LogItemLevel::Normal);
 
-        assert!(DisplayMode::AprsAll.shows(&notice));
-        assert!(DisplayMode::AprsMessages.shows(&notice));
+        assert!(DisplayMode::DmAprsAll.shows(&notice));
+        assert!(DisplayMode::DmAprsMessageOnly.shows(&notice));
     }
 }
