@@ -660,6 +660,17 @@ impl MainUi {
             ));
         }
         lines.push(String::new());
+        lines.push(String::from("Sending messages:"));
+        lines.push(String::from("  `@<station> <message>`"));
+        lines.push(String::from("For example:"));
+        lines.push(String::from("  @Q1ABC Howdy!!!"));
+        lines.push(String::new());
+        lines.push(String::from("Press tab to auto-complete commands. For example:"));
+        lines.push(String::from("  /h -> tab -> /help"));
+        lines.push(String::new());
+        lines.push(String::from("It also works for messaging stations you've already messaged. For example:"));
+        lines.push(String::from("  @Q1 -> tab -> @Q1ABC"));
+        lines.push(String::new());
         self.log.push(LogItem::notice(lines, LogItemLevel::Normal));
     }
 
