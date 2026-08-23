@@ -136,6 +136,7 @@ pub struct MainUi {
     current_command_type: CommandType,
     current_input_len: usize,
     max_input_len: usize,
+    connected_to_tnc: bool,
 }
 
 impl MainUi {
@@ -173,6 +174,7 @@ impl MainUi {
             current_command_type: CommandType::CtUnknown,
             current_input_len: 0,
             max_input_len: MAX_INPUT_DATA_LEN,
+            connected_to_tnc: false,
         }
     }
 
@@ -305,6 +307,7 @@ impl MainUi {
         );
 
         let mode_text = match &self.display_mode {
+            _ if !self.connected_to_tnc => String::from("Awaiting TNC connection"),
             DisplayMode::DmAprsAll => { String::from("Displaying: all APRS packets") }
             DisplayMode::DmAprsMessageOnly => { String::from("Displaying: only 'message' packets") }
         };
@@ -434,6 +437,10 @@ impl MainUi {
             Message::Clear => {
                 self.log.clear();
                 self.terminal_output.scroll_to_bottom();
+                None
+            }
+            Message::ConnectedToTnc(connected) => {
+                self.connected_to_tnc = connected;
                 None
             }
             other => self.terminal_input.try_claim(other),
