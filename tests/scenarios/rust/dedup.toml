@@ -1,5 +1,4 @@
 name             = "dedup"
-platform         = "rust"
 mycall           = "NOCALL"
 
 # Repeats and dedup are one mechanism here (kiss/session.rs try_attach_repeat),

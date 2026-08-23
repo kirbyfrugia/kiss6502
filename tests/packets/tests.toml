@@ -1,0 +1,9 @@
+# Root of the injector's packet tree. Categories only -- no tests live here,
+# so every test has a category in its address.
+#
+# Adding a test:     drop a [[test]] entry into the right tests.toml.
+# Adding a category: make a directory with its own tests.toml.
+#
+# Naming follows what the category is for. See each one's own note.
+title = "kisstty test packets"
+description = "Packets to fire at a running kisstty, grouped by what they exercise"

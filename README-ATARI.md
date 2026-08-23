@@ -147,7 +147,7 @@ You can run kisstty on a real Atari or in the Altirra emulator.
 # One-time setup:
 # 1. Install Bottles, create a bottle named "altirra" (or set ALTIRRA_BOTTLE)
 # 2. Install Altirra into the bottle
-# 3. Allow the sandbox to read your home dir:
+# 3. Allow the sandbox to read your home dir (do this at your own risk since this isn't recommended!):
 flatpak override --user com.usebottles.bottles --filesystem=home
 
 # 4. Get the 850 firmware and save it two directories up from Altirra64.exe:
@@ -277,8 +277,9 @@ packets over that serial KISS link. They flow PTY -> socat -> TCP 9000 -> Altirr
 # Run kisstty in Altirra and start APRS mode, then bridge the socat PTY as in
 # use case 2, but skip the direwolf.conf/launch steps, the runner handles those.
 
-# Run a scenario:
-cargo run -p scenario-runner -- tests/scenarios/atari/rendering.toml
+# Run a scenario (scenario-runner lives in its own workspace under tests/):
+cd tests
+cargo run --bin scenario-runner -- scenarios/atari/rendering.toml
 ```
 
 The runner starts and stops direwolf itself, so don't have one already running. It

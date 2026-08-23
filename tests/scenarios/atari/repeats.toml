@@ -1,6 +1,4 @@
 name             = "repeats"
-platform         = "atari"
-serial           = "/tmp/altirra-tty"
 mycall           = "NOCALL"
 
 # The status bar ack and repeat fields.

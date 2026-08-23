@@ -1,5 +1,4 @@
 name             = "ui"
-platform         = "rust"
 
 # No step here sends or checks a packet, so this drives kisstty directly and
 # never touches direwolf. There's no automatic callsign prompt for that

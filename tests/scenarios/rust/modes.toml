@@ -1,5 +1,4 @@
 name             = "modes"
-platform         = "rust"
 mycall           = "NOCALL"
 
 # net, monitor and qso, and how each one filters the log. See

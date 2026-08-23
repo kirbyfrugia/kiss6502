@@ -1,6 +1,4 @@
 name             = "dedup"
-platform         = "atari"
-serial           = "/tmp/altirra-tty"
 mycall           = "NOCALL"
 
 # These have to land inside one 30s window, so they go out as a list with no

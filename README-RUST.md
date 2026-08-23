@@ -11,7 +11,7 @@ Rust and a KISS TNC reachable over TCP. See "Connecting to a TNC" below.
 ## Running
 
 ```
-cargo run --bin kisstty
+cargo run
 ```
 
 First run writes a default config into your OS's standard config directory (e.g. `~/.config/kisstty/config.toml` on Linux) and drops you straight into the config screen. You'll need to set a callsign to continue.

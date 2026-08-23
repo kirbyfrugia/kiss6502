@@ -1,0 +1,8 @@
+# Rendering tests: exercise how a packet is DISPLAYED, not how it parses.
+# Named by expected outcome (what should end up on screen), because that is
+# what you check when you look at it.
+#
+# Subdirectories are display widths, since where a line wraps is the thing
+# most of these pin down and that arithmetic is per display.
+title = "Rendering"
+description = "Display behaviour: wrapping, boundaries and layout, by display width"

@@ -111,8 +111,12 @@ impl KissClient {
 
         while running.load(Ordering::Relaxed) {
             let read_stream = match Self::connect(&host, port, connect_timeout) {
-                Some(stream) => stream,
+                Some(stream) => {
+                    let _ = message_sender.send(Message::ConnectedToTnc(true));
+                    stream
+                }
                 None => {
+                    let _ = message_sender.send(Message::ConnectedToTnc(false));
                     thread::sleep(connect_timeout);
                     continue
                 },

@@ -1,5 +1,4 @@
 name             = "config"
-platform         = "rust"
 
 # The Config screen itself. No step here sends or checks a packet, so this
 # never touches direwolf and there's no callsign prompt for that reason.

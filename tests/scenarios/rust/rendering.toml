@@ -1,5 +1,4 @@
 name             = "rendering"
-platform         = "rust"
 mycall           = "NOCALL"
 
 # Position, weather, mic-e and status frames are actually parsed and shown

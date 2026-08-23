@@ -11,41 +11,50 @@ packets, and walks you through checking what the app under test does with them.
 
 ## Running one
 
+`scenario-runner` and `packet-injector` are their own Cargo workspace under `tests/`,
+separate from kisstty's own, so run them from there:
+
 ```
-cargo run -p scenario-runner -- tests/scenarios/atari/acks.toml
+cd tests
+cargo run --bin scenario-runner                              # interactive picker
+cargo run --bin scenario-runner -- scenarios/atari/acks.toml
+cargo run --bin scenario-runner -- --check scenarios/*/*.toml
 ```
 
-Start Altirra, kisstty, and socat first, and let the scenario's opening prompt tell
-you which callsign to configure. The runner starts direwolf itself and stops it on the
-way out, so do not have one already running. It refuses to start if port 8001 is taken.
+Start Altirra, kisstty, and socat first, and let the scenario's opening prompt tell you
+which callsign to configure. The runner starts direwolf itself and stops it on the way
+out, so don't have one already running.
 
-Direwolf only starts if the scenario actually needs it, meaning some step uses
-`to_kisstty`, `random`, `from_kisstty` or `not_from_kisstty`. A scenario built only from
-`do` and `look_for` steps drives the app some other way, so the runner leaves direwolf and
-the serial device alone and skips the callsign prompt. `line-endings.toml` is one of those:
-it runs kisstty in terminal mode and writes raw bytes to the atari's serial device itself.
-`mycall` is therefore only required when a scenario uses direwolf, and `cargo test` enforces
-that.
+Each tool remembers its own settings (serial device, TCP port) under
+`~/.config/kisstty-tests/`. Set them by passing a value on the command line, or from the
+`.) settings` entry in the interactive menu.
 
-An optional second argument overrides the scenario's serial device. Pass `''` for TCP
-KISS only.
+In the interactive menu, picking an item is a single keypress -- no Enter needed. Items
+are numbered `1`-`9`, then `A`-`Z` (35 per directory, case-insensitive). Esc goes back
+a level; ctrl-c quits outright, from anywhere.
+
+`--check` validates scenarios without touching any hardware.
+
+Direwolf only starts if the scenario needs it -- some step uses `to_kisstty`, `random`,
+`from_kisstty` or `not_from_kisstty`. A scenario built only from `do` and `look_for`
+steps drives the app some other way (`line-endings.toml` does this over the serial
+device directly), so it needs no callsign and no `mycall`.
 
 ## Scenarios are per platform
 
-`tests/scenarios/<platform>/` and the `platform` field inside each file have to agree,
-and `cargo test -p scenario-runner` enforces it.
+The platform comes from the directory a scenario lives in --
+`tests/scenarios/<platform>/<name>.toml` -- not a field inside the file, so it can't
+drift out of sync with where the file actually is.
 
-This matters because the `look_for` lines describe one platform's screen. The atari scenarios
-assume the 40 column display, its `SOURCE>ADDRESSEE:text#id` line format, and its `/tx`
-command, so they mean nothing against the rust build. The runner itself is platform
-neutral: it only knows about direwolf, packets, and prompting you.
+This matters because the `look_for` lines describe one platform's screen. The atari
+scenarios assume the 40 column display, its `SOURCE>ADDRESSEE:text#id` line format, and
+its `/tx` command, so they mean nothing against the rust build. The runner itself is
+platform neutral: it only knows about direwolf, packets, and prompting you.
 
 ## Writing one
 
 ```toml
 name = "acks"
-platform = "atari"
-serial = "/tmp/altirra-tty"   # omit for tcp kiss only
 mycall = "NOCALL"
 
 [[step]]
@@ -84,8 +93,8 @@ Keys within a step read in the order the runner runs them: `description`, `do`,
 
 `to_serial` and `from_serial` skip direwolf and the radio entirely and talk to the app over
 its serial device, which is what a terminal mode scenario needs. A scenario cannot use these
-and direwolf at the same time, because direwolf would already have the device open, and
-`cargo test` rejects one that tries.
+and direwolf at the same time, because direwolf would already have the device open, and both
+the runner and `cargo test` (from inside `tests/`) reject one that tries.
 
 Both take backslash escapes: `\r`, `\n`, `\t`, `\0`, `\\` and `\xNN` for any byte.
 
@@ -101,8 +110,9 @@ to_serial   = 'ATASCII ONE\x9bATASCII TWO\x9b'
 from_serial = 'AB\r\n'
 ```
 
-The device comes from the scenario's `serial` field, overridden by the runner's second
-argument, so a real atari on a real port is a command line change and not an edit.
+The device is whatever the runner's serial-port setting says, so switching from the
+emulator to a real Atari on a real port is a settings change, not an edit to the
+scenario.
 
 Word a `do` step for the moment it is read, not for what happens next. The runner is
 blocked waiting for you, so "watch for X" before the traffic starts leaves you waiting
@@ -114,7 +124,7 @@ second window, and a prompt between each would let the window expire while you t
 the whole group in one `to_kisstty` list and check the result once at the end.
 
 `repeat` and `every` apply to `to_kisstty` and `random` alike, which is how `soak.toml` runs
-indefinitely until you ctrl-c out of it.
+indefinitely until you press q to stop it, or ctrl-c to quit outright.
 
 Only `from_kisstty` and `not_from_kisstty` can fail on their own, because the runner
 cannot see the atari screen. For `look_for` you are the check: `y` passes, `n` records a failure and carries on, `q` stops the run.
@@ -159,6 +169,43 @@ wraps has to do its arithmetic against 38.
 The rendered line is `SOURCE>ADDRESSEE:text`, where the addressee is trimmed at its
 first space and the `:` comes from the info field. So `NOCALL-7>NOCALL:` is a 16
 character prefix and an exact two line fill needs a body of `2 * 38 - 16`.
+
+## Packet injector
+
+`packet-injector` fires one simulated packet at a running kisstty so you can eyeball how it
+renders, then exits. It shares its direwolf/audio plumbing with `scenario-runner` (the
+`kisstty-harness` crate) but is otherwise independent -- there's no scenario file, no
+pass/fail, just "does this look right on screen".
+
+```
+cd tests
+cargo run --bin packet-injector                              # interactive menu
+cargo run --bin packet-injector -- -t protocol/status/timestamped
+cargo run --bin packet-injector -- -T rendering -n 5          # 5 random rendering tests
+cargo run --bin packet-injector -- -l                         # list every test
+```
+
+Tests live in a `tests.toml` in each directory under `tests/packets/`. Subdirectories are
+subcategories, each with their own `tests.toml`:
+
+```toml
+title = "40-column rendering"
+description = "Messages sized around the 40-char wrap boundary"
+
+[[test]]
+name = "wraps-to-two-lines"
+label = "Wraps to two lines"
+description = "Message long enough to wrap, ending partway through line 2"
+packet = "NOCALL>APZ001::NOCALL   :This message should end mid line 2!"
+```
+
+Tests list in the order they're written here, not alphabetically. A test is addressed as
+`<dir>/<name>`, or by its bare name if that's unambiguous across the whole tree (`-t position`
+resolves to `protocol/position`). Adding a test is a new `[[test]]` entry; adding a category
+is a new directory plus its own `tests.toml`.
+Categories are named by what they're for: `protocol/` by the input (what the packet *is*),
+`rendering/` by the outcome (what should render), since that's what you check when you look
+at the screen.
 
 ## Requirements
 

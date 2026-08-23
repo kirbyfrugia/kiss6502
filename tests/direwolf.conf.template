@@ -4,10 +4,11 @@
 # Template for scenario-runner, which generates the direwolf.conf it runs.
 # See tests/README.md.
 #
-# Two lines below are substitution anchors and have to stay verbatim:
+# These are substitution anchors and have to stay verbatim:
 #
-#   %%SERIALKISS%%  becomes "SERIALKISS <device>" from the scenario's serial
-#                   field, or is dropped for TCP KISS only.
+#   %%KISSPORT%%    becomes the KISS TCP port in use.
+#   %%SERIALKISS%%  becomes "SERIALKISS <device>", or is dropped for TCP
+#                   KISS only.
 #   MYCALL NOCALL   becomes the scenario's mycall. Putting a real callsign
 #                   here instead breaks the substitution silently.
 #############################################################
@@ -22,9 +23,9 @@ MYCALL NOCALL
 MODEM 1200
 
 # KISS TCP - kisstty connects here
-KISSPORT 8001
+KISSPORT %%KISSPORT%%
 
-# KISS over a serial device - filled in from the scenario's serial field
+# KISS over a serial device
 %%SERIALKISS%%
 
 # AGW port - for tools like YAAC if needed
