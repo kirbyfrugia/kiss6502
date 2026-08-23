@@ -1,6 +1,4 @@
 name             = "line-endings"
-platform         = "atari"
-serial           = "/tmp/altirra-tty"
 
 # Every step drives the serial device directly, so the runner does not start
 # direwolf and there is no callsign to set. socat has to be running, and the

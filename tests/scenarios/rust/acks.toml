@@ -1,5 +1,4 @@
 name             = "acks"
-platform         = "rust"
 mycall           = "NOCALL"
 
 # The rust build has no status bar. Ack and repeat state show inline on the

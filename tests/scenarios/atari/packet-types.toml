@@ -1,6 +1,4 @@
 name             = "unhandled packet types"
-platform         = "atari"
-serial           = "/tmp/altirra-tty"
 mycall           = "NOCALL"
 
 # pk_process_frame only dispatches on ':', and status parsing is commented out,

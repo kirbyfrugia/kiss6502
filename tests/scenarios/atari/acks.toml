@@ -1,6 +1,4 @@
 name             = "acks"
-platform         = "atari"
-serial           = "/tmp/altirra-tty"
 mycall           = "NOCALL"
 
 [[step]]

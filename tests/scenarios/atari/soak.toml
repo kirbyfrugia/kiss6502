@@ -1,6 +1,4 @@
 name             = "soak"
-platform         = "atari"
-serial           = "/tmp/altirra-tty"
 mycall           = "NOCALL"
 
 # Runs until you interrupt it, so there is nothing after the traffic step.
@@ -9,7 +7,7 @@ mycall           = "NOCALL"
 
 [[step]]
 description      = "get set up before the traffic starts"
-do               = "get kisstty on screen. pressing Enter starts a message every 5s from a random station, running until you ctrl-c. watch for torn lines, bad wrapping, scrolling trouble or a lockup"
+do               = "get kisstty on screen. pressing Enter starts a message every 5s from a random station. press q to stop it, or ctrl-c to quit outright. watch for torn lines, bad wrapping, scrolling trouble or a lockup"
 
 [[step]]
 description      = "random traffic until you interrupt it"

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["platform/rust", "tests/scenario-runner"]
+members = ["platform/rust"]
 
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
 [profile.release]
