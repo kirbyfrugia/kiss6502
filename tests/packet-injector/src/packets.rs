@@ -26,8 +26,7 @@ struct TestData {
 /// One test: where it lives, its key, and its fields.
 #[derive(Clone)]
 pub struct Test {
-    pub directory: PathBuf,
-    pub name: String,
+    directory: PathBuf,
     data: TestData,
     root: PathBuf,
 }
@@ -38,7 +37,7 @@ impl Test {
     }
 
     pub fn label(&self) -> &str {
-        self.data.label.as_deref().unwrap_or(&self.name)
+        self.data.label.as_deref().unwrap_or(&self.data.name)
     }
 
     pub fn description(&self) -> &str {
@@ -52,9 +51,9 @@ impl Test {
             .strip_prefix(&self.root)
             .unwrap_or(&self.directory);
         if rel.as_os_str().is_empty() {
-            self.name.clone()
+            self.data.name.clone()
         } else {
-            format!("{}/{}", rel.display(), self.name)
+            format!("{}/{}", rel.display(), self.data.name)
         }
     }
 }
@@ -89,7 +88,6 @@ pub fn tests_in(directory: &Path, root: &Path) -> Vec<Test> {
         .into_iter()
         .map(|data| Test {
             directory: directory.to_path_buf(),
-            name: data.name.clone(),
             data,
             root: root.to_path_buf(),
         })
@@ -141,7 +139,7 @@ pub fn find_test(root: &Path, address: &str) -> FindResult {
         }
         return match tests_in(&directory, root)
             .into_iter()
-            .find(|t| t.name == name)
+            .find(|t| t.data.name == name)
         {
             Some(t) => FindResult::Found(t),
             None => FindResult::NotFound,
@@ -150,7 +148,7 @@ pub fn find_test(root: &Path, address: &str) -> FindResult {
 
     let matches: Vec<Test> = all_tests(root, root)
         .into_iter()
-        .filter(|t| t.name == address)
+        .filter(|t| t.data.name == address)
         .collect();
     match matches.len() {
         0 => FindResult::NotFound,
@@ -242,7 +240,7 @@ mod tests {
              [[test]]\nname = \"mango\"\npacket = \"A>B:m\"\n",
         );
         let found = tests_in(d.path(), d.path());
-        let names: Vec<&str> = found.iter().map(|t| t.name.as_str()).collect();
+        let names: Vec<&str> = found.iter().map(|t| t.data.name.as_str()).collect();
         assert_eq!(names, ["zebra", "apple", "mango"]);
     }
 }

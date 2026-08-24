@@ -242,10 +242,11 @@ fn main() -> ExitCode {
 
     // The interactive picker: run a scenario, land back in the same
     // directory to pick another. Ctrl-c is the only way out from here.
-    let mut current = scenarios_root();
+    let root = scenarios_root();
+    let mut current = root.clone();
     loop {
         match picker::pick_scenario(
-            &scenarios_root(),
+            &root,
             &mut current,
             &mut kisstty_harness::read_menu_key,
             &mut kisstty_harness::read_menu_line,

@@ -4,7 +4,7 @@
 //! the only way out.
 
 use crate::settings::Settings;
-use kisstty_harness::{is_back, item_index, item_label};
+use kisstty_harness::{MENU_RULE, is_back, item_index, item_label};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -48,8 +48,12 @@ pub fn pick_scenario(
             format!("scenarios/{}", rel.display())
         };
         println!();
+        println!("{MENU_RULE}");
         println!("{header}/");
 
+        if *current != root {
+            println!("  0) back");
+        }
         for (i, (label, _)) in entries.iter().enumerate() {
             println!("  {}) {label}", item_label(i).expect("under 35 entries"));
         }
@@ -58,8 +62,6 @@ pub fn pick_scenario(
             println!("  .) settings");
             println!("        serial port: {}", settings.serial_port);
             println!("        tcp port:    {}", settings.tcp_port);
-        } else {
-            println!("  Esc) back");
         }
         println!("  (ctrl-c to quit)");
 
@@ -105,13 +107,14 @@ fn edit_settings(
     let mut settings = Settings::load();
     loop {
         println!();
+        println!("{MENU_RULE}");
+        println!("  0) back");
         println!("settings");
         println!(
             "  1) serial port (for atari scenarios): {}",
             settings.serial_port
         );
         println!("  2) tcp port (for rust scenarios): {}", settings.tcp_port);
-        println!("  Esc) back");
         println!("  (ctrl-c to quit)");
         print!("Select: ");
         let _ = std::io::stdout().flush();

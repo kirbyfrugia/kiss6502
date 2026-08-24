@@ -1,6 +1,6 @@
 //! Random packets for `random` scenario steps and soak runs.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::Xorshift64;
 
 /// Message bodies for `random` steps, short enough through long enough to wrap.
 const LOREM: &[&str] = &[
@@ -21,40 +21,18 @@ const LOREM: &[&str] = &[
     "A gentle breeze drifts across the wide open meadow on a summer day.",
 ];
 
-/// xorshift64, so a soak run varies without pulling in a rand crate.
-///
 /// Seed it explicitly to get checkable, repeatable output.
 pub struct LoremSource {
-    state: u64,
+    rng: Xorshift64,
 }
 
 impl LoremSource {
     /// `None` seeds from the clock, for real runs. Tests pass an explicit
     /// seed so the invariants below are checkable.
     pub fn new(seed: Option<u64>) -> Self {
-        let seed = seed.unwrap_or_else(|| {
-            let nanos = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.subsec_nanos() as u64)
-                .unwrap_or(0);
-            (nanos % 1_000_000_000) | 1
-        });
         Self {
-            state: if seed == 0 {
-                0x2545_f491_4f6c_dd1d
-            } else {
-                seed
-            },
+            rng: Xorshift64::new(seed),
         }
-    }
-
-    fn next(&mut self) -> u64 {
-        let mut s = self.state;
-        s ^= s << 13;
-        s ^= s >> 7;
-        s ^= s << 17;
-        self.state = s;
-        s
     }
 
     /// A message from the corpus, from a random SSID station.
@@ -64,7 +42,7 @@ impl LoremSource {
     /// Varying the sender also keeps the small corpus from tripping dedup
     /// on every other packet.
     pub fn packet(&mut self) -> String {
-        let s = self.next();
+        let s = self.rng.next_u64();
         let body = LOREM[(s % LOREM.len() as u64) as usize];
         let ssid = 1 + (s >> 8) % 15;
         format!("NOCALL-{ssid}>APKTY1,WIDE1-1,WIDE2-1::NOCALL   :{body}")

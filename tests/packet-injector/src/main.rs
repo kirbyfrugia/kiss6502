@@ -12,7 +12,7 @@ mod packets;
 mod settings;
 
 use interactive::pick_interactive;
-use kisstty_harness::{Direwolf, TRAILING_SILENCE, emergency_stop};
+use kisstty_harness::{Direwolf, TRAILING_SILENCE, Xorshift64, emergency_stop};
 use packets::{FindResult, Test, all_tests, find_test};
 use settings::Settings;
 use std::io::IsTerminal;
@@ -126,13 +126,6 @@ fn pick_interactive_stdin(root: &Path, current: &mut PathBuf) -> Option<Test> {
     )
 }
 
-fn next_random(state: &mut u64) -> u64 {
-    *state ^= *state << 13;
-    *state ^= *state >> 7;
-    *state ^= *state << 17;
-    *state
-}
-
 fn main() -> ExitCode {
     if let Err(e) = ctrlc::set_handler(|| {
         emergency_stop();
@@ -237,11 +230,7 @@ fn main() -> ExitCode {
         let mut serial = settings.serial();
         let mut tcp_port = settings.tcp_port;
         let mut current = root.clone();
-        loop {
-            let Some(test) = pick_interactive_stdin(&root, &mut current) else {
-                break;
-            };
-
+        while let Some(test) = pick_interactive_stdin(&root, &mut current) {
             // The menu's settings entry can change these out from under the
             // already-running direwolf; restart it so the change actually
             // takes effect this session, not just next run.
@@ -269,15 +258,12 @@ fn main() -> ExitCode {
             std::thread::sleep(TRAILING_SILENCE);
         }
     } else {
-        let mut rng = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.subsec_nanos() as u64 | 1)
-            .unwrap_or(0x2545_f491_4f6c_dd1d);
+        let mut rng = Xorshift64::new(None);
 
         let mut done = 0u64;
         loop {
             let test = match &random_pool {
-                Some(pool) => &pool[(next_random(&mut rng) as usize) % pool.len()],
+                Some(pool) => &pool[(rng.next_u64() as usize) % pool.len()],
                 None => fixed_test
                     .as_ref()
                     .expect("one of the two branches above set this"),

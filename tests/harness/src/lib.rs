@@ -14,6 +14,7 @@
 mod direwolf;
 mod escape;
 mod lorem;
+mod rng;
 mod serial;
 mod terminal;
 
@@ -22,19 +23,23 @@ pub use direwolf::{
 };
 pub use escape::{contains, escape, unescape};
 pub use lorem::LoremSource;
+pub use rng::Xorshift64;
 pub use serial::Serial;
 pub use terminal::{RawSession, raw_session, read_menu_key, read_menu_line};
 
 /// Anything that should stop the run with a message, not a panic.
 pub type HarnessError = String;
 
-/// Whether a line of interactive input means "go back a level". `\x1b` is
-/// what [`read_menu_key`]/[`read_menu_line`] return for a bare Esc; `..`/`b`/
-/// `back` are for anywhere that just reads plain lines instead (piped
-/// input, tests).
+/// Whether a line of interactive input means "go back a level": `0` from
+/// the menu itself, or `..`/`b`/`back` from anywhere that just reads plain
+/// lines instead (piped input, tests).
 pub fn is_back(input: &str) -> bool {
-    input == "\u{1b}" || matches!(input, ".." | "b" | "back")
+    input == "0" || matches!(input, ".." | "b" | "back")
 }
+
+/// Printed at the top of each menu redraw in both apps' pickers, so the new
+/// screenful doesn't read as a continuation of whatever was above it.
+pub const MENU_RULE: &str = "----------------------------------------";
 
 pub fn item_label(index: usize) -> Option<char> {
     match index {

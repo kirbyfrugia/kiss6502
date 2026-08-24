@@ -5,7 +5,7 @@
 
 use crate::packets::{self, Test, all_tests, subdirs, tests_in};
 use crate::settings::Settings;
-use kisstty_harness::{is_back, item_index, item_label};
+use kisstty_harness::{MENU_RULE, is_back, item_index, item_label};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -39,6 +39,7 @@ pub fn pick_interactive(
             format!("packets/{}", rel.display())
         };
         println!();
+        println!("{MENU_RULE}");
         match packets::title(current) {
             Some(title) => println!("{header}/  -  {title}"),
             None => println!("{header}/"),
@@ -57,6 +58,7 @@ pub fn pick_interactive(
             }
             entries.push((label, Entry::Dir(d.clone())));
         }
+
         for t in tests {
             let label = if t.description().is_empty() {
                 t.label().to_string()
@@ -66,6 +68,9 @@ pub fn pick_interactive(
             entries.push((label, Entry::Test(t)));
         }
 
+        if *current != root {
+            println!("  0) back");
+        }
         for (i, (label, _)) in entries.iter().enumerate() {
             println!("  {}) {label}", item_label(i).expect("under 35 entries"));
         }
@@ -78,8 +83,6 @@ pub fn pick_interactive(
                 "        using:       {}",
                 if settings.use_serial { "serial" } else { "tcp" }
             );
-        } else {
-            println!("  Esc) back");
         }
         println!("  (ctrl-c to quit)");
 
@@ -125,6 +128,8 @@ fn edit_settings(
     let mut settings = Settings::load();
     loop {
         println!();
+        println!("{MENU_RULE}");
+        println!("  0) back");
         println!("settings");
         println!("  1) serial port: {}", settings.serial_port);
         println!("  2) tcp port: {}", settings.tcp_port);
@@ -132,7 +137,6 @@ fn edit_settings(
             "  3) using: {}",
             if settings.use_serial { "serial" } else { "tcp" }
         );
-        println!("  Esc) back");
         println!("  (ctrl-c to quit)");
         print!("Select: ");
         let _ = std::io::stdout().flush();
@@ -212,9 +216,9 @@ mod tests {
     #[test]
     fn navigates_and_picks_a_test() {
         let d = sample_tree();
-        // descend into "cat" (1); bad input reprompts twice; Esc back to
+        // descend into "cat" (1); bad input reprompts twice; 0 back to
         // root; descend again (1); pick "one" (its only entry, so 1).
-        let mut menu_key = canned(&["1", "nope", "9", "\u{1b}", "1", "1"]);
+        let mut menu_key = canned(&["1", "nope", "9", "0", "1", "1"]);
         let mut current = d.path().to_path_buf();
         let t = pick_interactive(d.path(), &mut current, &mut menu_key, &mut canned(&[]))
             .expect("a test should be picked");

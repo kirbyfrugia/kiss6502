@@ -1,4 +1,4 @@
-//! Reading one line of menu input at a time, with Esc acting immediately.
+//! Reading menu input: a line at a time, or one instant keypress at a time.
 
 use std::io::{IsTerminal, Read, Write};
 use std::os::fd::AsRawFd;
@@ -31,9 +31,7 @@ pub fn restore() {
     }
 }
 
-/// Reads one line of menu input. A bare Esc returns immediately as `"\x1b"`
-/// -- a terminal only submits it once Enter follows, which defeats using it
-/// for "back" -- everything else is a normal, backspace-editable, Enter
+/// Reads one line of menu input: a normal, backspace-editable, Enter
 /// terminated line. Falls back to plain line reading when stdin isn't a
 /// terminal (piped input, tests don't go through this at all).
 pub fn read_menu_line() -> Option<String> {
@@ -55,7 +53,6 @@ pub fn read_menu_line() -> Option<String> {
             Ok(_) => {}
         }
         match byte[0] {
-            0x1b => break Some("\x1b".to_string()),
             b'\r' | b'\n' => {
                 print!("\r\n");
                 let _ = std::io::stdout().flush();
@@ -98,7 +95,6 @@ pub fn read_menu_key() -> Option<String> {
     let mut byte = [0u8; 1];
     let result = match stdin.lock().read(&mut byte) {
         Ok(0) | Err(_) => None,
-        Ok(_) if byte[0] == 0x1b => Some("\x1b".to_string()),
         Ok(_) => {
             let ch = (byte[0] as char).to_ascii_uppercase();
             print!("{ch}\r\n");

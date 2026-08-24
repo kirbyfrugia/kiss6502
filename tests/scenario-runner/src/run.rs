@@ -262,10 +262,10 @@ impl<'a> Run<'a> {
             if step.repeat != 0 && done >= step.repeat {
                 return;
             }
-            if let Some(r) = &raw {
-                if matches!(r.poll_key(), Some(b'q' | b'Q')) {
-                    return;
-                }
+            if let Some(r) = &raw
+                && matches!(r.poll_key(), Some(b'q' | b'Q'))
+            {
+                return;
             }
         }
     }
@@ -296,11 +296,11 @@ impl<'a> Run<'a> {
         }
         let deadline = Instant::now() + Duration::from_secs(seconds);
         while Instant::now() < deadline {
-            if let Some(r) = raw {
-                if matches!(r.poll_key(), Some(b'q' | b'Q')) {
-                    self.ui.progress_done();
-                    return true;
-                }
+            if let Some(r) = raw
+                && matches!(r.poll_key(), Some(b'q' | b'Q'))
+            {
+                self.ui.progress_done();
+                return true;
             }
             self.ui.progress(label, deadline);
             std::thread::sleep(Duration::from_millis(200));

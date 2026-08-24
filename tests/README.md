@@ -30,7 +30,7 @@ Each tool remembers its own settings (serial device, TCP port) under
 `.) settings` entry in the interactive menu.
 
 In the interactive menu, picking an item is a single keypress -- no Enter needed. Items
-are numbered `1`-`9`, then `A`-`Z` (35 per directory, case-insensitive). Esc goes back
+are numbered `1`-`9`, then `A`-`Z` (35 per directory, case-insensitive). `0` goes back
 a level; ctrl-c quits outright, from anywhere.
 
 `--check` validates scenarios without touching any hardware.
