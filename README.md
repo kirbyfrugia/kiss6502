@@ -72,7 +72,6 @@ But I realized this might be useful for other people who want to have ragchews w
 
 * [README-ATARI.md](README-ATARI.md) - the Atari 800 build.
 * [README-RUST.md](README-RUST.md) - the Linux/Windows build.
-* [tests/README.md](tests/README.md) - an app that can be used to help test kisstty by manually piping messages through a real direwolf instance and listening for responses. Unlike the rest of kisstty, this one was vibe-coded and I take no responsibility for the code, lol.
 
 ## Use of open source
 
@@ -93,18 +92,16 @@ That's how I approached this project. However, I'm also aware of the advantages 
 Here's what I did myself:
 
 * I wrote *almost all* the 6502 assembly code.
-* I wrote *most (like 80% if I were to guess)* of the rust code myself, very much as a learning exercise.
+* I wrote *most (like 90% if I were to guess)* of the rust code myself, very much as a learning exercise.
 * I did all the architecture myself.
 * I designed the user experience and UIs myself.
 * I bought and read several books, read tons of online content, etc.
 
 Here's where I used AI:
 
-* OCR. Specifically, I wrote code that dumped memory to my screen and I took a photo with my phone. I had Claude convert that to text for a file on my PC.
 * I copied and pasted the keycode to ATASCII lookup table from the Atari OS User's manual and had Claude turn that into a lookup table for me.
-* I used it to update some of the instructions in the readme files.
-* I used it to write some of the helper scripts like `run-atari.sh`, most of the rust unit tests, the manual scenario runner, and the installers. In other words, infra stuff.
-* I used it for some *non-logic-changing* refactors, like bulk renaming things or moving functionality from one file to another. I kept the prompts very narrow on these.
+* I used it to write some of the helper scripts like `run-atari.sh`, most of the unit tests, some readme reworking, and the installers.
+* I used it for some *non-logic-changing* refactors, like bulk renaming things or moving functionality from one file to another. I kept the prompts scoped very narrow on these.
 
 ## License
 

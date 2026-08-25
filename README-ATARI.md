@@ -109,11 +109,8 @@ git clone https://github.com/HiassofT/AtariSIO
 cd AtariSIO/tools && make dir2atr && sudo cp dir2atr /usr/local/bin/
 ```
 
-DOS 2.5's `DOS.SYS`/`DUP.SYS` also have to be present in `3rdparty/atari/dos25/`
-(see that directory's own README.md); they're gitignored since they aren't
-ours to redistribute. `.github/workflows/release.yml` gets them from the
-`ATARI_DOS_SYS_B64`/`ATARI_DUP_SYS_B64` repo secrets (base64-encoded file
-contents) instead.
+You will need to find copies of DOS 2.5's `DOS.SYS`/`DUP.SYS` and copy them
+to `3rdparty/atari/dos25`.
 
 ## Building
 
@@ -207,11 +204,8 @@ kisstty talks KISS to direwolf over a serial link. The use cases below differ
 only in where the Atari/Altirra and direwolf live, and how the serial link
 between them is made.
 
-To test without a radio, the scenario runner starts its own direwolf, injects real
-packets, and walks you through what should show up on screen. See "Automated testing
-with the scenario runner" below, and [tests/README.md](tests/README.md) for the full
-docs. For the cross-machine cases (1 and 3), `kissutil` (ships with direwolf) can be
-used, too.
+For the cross-machine cases (1 and 3), `kissutil` (ships with direwolf) can be
+used to test without a radio.
 
 ## Use case 1: Physical Atari, direwolf on a separate box
 
@@ -224,7 +218,7 @@ used, too.
 
 # Put this in ~/.config/direwolf/direwolf.conf:
 KISSPORT 8001
-SERIALKISS /dev/COM1 9600    # the box's serial port wired to the 850
+SERIALKISS /dev/COM1 9600    # the box's serial port connected to the 850
 
 # Launch direwolf:
 direwolf -c ~/.config/direwolf/direwolf.conf -t 0
@@ -264,26 +258,6 @@ kissutil -v -p /tmp/altirra-tty -s 9600
 # Then type this. See the note in use case 1 about the message format:
 NOCALL-7>APKTY1::NOCALL   :this is a test
 ```
-
-### Automated testing with the scenario runner
-
-The scenario runner drives use case 2's setup itself: it fills `SERIALKISS` in
-`tests/direwolf.conf.template` with the PTY from the scenario's `serial` field
-(default `/tmp/altirra-tty`), runs direwolf for the length of the run, and injects
-packets over that serial KISS link. They flow PTY -> socat -> TCP 9000 -> Altirra's
-850 -> kisstty. Full docs are in [tests/README.md](tests/README.md).
-
-```
-# Run kisstty in Altirra and start APRS mode, then bridge the socat PTY as in
-# use case 2, but skip the direwolf.conf/launch steps, the runner handles those.
-
-# Run a scenario (scenario-runner lives in its own workspace under tests/):
-cd tests
-cargo run --bin scenario-runner -- scenarios/atari/rendering.toml
-```
-
-The runner starts and stops direwolf itself, so don't have one already running. It
-refuses to start if anything is already listening on port 8001.
 
 ## Use case 3: Altirra connected by serial to a separate direwolf box
 

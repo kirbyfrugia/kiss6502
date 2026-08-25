@@ -1,9 +1,0 @@
-[package]
-name = "kisstty-harness"
-version = "0.1.0"
-edition = "2024"
-publish = false
-description = "Shared plumbing for the kisstty test tools: a temporary direwolf, packet audio, and the app's serial device"
-
-[dependencies]
-libc = "0.2"
